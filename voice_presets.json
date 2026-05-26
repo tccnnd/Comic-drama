@@ -1,0 +1,15 @@
+{
+  "default": "zh-CN-XiaoxiaoNeural",
+  "voice_map": {
+    "narrator": "zh-CN-YunxiNeural",
+    "female_lead": "zh-CN-XiaoxiaoNeural",
+    "male_lead": "zh-CN-YunxiNeural",
+    "antagonist": "zh-CN-YunjianNeural",
+    "host": "zh-CN-YunyangNeural",
+    "child": "zh-CN-XiaobeiNeural",
+    "旁白": "zh-CN-YunxiNeural",
+    "林晚": "zh-CN-XiaoxiaoNeural",
+    "反派": "zh-CN-YunjianNeural",
+    "主持人": "zh-CN-YunyangNeural"
+  }
+}

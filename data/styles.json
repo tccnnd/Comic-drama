@@ -1,0 +1,105 @@
+{
+  "default_style_id": "anime_standard",
+  "styles": [
+    {
+      "id": "anime_standard",
+      "name": "日系动画",
+      "category": "system",
+      "positive_suffix": "anime key visual, studio anime style, cel shading, clean thin lines, flat colors, cinematic lighting, detailed background",
+      "negative_suffix": "photorealistic, realistic skin, 3d render, photograph, noisy, blurry, low quality",
+      "thumbnail": "styles/anime_standard.png",
+      "checkpoint_hint": "Anything-v5.0-PRT.safetensors",
+      "lora_hint": "anime-character-lora_v1.5.safetensors"
+    },
+    {
+      "id": "manhwa_soft",
+      "name": "韩漫唯美",
+      "category": "system",
+      "positive_suffix": "manhwa style, soft shading, pastel colors, elegant faces, glossy eyes, warm rim light, romantic atmosphere",
+      "negative_suffix": "photorealistic, harsh contrast, muddy colors, distorted hands, low detail, 3d render",
+      "thumbnail": "styles/manhwa_soft.png",
+      "checkpoint_hint": "manhwa-soft-v1.safetensors",
+      "lora_hint": "manhwa-aesthetic-lora.safetensors"
+    },
+    {
+      "id": "gongfeng",
+      "name": "纯正国风",
+      "category": "system",
+      "positive_suffix": "chinese ink painting, traditional chinese art, hanfu, elegant composition, brush texture, misty atmosphere, classical beauty",
+      "negative_suffix": "photorealistic, western comic, neon colors, 3d render, plastic skin, blurry brushwork",
+      "thumbnail": "styles/gongfeng.png",
+      "checkpoint_hint": "guofeng-illustration.safetensors",
+      "lora_hint": "hanfu-ink-lora.safetensors"
+    },
+    {
+      "id": "neon_action",
+      "name": "激燃极光",
+      "category": "system",
+      "positive_suffix": "dynamic lighting, neon glow, action scene, dramatic shadows, motion energy, sharp contrast, explosive composition",
+      "negative_suffix": "static pose, soft pastel, dull lighting, low energy, flat composition, blurry motion",
+      "thumbnail": "styles/neon_action.png",
+      "checkpoint_hint": "action-neon-v2.safetensors",
+      "lora_hint": "combat-intensity-lora.safetensors"
+    },
+    {
+      "id": "western_comic",
+      "name": "美漫硬朗",
+      "category": "system",
+      "positive_suffix": "western comic style, bold lines, strong shadows, heroic composition, high contrast, graphic storytelling",
+      "negative_suffix": "anime style, watercolor, soft pastel, photorealistic, blurry outlines, low contrast",
+      "thumbnail": "styles/western_comic.png",
+      "checkpoint_hint": "western-comic-v1.safetensors",
+      "lora_hint": "bold-ink-lora.safetensors"
+    },
+    {
+      "id": "semi_realistic",
+      "name": "写实画报",
+      "category": "system",
+      "positive_suffix": "semi-realistic, detailed illustration, magazine quality, clean skin texture, cinematic portrait, refined lighting",
+      "negative_suffix": "cartoonish, exaggerated proportions, low detail, flat face, blurry background, toy-like",
+      "thumbnail": "styles/semi_realistic.png",
+      "checkpoint_hint": "realistic-illustration-v1.safetensors",
+      "lora_hint": "editorial-portrait-lora.safetensors"
+    },
+    {
+      "id": "picture_book",
+      "name": "治愈绘本",
+      "category": "system",
+      "positive_suffix": "children book illustration, warm colors, soft edges, watercolor texture, friendly atmosphere, comforting composition",
+      "negative_suffix": "dark horror, harsh shadows, photorealistic, metallic texture, noisy details, cold palette",
+      "thumbnail": "styles/picture_book.png",
+      "checkpoint_hint": "picture-book-v1.safetensors",
+      "lora_hint": "watercolor-soft-lora.safetensors"
+    },
+    {
+      "id": "claymation",
+      "name": "趣味黏土",
+      "category": "system",
+      "positive_suffix": "claymation style, 3d clay figure, soft lighting, miniature set, handcrafted texture, playful charm",
+      "negative_suffix": "photorealistic, metallic shine, flat cartoon, noisy surface, high detail skin pores",
+      "thumbnail": "styles/claymation.png",
+      "checkpoint_hint": "claymation-toy-v1.safetensors",
+      "lora_hint": "miniature-clay-lora.safetensors"
+    },
+    {
+      "id": "blindbox_3d",
+      "name": "3D盲盒",
+      "category": "system",
+      "positive_suffix": "3d chibi figure, blind box toy, studio lighting, simple background, collectible figure, glossy finish",
+      "negative_suffix": "photorealistic, realistic adult proportions, dark background, complex clutter, flat illustration",
+      "thumbnail": "styles/blindbox_3d.png",
+      "checkpoint_hint": "blindbox-figure-v1.safetensors",
+      "lora_hint": "chibi-collectible-lora.safetensors"
+    },
+    {
+      "id": "one_piece_style",
+      "name": "海贼王风格",
+      "category": "system",
+      "positive_suffix": "one piece anime style, bold outlines, exaggerated proportions, energetic expressions, adventurous mood, colorful action",
+      "negative_suffix": "photorealistic, subdued colors, realistic anatomy, thin outlines, flat emotion, dark realism",
+      "thumbnail": "styles/one_piece_style.png",
+      "checkpoint_hint": "shonen-adventure-v1.safetensors",
+      "lora_hint": "shonen-exaggeration-lora.safetensors"
+    }
+  ]
+}

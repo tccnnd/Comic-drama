@@ -1,0 +1,24 @@
+.venv/
+outputs/
+workspace/
+.env
+__pycache__/
+*.pyc
+tools/
+tmp/
+*.log
+*.pid
+*.job
+*.exit.txt
+launcher_env_probe.txt
+probe.txt
+*_stage2.png
+asset-add-modal-stage2.png
+assets-stage2.png
+style-modal-stage2.png
+node_modules/
+dist/
+build/
+.DS_Store
+Thumbs.db
+workflows/Unsaved Workflow.json

@@ -1,0 +1,8 @@
+imageio-ffmpeg==0.6.0
+pillow==12.2.0
+pyttsx3==2.99
+edge-tts==7.2.8
+fastapi==0.136.1
+uvicorn==0.47.0
+httpx==0.28.1
+websockets==16.0

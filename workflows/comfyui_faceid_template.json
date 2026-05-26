@@ -1,0 +1,158 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "v1-5-pruned-emaonly-fp16.safetensors"
+    },
+    "_meta": {
+      "title": "Checkpoint加载器"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__PRIMARY_REFERENCE_IMAGE__"
+    },
+    "_meta": {
+      "title": "参考图"
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "1",
+        1
+      ],
+      "text": "__PROMPT__\n__CHARACTER_DESCRIPTIONS__"
+    },
+    "_meta": {
+      "title": "正向提示词"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "1",
+        1
+      ],
+      "text": "text, watermark, __NEGATIVE__"
+    },
+    "_meta": {
+      "title": "负向提示词"
+    }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": "__WIDTH__",
+      "height": "__HEIGHT__",
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "空Latent"
+    }
+  },
+  "6": {
+    "class_type": "IPAdapterUnifiedLoaderFaceID",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "preset": "FACEID PLUS V2",
+      "lora_strength": "__FACEID_LORA_STRENGTH__",
+      "provider": "CPU"
+    },
+    "_meta": {
+      "title": "FaceID统一加载器"
+    }
+  },
+  "7": {
+    "class_type": "IPAdapterFaceID",
+    "inputs": {
+      "model": [
+        "6",
+        0
+      ],
+      "ipadapter": [
+        "6",
+        1
+      ],
+      "image": [
+        "2",
+        0
+      ],
+      "weight": "__IP_ADAPTER_WEIGHT__",
+      "weight_faceidv2": "__FACEID_WEIGHT__",
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0,
+      "end_at": 1,
+      "embeds_scaling": "K+mean(V) w/ C penalty"
+    },
+    "_meta": {
+      "title": "FaceID注入"
+    }
+  },
+  "8": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "__SEED__",
+      "steps": 20,
+      "cfg": 7,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "7",
+        0
+      ],
+      "positive": [
+        "3",
+        0
+      ],
+      "negative": [
+        "4",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "9": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "8",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "10": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "comicdrama_faceid",
+      "images": [
+        "9",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "保存图像"
+    }
+  }
+}
