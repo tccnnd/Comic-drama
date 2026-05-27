@@ -10,8 +10,8 @@ PORT="${COMFYUI_LISTEN_PORT:-8188}"
 LOG_DIR="${COMFYUI_LOG_DIR:-/root/rivermind-data/comfyui-cloud/logs}"
 PID_FILE="${COMFYUI_PID_FILE:-/root/rivermind-data/comfyui-cloud/comfyui.pid}"
 
-ANIME_LORA_NAME="${COMFYUI_LORA_NAME:-anime-character-lora_v1.5.safetensors}"
-CHECKPOINT_NAME="${COMFYUI_CHECKPOINT_NAME:-v1-5-pruned-emaonly-fp16.safetensors}"
+ANIME_LORA_NAME="${COMFYUI_LORA_NAME:-${COMFYUI_VIDEO_LORA_NAME:-anime-character-lora_v1.5.safetensors}}"
+CHECKPOINT_NAME="${COMFYUI_CHECKPOINT_NAME:-${COMFYUI_VIDEO_CHECKPOINT_NAME:-v1-5-pruned-emaonly-fp16.safetensors}}"
 
 mkdir -p "$LOG_DIR"
 
@@ -87,4 +87,3 @@ fi
 echo "[restore] ComfyUI pid: $(cat "$PID_FILE")"
 echo "[restore] Health check:"
 curl -fsS "http://127.0.0.1:$PORT/system_stats" >/dev/null && echo "[restore] OK"
-

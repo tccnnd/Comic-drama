@@ -98,3 +98,5 @@ Project artifacts are exposed under `/workspace/<project_id>/...`.
 - Replace placeholder audio with TTS.
 - Replace placeholder audio with TTS.
 - Wrap this script behind a FastAPI task endpoint and stream progress to the web UI.
+
+See [target_modules_from_references.md](docs/target_modules_from_references.md) for the OpenToonz / OmniVoice-derived module map.

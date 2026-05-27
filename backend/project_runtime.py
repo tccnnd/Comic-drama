@@ -33,6 +33,7 @@ from scripts.run_workflow import (
     analyze_script_workflow,
     default_episode_pacing,
     build_storyboard,
+    build_scene_graph,
     default_audio_style,
     default_subtitle_style,
     generate_keyframe,
@@ -314,6 +315,216 @@ def derive_project_title(story_text: str, fallback: str = "未命名漫剧") -> 
     return compact[:18]
 
 
+def _scene_subtitle_path(scene_order: int, scene_id: str) -> str:
+    return f"scenes/{scene_id}/scene_{scene_order:02d}_dialogue.srt"
+
+
+def _scene_audio_ref(scene: StoryScene | dict[str, Any], project_id: str, scene_order: int, scene_id: str) -> dict[str, Any]:
+    payload = scene if isinstance(scene, dict) else {}
+    assets = payload.get("assets", {}) if isinstance(payload, dict) else {}
+    audio_path = ""
+    audio_url = ""
+    if isinstance(assets, dict):
+        audio_path = str(assets.get("audio_path") or "").strip()
+        audio_url = str(assets.get("audio_url") or "").strip()
+    if not audio_path and isinstance(scene, StoryScene):
+        audio_path = str(scene.reference_audio_path or "").strip()
+    if not audio_path and isinstance(payload, dict):
+        audio_path = str(payload.get("reference_audio_path") or "").strip()
+    if not audio_url and project_id and audio_path and project_relative_file_exists(project_id, audio_path):
+        audio_url = workspace_url(project_id, audio_path)
+    return {
+        "kind": "scene_audio",
+        "scene_id": scene_id,
+        "scene_order": scene_order,
+        "path": audio_path,
+        "url": audio_url,
+        "reference_audio_path": str(getattr(scene, "reference_audio_path", "") or payload.get("reference_audio_path") or "").strip(),
+        "voice_id": str(getattr(scene, "voice_id", "") or payload.get("voice_id") or "").strip(),
+        "voice_profile": str(getattr(scene, "voice_profile", "") or payload.get("voice_profile") or "").strip(),
+    }
+
+
+def _scene_subtitle_ref(project_id: str, scene_order: int, scene_id: str) -> dict[str, Any]:
+    path = _scene_subtitle_path(scene_order, scene_id)
+    url = workspace_url(project_id, path) if project_id and project_relative_file_exists(project_id, path) else ""
+    return {
+        "kind": "scene_subtitle",
+        "scene_id": scene_id,
+        "scene_order": scene_order,
+        "path": path,
+        "url": url,
+    }
+
+
+def _scene_graph_payload(
+    scene: StoryScene | dict[str, Any],
+    order: int,
+    *,
+    project_id: str = "",
+) -> dict[str, Any]:
+    if isinstance(scene, dict):
+        scene_obj = _scene_from_payload(scene)
+        payload_scene: dict[str, Any] = scene
+    else:
+        scene_obj = scene
+        payload_scene = {}
+    scene_order = int(payload_scene.get("order") or order) if isinstance(payload_scene, dict) else order
+    scene_id = str(payload_scene.get("scene_id") or f"scene_{scene_order:03d}") if isinstance(payload_scene, dict) else f"scene_{scene_order:03d}"
+    graph = deepcopy(build_scene_graph(scene_obj))
+    graph = _apply_shot_overrides_to_graph(graph, payload_scene.get("shot_overrides") if isinstance(payload_scene, dict) else [])
+    audio_ref = _scene_audio_ref(scene_obj, project_id, scene_order, scene_id)
+    subtitle_ref = _scene_subtitle_ref(project_id, scene_order, scene_id)
+    shots: list[dict[str, Any]] = []
+    for shot in graph.get("shots", []) or []:
+        shot_payload = deepcopy(shot) if isinstance(shot, dict) else {}
+        shot_payload["scene_id"] = scene_id
+        shot_payload["scene_order"] = scene_order
+        shot_payload["audio_ref"] = deepcopy(audio_ref)
+        shot_payload["subtitle_ref"] = deepcopy(subtitle_ref)
+        shots.append(shot_payload)
+    graph["shots"] = shots
+    graph["camera_track"] = {
+        **deepcopy(graph.get("camera_track") or {}),
+        "movement": str(scene_obj.camera_movement or scene_obj.camera or "").strip(),
+        "speed": float(scene_obj.camera_speed or 1.0),
+        "shot_count": len(shots),
+    }
+    graph["production_bible"] = deepcopy(payload_scene.get("production_bible") or {}) if isinstance(payload_scene, dict) else {}
+    graph["temporal_spec"] = deepcopy(payload_scene.get("temporal_spec") or {}) if isinstance(payload_scene, dict) else {}
+    if isinstance(payload_scene, dict) and payload_scene.get("shot_overrides"):
+        total_duration = float(graph["camera_track"].get("duration_seconds") or sum(float(shot.get("duration_seconds") or 0.0) for shot in shots))
+        payload_scene["duration_seconds"] = round(total_duration, 3)
+    return graph
+
+
+def _bounded_float(value: Any, default: float, minimum: float, maximum: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(minimum, min(maximum, number))
+
+
+def _shot_override_key(override: dict[str, Any]) -> str:
+    shot_id = str(override.get("shot_id") or "").strip()
+    if shot_id:
+        return f"id:{shot_id}"
+    try:
+        return f"order:{int(override.get('shot_order') or 0)}"
+    except (TypeError, ValueError):
+        return "order:0"
+
+
+def _normalize_shot_overrides(overrides: Any) -> list[dict[str, Any]]:
+    if not isinstance(overrides, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in overrides:
+        if not isinstance(item, dict):
+            continue
+        try:
+            shot_order = int(item.get("shot_order") or 0)
+        except (TypeError, ValueError):
+            shot_order = 0
+        shot_id = str(item.get("shot_id") or "").strip()
+        if shot_order <= 0 and not shot_id:
+            continue
+        payload: dict[str, Any] = {}
+        if shot_id:
+            payload["shot_id"] = shot_id
+        if shot_order > 0:
+            payload["shot_order"] = shot_order
+        for key in ("label", "caption", "bubble", "camera_movement"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                payload[key] = value
+        numeric_bounds = {
+            "duration_seconds": (0.25, 120.0),
+            "camera_speed": (0.1, 5.0),
+            "zoom": (1.0, 3.0),
+            "hold_in_ratio": (0.0, 0.45),
+            "hold_out_ratio": (0.0, 0.45),
+            "center_x": (0.0, 1.0),
+            "center_y": (0.0, 1.0),
+        }
+        for key, bounds in numeric_bounds.items():
+            if key in item and item.get(key) not in (None, ""):
+                payload[key] = _bounded_float(item.get(key), bounds[0], bounds[0], bounds[1])
+        normalized.append(payload)
+    return normalized
+
+
+def _apply_shot_overrides_to_graph(graph: dict[str, Any], overrides: Any) -> dict[str, Any]:
+    normalized = _normalize_shot_overrides(overrides)
+    if not normalized:
+        graph["shot_overrides"] = []
+        return graph
+    by_key = {_shot_override_key(item): item for item in normalized}
+    shots = [deepcopy(shot) for shot in graph.get("shots", []) or [] if isinstance(shot, dict)]
+    if not shots:
+        graph["shot_overrides"] = normalized
+        return graph
+    for shot in shots:
+        key = f"id:{str(shot.get('shot_id') or '').strip()}"
+        override = by_key.get(key)
+        if override is None:
+            override = by_key.get(f"order:{int(shot.get('shot_order') or 0)}")
+        if not override:
+            continue
+        for text_key in ("label", "caption", "bubble", "camera_movement"):
+            if text_key in override:
+                shot[text_key] = override[text_key]
+        for number_key in (
+            "duration_seconds",
+            "camera_speed",
+            "zoom",
+            "hold_in_ratio",
+            "hold_out_ratio",
+            "center_x",
+            "center_y",
+        ):
+            if number_key in override:
+                shot[number_key] = override[number_key]
+        shot["has_override"] = True
+    cursor = 0.0
+    for shot in shots:
+        duration = max(0.25, float(shot.get("duration_seconds") or 0.25))
+        shot["start_seconds"] = round(cursor, 3)
+        shot["duration_seconds"] = round(duration, 3)
+        cursor += duration
+        shot["end_seconds"] = round(cursor, 3)
+    graph["shots"] = shots
+    graph["shot_overrides"] = normalized
+    camera_track = deepcopy(graph.get("camera_track") or {})
+    camera_track["shot_count"] = len(shots)
+    camera_track["duration_seconds"] = round(cursor, 3)
+    graph["camera_track"] = camera_track
+    return graph
+
+
+def _apply_scene_graph(scene: dict[str, Any], graph: dict[str, Any]) -> None:
+    scene["camera_track"] = deepcopy(graph.get("camera_track") or {})
+    scene["shots"] = deepcopy(graph.get("shots") or [])
+    scene["shot_count"] = len(scene["shots"])
+    scene["shot_overrides"] = deepcopy(graph.get("shot_overrides") or [])
+    scene["production_bible"] = deepcopy(graph.get("production_bible") or {})
+    scene["temporal_spec"] = deepcopy(graph.get("temporal_spec") or {})
+
+
+def _refresh_project_scene_graph(project: dict[str, Any], *, project_id: str = "") -> None:
+    scenes = project.get("scenes", [])
+    if not isinstance(scenes, list):
+        return
+    for index, scene in enumerate(scenes, start=1):
+        if not isinstance(scene, dict):
+            continue
+        scene_order = int(scene.get("order") or index)
+        scene_context = scene_with_character_context(project, scene)
+        graph = _scene_graph_payload(scene_context, scene_order, project_id=project_id)
+        _apply_scene_graph(scene, graph)
+
+
 def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
     scene_id = f"scene_{order:03d}"
     payload = {
@@ -354,6 +565,7 @@ def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
         "director_meta": deepcopy(scene.director_meta) if isinstance(scene.director_meta, dict) else {},
         "character_prompt_compilation": scene.character_prompt_compilation or "",
         "negative_prompt_compilation": scene.negative_prompt_compilation or "",
+        "shot_overrides": [],
         "validation_failed": bool(getattr(scene, "validation_failed", False)),
         "error_message": str(getattr(scene, "error_message", "") or ""),
         "raw_llm_output": deepcopy(getattr(scene, "raw_llm_output", {})) if getattr(scene, "raw_llm_output", {}) else {},
@@ -374,6 +586,8 @@ def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
         payload["assets"]["status"] = "failed"
     if not isinstance(scene.director_meta, dict):
         apply_director_recommendation(payload)
+    graph = _scene_graph_payload(payload, order)
+    _apply_scene_graph(payload, graph)
     return payload
 
 
@@ -950,6 +1164,7 @@ def save_project(project: dict[str, Any]) -> dict[str, Any]:
     project_id = project["project_id"]
     project["style_id"] = str(project.get("style_id") or get_default_style_id()).strip()
     project.setdefault("style_guide", "")
+    _refresh_project_scene_graph(project, project_id=project_id)
     project["updated_at"] = utc_iso()
     sync_character_card_files(project)
     atomic_write_json(project_file(project_id), project)
@@ -1103,6 +1318,7 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
     project_subtitle_style(snapshot)
     project_audio_style(snapshot)
     apply_project_episode_pacing(snapshot)
+    _refresh_project_scene_graph(snapshot, project_id=project_id)
     scenes = snapshot.get("scenes", [])
     characters = snapshot.get("characters", [])
     for character in snapshot.get("characters", []):
@@ -1166,6 +1382,8 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         output["subtitles_ass_url"] = ""
     asset_totals = {"image": 0, "audio": 0, "video": 0}
     completed_scenes = 0
+    scene_graph_entries: list[dict[str, Any]] = []
+    total_shots = 0
     for scene in scenes:
         assets = scene.get("assets", {}) or {}
         if assets.get("status") == "completed":
@@ -1173,13 +1391,33 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         for kind in asset_totals:
             if assets.get(f"{kind}_url"):
                 asset_totals[kind] += 1
+        shots = scene.get("shots", []) if isinstance(scene, dict) else []
+        shot_count = len(shots) if isinstance(shots, list) else 0
+        total_shots += shot_count
+        scene_graph_entries.append(
+            {
+                "scene_id": str(scene.get("scene_id") or ""),
+                "order": int(scene.get("order") or 0),
+                "title": str(scene.get("title") or ""),
+                "shot_count": shot_count,
+                "camera_track": deepcopy(scene.get("camera_track") or {}),
+            }
+        )
     snapshot["summary"] = {
         "total_scenes": len(scenes),
         "completed_scenes": completed_scenes,
         "total_characters": len(characters),
         "asset_totals": asset_totals,
         "has_final_video": bool(output.get("final_video_url")),
+        "total_shots": total_shots,
     }
+    snapshot["scene_graph"] = {
+        "version": 1,
+        "scene_count": len(scenes),
+        "shot_count": total_shots,
+        "scenes": scene_graph_entries,
+    }
+    snapshot["production_bible"] = build_production_bible(snapshot)
     return snapshot
 
 
@@ -1291,6 +1529,8 @@ def _scene_from_payload(scene: dict[str, Any]) -> StoryScene:
         pacing=str(scene.get("pacing") or ""),
         subject_focus=str(scene.get("subject_focus") or ""),
         director_meta=deepcopy(scene.get("director_meta")) if isinstance(scene.get("director_meta"), dict) else None,
+        production_bible=deepcopy(scene.get("production_bible")) if isinstance(scene.get("production_bible"), dict) else {},
+        temporal_spec=deepcopy(scene.get("temporal_spec")) if isinstance(scene.get("temporal_spec"), dict) else {},
         character_prompt_compilation=str(scene.get("character_prompt_compilation") or ""),
         negative_prompt_compilation=str(scene.get("negative_prompt_compilation") or ""),
         validation_failed=bool(scene.get("validation_failed")),
@@ -1428,6 +1668,88 @@ def compile_character_prompt(scene: dict[str, Any], refs: list[dict[str, Any]]) 
     return "；".join(line for line in positive_lines if line), "；".join(line for line in negative_lines if line)
 
 
+def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
+    characters: list[dict[str, Any]] = []
+    for character in project.get("characters", []) or []:
+        if not isinstance(character, dict):
+            continue
+        characters.append(
+            {
+                "name": str(character.get("name") or "").strip(),
+                "char_id": str(character.get("char_id") or "").strip(),
+                "description": str(character.get("description") or character.get("summary") or "").strip(),
+                "appearance_core": str(character.get("appearance_core") or "").strip(),
+                "clothing_style": str(character.get("clothing_style") or "").strip(),
+                "negative_constraints": str(character.get("negative_constraints") or "").strip(),
+                "reference_image_path": str(character.get("reference_image_path") or "").strip(),
+                "reference_meta": deepcopy(character.get("reference_meta")) if isinstance(character.get("reference_meta"), dict) else {},
+            }
+        )
+    scenes: list[dict[str, Any]] = []
+    for scene in project.get("scenes", []) or []:
+        if not isinstance(scene, dict):
+            continue
+        scenes.append(
+            {
+                "scene_id": str(scene.get("scene_id") or "").strip(),
+                "order": int(scene.get("order") or len(scenes) + 1),
+                "title": str(scene.get("title") or "").strip(),
+                "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "pacing": str(scene.get("pacing") or "").strip(),
+                "scene_intent": str(scene.get("scene_intent") or "").strip(),
+                "subject_focus": str(scene.get("subject_focus") or "").strip(),
+                "characters": [str(name).strip() for name in scene.get("characters") or [] if str(name).strip()],
+            }
+        )
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    return {
+        "version": 1,
+        "project_id": str(project.get("project_id") or "").strip(),
+        "title": str(project.get("title") or "").strip(),
+        "style_id": str(project.get("style_id") or "").strip(),
+        "style_guide": str(project.get("style_guide") or "").strip(),
+        "global_style": str(settings.get("global_style") or "").strip(),
+        "characters": characters,
+        "scene_continuity": scenes,
+        "rules": {
+            "preserve_character_identity": True,
+            "preserve_costume_per_scene": True,
+            "keep_lighting_continuous_within_scene": True,
+            "keep_environment_geometry_stable": True,
+            "avoid_identity_drift": True,
+            "avoid_unmotivated_camera_jumps": True,
+        },
+    }
+
+
+def scene_production_bible(project: dict[str, Any], scene: dict[str, Any], refs: list[dict[str, Any]]) -> dict[str, Any]:
+    bible = build_production_bible(project)
+    scene_order = int(scene.get("order") or 0)
+    bible["current_scene"] = {
+        "scene_id": str(scene.get("scene_id") or f"scene_{scene_order:03d}"),
+        "order": scene_order,
+        "title": str(scene.get("title") or "").strip(),
+        "visual_prompt": str(scene.get("visual_prompt") or "").strip(),
+        "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+        "pacing": str(scene.get("pacing") or "").strip(),
+        "scene_intent": str(scene.get("scene_intent") or "").strip(),
+        "subject_focus": str(scene.get("subject_focus") or "").strip(),
+        "camera_movement": str(scene.get("camera_movement") or "").strip(),
+        "active_characters": [
+            {
+                "name": str(ref.get("name") or "").strip(),
+                "role": str(ref.get("role") or "").strip(),
+                "appearance_core": str(ref.get("appearance_core") or "").strip(),
+                "clothing_style": str(ref.get("clothing_style") or "").strip(),
+                "negative_constraints": str(ref.get("negative_constraints") or "").strip(),
+                "reference_image_path": str(ref.get("reference_image_path") or "").strip(),
+            }
+            for ref in refs
+        ],
+    }
+    return bible
+
+
 def scene_with_character_context(project: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
     merged = scene_with_inherited_voice(project, scene)
     refs = scene_character_refs(project, merged)
@@ -1454,6 +1776,25 @@ def scene_with_character_context(project: dict[str, Any], scene: dict[str, Any])
             "output_size": deepcopy(primary_meta.get("output_size")) if isinstance(primary_meta.get("output_size"), list) else primary_meta.get("output_size"),
             "warnings": list(primary_meta.get("warnings") or []),
         }
+    merged["production_bible"] = scene_production_bible(project, merged, refs)
+    scene_order = int(merged.get("order") or 1)
+    scene_graph = _scene_graph_payload(merged, scene_order, project_id=str(project.get("project_id") or ""))
+    merged["temporal_spec"] = {
+        "version": 1,
+        "kind": "scene_temporal_video_spec",
+        "scene": scene_order,
+        "title": str(merged.get("title") or "").strip(),
+        "duration_seconds": float(merged.get("duration_seconds") or 0.0),
+        "camera_track": deepcopy(scene_graph.get("camera_track") or {}),
+        "shots": deepcopy(scene_graph.get("shots") or []),
+        "continuity_rules": {
+            "generate_continuous_video": True,
+            "avoid_static_pan_only_motion": True,
+            "preserve_character_environment_contact": True,
+            "preserve_lighting_direction": True,
+            "preserve_scene_geometry": True,
+        },
+    }
     return merged
 
 
@@ -1553,12 +1894,14 @@ def _scene_snapshot_payload(
     scene: dict[str, Any],
     project: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    scene_payload = deepcopy(scene)
+    _apply_scene_graph(scene_payload, _scene_graph_payload(scene_payload, scene_order, project_id=project_id))
     payload = {
         "project_id": project_id,
         "scene_order": scene_order,
         "action": action,
         "captured_at": utc_iso(),
-        "scene": deepcopy(scene),
+        "scene": scene_payload,
     }
     if project is not None:
         payload["scenes"] = deepcopy(project.get("scenes", []))
@@ -1800,6 +2143,7 @@ VIDEO_STALE_FIELDS = {
     "subtitle_preset",
     "camera_intensity",
     "camera_speed",
+    "shot_overrides",
     "episode_rhythm",
     "episode_phase",
     "episode_phase_index",

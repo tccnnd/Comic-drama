@@ -72,6 +72,7 @@ from scripts.comfyui_ssh_tunnel import tunnel_config
 from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
 from scripts.tts_engines import edge_tts, synthesize_preview, tts_diagnostics
 from scripts.tts_engines import load_tts_provider_settings, save_tts_provider_settings, tts_provider_settings_path
+from video_providers import get_video_provider_status, list_video_providers
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -210,7 +211,7 @@ class CreateTaskRequest(BaseModel):
     planner: Literal["auto", "rule", "llm"] = "auto"
     scene_count: int = Field(default=5, ge=1, le=12)
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
-    video_provider: Literal["auto", "local", "comfyui"] = "auto"
+    video_provider: str = "auto"
     voice_provider: Literal["auto", "edge", "local", "silent"] = "auto"
 
 
@@ -228,7 +229,7 @@ class CreateProjectRequest(BaseModel):
     planner: Literal["auto", "rule", "llm"] = "auto"
     scene_count: int = Field(default=5, ge=1, le=12)
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
-    video_provider: Literal["auto", "local", "comfyui"] = "auto"
+    video_provider: str = "auto"
     voice_provider: Literal["auto", "edge", "local", "silent"] = "auto"
 
 
@@ -267,6 +268,7 @@ class UpdateSceneRequest(BaseModel):
     subtitle_preset: str | None = None
     camera_intensity: float | None = None
     camera_speed: float | None = None
+    shot_overrides: list[dict] | None = None
     episode_rhythm: Literal["classic_four_act", "fast_hook", "slow_burn"] | None = None
     episode_phase: Literal["opening", "setup", "reversal", "finale"] | None = None
     episode_phase_index: int | None = Field(default=None, ge=1, le=100)
@@ -595,6 +597,16 @@ def run_workflow_task(task: TaskRecord, story_text: str) -> None:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/video-providers")
+def video_providers() -> dict[str, list[dict[str, object]]]:
+    return {"providers": list_video_providers()}
+
+
+@app.get("/api/video-providers/status")
+def video_providers_status(provider: str = "auto") -> dict[str, object]:
+    return get_video_provider_status(provider)
 
 
 def comfyui_base_url() -> str:

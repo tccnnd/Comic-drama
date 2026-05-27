@@ -1226,6 +1226,268 @@ select:focus {
   box-shadow: 0 0 0 4px rgba(244, 198, 110, 0.08);
 }
 
+.shot-track {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.shot-node {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid rgba(88, 166, 255, 0.26);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shot-node span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.shot-node.is-opening {
+  border-color: rgba(88, 166, 255, 0.44);
+  background: rgba(88, 166, 255, 0.12);
+}
+
+.shot-node.is-setup {
+  border-color: rgba(84, 209, 156, 0.38);
+  background: rgba(84, 209, 156, 0.08);
+}
+
+.shot-node.is-reversal {
+  border-color: rgba(255, 122, 122, 0.38);
+  background: rgba(255, 122, 122, 0.1);
+}
+
+.shot-node.is-finale {
+  border-color: rgba(244, 198, 110, 0.42);
+  background: rgba(244, 198, 110, 0.1);
+}
+
+.shot-node.is-overridden {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.shot-editor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.shot-editor-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) repeat(4, minmax(96px, 1fr));
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.shot-editor-label {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.shot-editor-label strong,
+.shot-editor-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shot-editor-label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.temporal-preview {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px;
+}
+
+.temporal-preview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.temporal-preview-head strong,
+.temporal-preview-head span {
+  display: block;
+}
+
+.temporal-preview-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.temporal-preview-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.temporal-preview-stage {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(88, 166, 255, 0.18);
+  background: #101724;
+}
+
+.temporal-preview-world {
+  position: absolute;
+  inset: -18%;
+  transform-origin: 50% 50%;
+  background:
+    linear-gradient(180deg, rgba(88, 166, 255, 0.14), transparent 42%),
+    radial-gradient(circle at 68% 30%, rgba(244, 198, 110, 0.2), transparent 20%),
+    linear-gradient(180deg, #172033 0%, #101724 58%, #151b20 100%);
+  will-change: transform;
+}
+
+.temporal-preview-horizon {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 54%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.temporal-preview-grid {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 12%;
+  height: 32%;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 40px 28px;
+  transform: perspective(220px) rotateX(56deg);
+  transform-origin: 50% 100%;
+  opacity: 0.62;
+}
+
+.temporal-preview-actor {
+  position: absolute;
+  left: 48%;
+  top: 48%;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-size: 11px;
+  will-change: transform;
+}
+
+.temporal-preview-actor i {
+  width: 30px;
+  height: 44px;
+  border-radius: 999px 999px 8px 8px;
+  background: linear-gradient(180deg, #f4c66e, #7aa2ff);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.temporal-preview-title {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  max-width: 70%;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.temporal-preview-progress {
+  height: 5px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.temporal-preview-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #7aa2ff;
+}
+
+.temporal-preview-strip {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.temporal-preview-strip b {
+  position: relative;
+  display: block;
+  min-width: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  line-height: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  user-select: none;
+}
+
+.temporal-preview-strip b span {
+  pointer-events: none;
+}
+
+.temporal-shot-resize {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 2px;
+  width: 8px;
+  border-radius: 4px;
+  cursor: ew-resize;
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.temporal-preview-strip b:hover .temporal-shot-resize,
+.temporal-shot-resize:hover {
+  opacity: 1;
+}
+
+.temporal-shot-resize:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.temporal-preview-strip b.is-active {
+  color: #101724;
+  border-color: #7aa2ff;
+  background: #7aa2ff;
+}
+
 .voice-track i {
   background: repeating-linear-gradient(
     90deg,
@@ -1831,6 +2093,7 @@ select:focus {
 
   .workspace[data-active-tab="scene"] .scene-editor,
   .workspace[data-active-tab="scene"] .scene-editor .form-grid,
+  .shot-editor-row,
   .preview-grid {
     grid-template-columns: 1fr;
   }

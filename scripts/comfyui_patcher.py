@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import copy
+import json
+import random
 from pathlib import Path
 from typing import Any
-
-import requests
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 
 def find_node(workflow: dict[str, Any], title: str) -> dict[str, Any] | None:
@@ -16,15 +18,45 @@ def find_node(workflow: dict[str, Any], title: str) -> dict[str, Any] | None:
 
 def upload_reference_image(comfyui_url: str, image_path: str | Path) -> str:
     path = Path(image_path)
-    with path.open("rb") as handle:
-        response = requests.post(
-            f"{comfyui_url.rstrip('/')}/upload/image",
-            files={"image": (path.name, handle, "image/png")},
-            data={"overwrite": "true"},
-            timeout=30,
-        )
-    response.raise_for_status()
-    payload = response.json()
+    boundary = f"----comicdrama{random.randint(100000000, 999999999)}"
+    suffix = path.suffix.lower()
+    content_type = "image/png"
+    if suffix in {".jpg", ".jpeg"}:
+        content_type = "image/jpeg"
+    elif suffix == ".webp":
+        content_type = "image/webp"
+
+    body = bytearray()
+    body.extend(
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="image"; filename="{path.name}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode("utf-8")
+    )
+    body.extend(path.read_bytes())
+    body.extend(b"\r\n")
+    body.extend(
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="overwrite"\r\n\r\n'
+            "true\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("utf-8")
+    )
+
+    request = Request(
+        f"{comfyui_url.rstrip('/')}/upload/image",
+        data=bytes(body),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body_text = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"ComfyUI image upload failed with HTTP {exc.code}: {body_text}") from exc
     name = str(payload.get("name") or "").strip()
     if not name:
         raise RuntimeError("ComfyUI upload did not return a file name")

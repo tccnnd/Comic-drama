@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from video_providers import get_video_provider_spec
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,8 +92,8 @@ def _resolve_template_value(value: Any) -> str | None:
     if not value:
         return None
     replacements = {
-        "__LORA_NAME__": os.environ.get("COMFYUI_LORA_NAME", "").strip(),
-        "__CHECKPOINT_NAME__": _env_value("COMFYUI_CHECKPOINT_NAME", default=""),
+        "__LORA_NAME__": _env_value("COMFYUI_LORA_NAME", "COMFYUI_VIDEO_LORA_NAME", default=""),
+        "__CHECKPOINT_NAME__": _env_value("COMFYUI_CHECKPOINT_NAME", "COMFYUI_VIDEO_CHECKPOINT_NAME", default=""),
     }
     return replacements.get(value, value)
 
@@ -150,7 +151,10 @@ def _as_string_list(value: Any) -> list[str]:
 def check_comfyui_health() -> dict[str, Any]:
     _load_env_file()
     base_url = _comfyui_base_url()
-    video_provider = _env_value("VIDEO_PROVIDER", default="local").strip().lower() or "local"
+    provider_spec = get_video_provider_spec(_env_value("VIDEO_PROVIDER", default="local"))
+    video_provider = provider_spec.id
+    video_backend = provider_spec.backend
+    requires_comfyui = video_backend == "comfyui"
     raw_video_template = _env_value("COMFYUI_VIDEO_WORKFLOW_PATH", "VIDEO_WORKFLOW_PATH", default="workflows/comfyui_video_template.json")
     video_template_path = Path(raw_video_template)
     if not video_template_path.is_absolute():
@@ -160,9 +164,9 @@ def check_comfyui_health() -> dict[str, Any]:
     blockers: list[str] = []
     warnings: list[str] = []
 
-    if via_ssh_tunnel and not paramiko_available:
+    if requires_comfyui and via_ssh_tunnel and not paramiko_available:
         blockers.append("SSH tunnel configured (COMFYUI_SSH_HOST is set) but paramiko is not installed")
-    if video_provider == "comfyui" and not video_template_path.is_file():
+    if requires_comfyui and not video_template_path.is_file():
         blockers.append(f"ComfyUI video workflow template not found: {video_template_path}")
 
     try:
@@ -171,17 +175,17 @@ def check_comfyui_health() -> dict[str, Any]:
     except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError):
         comfyui_online = False
 
-    if not comfyui_online:
+    if requires_comfyui and not comfyui_online:
         if via_ssh_tunnel and paramiko_available:
             blockers.append("ComfyUI unreachable; SSH tunnel may be down")
         else:
             blockers.append(f"ComfyUI offline at {base_url}")
 
-    requirements = _parse_template_requirements()
+    requirements = _parse_template_requirements() if requires_comfyui else {"checkpoints": [], "loras": []}
     checkpoint_required = requirements["checkpoints"]
     loras_required = requirements["loras"]
-    if not checkpoint_required:
-        blockers.append("COMFYUI_CHECKPOINT_NAME is required")
+    if requires_comfyui and not checkpoint_required:
+        blockers.append("COMFYUI_CHECKPOINT_NAME / COMFYUI_VIDEO_CHECKPOINT_NAME is required")
     checkpoint_available: list[str] = []
     loras_available: list[str] = []
     missing_nodes: list[str] = []
@@ -212,14 +216,15 @@ def check_comfyui_health() -> dict[str, Any]:
             ]
             missing_nodes = [node for node in required_nodes if node not in object_info]
 
-            for checkpoint in checkpoint_required:
-                if checkpoint not in checkpoint_available:
-                    blockers.append(f"Checkpoint not found in ComfyUI: {checkpoint}")
-            for lora in loras_required:
-                if lora not in loras_available:
-                    blockers.append(f"LoRA not found in ComfyUI: {lora}")
-            if missing_nodes:
-                blockers.append(f"Missing ComfyUI nodes: {', '.join(missing_nodes)}")
+            if requires_comfyui:
+                for checkpoint in checkpoint_required:
+                    if checkpoint not in checkpoint_available:
+                        blockers.append(f"Checkpoint not found in ComfyUI: {checkpoint}")
+                for lora in loras_required:
+                    if lora not in loras_available:
+                        blockers.append(f"LoRA not found in ComfyUI: {lora}")
+                if missing_nodes:
+                    blockers.append(f"Missing ComfyUI nodes: {', '.join(missing_nodes)}")
 
     return {
         "comfyui": {
@@ -230,6 +235,7 @@ def check_comfyui_health() -> dict[str, Any]:
         },
         "video": {
             "provider": video_provider,
+            "backend": video_backend,
             "workflow_path": str(video_template_path),
             "workflow_exists": video_template_path.is_file(),
         },

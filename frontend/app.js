@@ -47,6 +47,7 @@ const state = {
   eventSourceProjectId: "",
   sseConnected: false,
   timelineDrag: null,
+  temporalShotDrag: null,
   sfxDrag: null,
   cropEditorSceneOrder: null,
   cropBoxDirty: false,
@@ -60,6 +61,10 @@ const STORAGE_KEYS = {
 
 const appRoot = document.getElementById("app");
 const voiceCatalogList = document.getElementById("voiceCatalogList");
+
+let temporalPreviewTimeline = null;
+let temporalPreviewFallbackTimer = null;
+let gsapLoadPromise = null;
 
 const assetTabs = [
   ["character", "characters", "角色"],
@@ -1040,6 +1045,7 @@ async function importScriptFile(file) {
 }
 
 function render() {
+  stopTemporalPreview();
   appRoot.innerHTML = renderShell();
   renderVoiceCatalogDatalist();
 }
@@ -1857,6 +1863,7 @@ function renderSceneEditor(scene, project) {
             ${fieldTextarea("sceneReferenceTextInput", "参考文本", scene.reference_text || "", 3)}
           </div>
         </div>
+        ${renderSceneShotEditor(scene)}
         ${renderSceneAudioManifestEditor(scene)}
         ${renderSceneHistory(scene)}
         ${renderVoicePreviewResult()}
@@ -1900,8 +1907,135 @@ function sceneSfxTrigger(scene) {
   return manifest.sfx_trigger && typeof manifest.sfx_trigger === "object" ? manifest.sfx_trigger : {};
 }
 
+function sceneShots(scene) {
+  return Array.isArray(scene?.shots) ? scene.shots : [];
+}
+
+function sceneTemporalShots(scene) {
+  const spec = scene?.temporal_spec && typeof scene.temporal_spec === "object" ? scene.temporal_spec : {};
+  return Array.isArray(spec.shots) && spec.shots.length ? spec.shots : sceneShots(scene);
+}
+
 function sceneDurationMs(scene) {
   return Math.max(250, Number(scene?.duration_seconds || 4) * 1000);
+}
+
+function shotBeatClass(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+}
+
+function renderSceneShotTrack(scene) {
+  const shots = sceneShots(scene);
+  if (!shots.length) {
+    return `<div class="micro-track shot-track"><em>暂无 shot</em></div>`;
+  }
+  const total = shots.reduce((sum, shot) => sum + Math.max(0.1, asNumber(shot.duration_seconds, 0)), 0) || 1;
+  return `
+    <div class="micro-track shot-track">
+      ${shots
+        .map((shot, index) => {
+          const duration = Math.max(0.1, asNumber(shot.duration_seconds, 0.1));
+          const label = String(shot.label || shot.beat_type || `SHOT ${index + 1}`).trim();
+          const beatType = shotBeatClass(shot.beat_type || label);
+          const width = Math.max(18, (duration / total) * 100);
+          const caption = String(shot.caption || shot.bubble || shot.dialogue || shot.title || "").trim();
+          return `
+            <b class="shot-node${beatType ? ` is-${h(beatType)}` : ""}${shot.has_override ? " is-overridden" : ""}" style="flex:${width};" title="${h(caption || shot.title || label)}">
+              ${h(label)}
+              <span>${h(duration.toFixed(1))}s</span>
+            </b>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function shotEditorId(order, field) {
+  return `sceneShot${field}_${order}`;
+}
+
+function renderSceneShotEditor(scene) {
+  const shots = sceneShots(scene);
+  if (!shots.length) {
+    return "";
+  }
+  return `
+    <div class="editor-block">
+      <div class="editor-block-title">Shot overrides</div>
+      <div class="shot-editor-list">
+        ${shots
+          .map((shot, index) => {
+            const order = Number(shot.shot_order || index + 1);
+            const label = String(shot.label || shot.beat_type || `SHOT ${order}`).trim();
+            return `
+              <div class="shot-editor-row">
+                <div class="shot-editor-label">
+                  <strong>${h(label)}</strong>
+                  <span>${h(shot.beat_type || `#${order}`)}</span>
+                </div>
+                ${fieldNumber(shotEditorId(order, "Duration"), "Duration", shot.duration_seconds ?? 1, 'min="0.25" max="120" step="0.05"')}
+                ${fieldSelect(shotEditorId(order, "Camera"), "Camera", cameraOptions, shot.camera_movement || scene.camera_movement || "slow_push_in")}
+                ${fieldNumber(shotEditorId(order, "Zoom"), "Zoom", shot.zoom ?? 1, 'min="1" max="3" step="0.01"')}
+                ${fieldNumber(shotEditorId(order, "Speed"), "Speed", shot.camera_speed ?? scene.camera_speed ?? 1, 'min="0.1" max="5" step="0.05"')}
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderTemporalPreview(scene) {
+  const shots = sceneTemporalShots(scene);
+  if (!shots.length) {
+    return "";
+  }
+  const total = shots.reduce((sum, shot) => sum + Math.max(0.25, asNumber(shot.duration_seconds, 0.25)), 0) || scene.duration_seconds || 1;
+  return `
+    <div class="temporal-preview" data-temporal-preview data-scene-order="${h(scene.order)}">
+      <div class="temporal-preview-head">
+        <div>
+          <strong>Temporal preview</strong>
+          <span data-temporal-summary>${h(shots.length)} shots / ${h(total.toFixed(1))}s</span>
+        </div>
+        <div class="temporal-preview-actions">
+          <button class="ghost-button mini-button" type="button" data-action="temporal-preview-play">Play</button>
+          <button class="ghost-button mini-button" type="button" data-action="temporal-preview-pause">Pause</button>
+          <button class="ghost-button mini-button" type="button" data-action="temporal-preview-reset">Reset</button>
+        </div>
+      </div>
+      <div class="temporal-preview-stage" id="temporalPreviewStage">
+        <div class="temporal-preview-world" id="temporalPreviewWorld">
+          <div class="temporal-preview-horizon"></div>
+          <div class="temporal-preview-grid"></div>
+          <div class="temporal-preview-actor" id="temporalPreviewActor">
+            <i></i>
+            <span>${h((scene.characters || [scene.speaker || "Actor"])[0] || scene.speaker || "Actor")}</span>
+          </div>
+          <div class="temporal-preview-title">${h(scene.title || "Scene")}</div>
+        </div>
+      </div>
+      <div class="temporal-preview-progress"><i id="temporalPreviewProgress"></i></div>
+      <div class="temporal-preview-strip">
+        ${shots
+          .map((shot, index) => {
+            const duration = Math.max(0.25, asNumber(shot.duration_seconds, 0.25));
+            const width = Math.max(20, (duration / total) * 100);
+            const label = String(shot.label || shot.beat_type || `SHOT ${index + 1}`).trim();
+            const order = Number(shot.shot_order || index + 1);
+            return `
+              <b data-temporal-shot="${h(index)}" data-shot-order="${h(order)}" data-duration="${h(duration)}" style="flex:${width};" title="${h(label)}">
+                <span>${h(index + 1)}</span>
+                <i class="temporal-shot-resize" data-action="temporal-shot-resize" data-temporal-shot="${h(index)}" data-shot-order="${h(order)}" aria-hidden="true"></i>
+              </b>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderSceneClipInspector(scene) {
@@ -1933,6 +2067,10 @@ function renderSceneClipInspector(scene) {
           </div>
         </div>
         <div class="micro-timeline-row">
+          <span>鏅ご绫诲瀷</span>
+          ${renderSceneShotTrack(scene)}
+        </div>
+        <div class="micro-timeline-row">
           <span>音效</span>
           <div class="micro-track sfx-track">
             ${triggerFile ? `<b class="sfx-node" data-sfx-anchor="true" data-scene-order="${h(scene.order)}" data-duration-ms="${h(durationMs)}" data-current-ms="${h(triggerMs)}" style="left:${sfxPosition}%" title="${h(triggerFile)} @ ${h(triggerMs)}ms">${h(triggerFile)} ${h(triggerMs)}ms</b>` : `<em>无触发音效</em>`}
@@ -1950,9 +2088,139 @@ function renderSceneClipInspector(scene) {
         <span>BGM ${h(manifest.bgm_style || manifest.bgm_file || "未设置")}</span>
         <span>SFX ${triggerFile ? `${h(triggerFile)} / ${h(triggerMs)}ms` : "无"}</span>
       </div>
+      ${renderTemporalPreview(scene)}
       <button class="ghost-button clip-rerender-button" type="button" data-action="rerender-video">重合成当前格</button>
     </div>
   `;
+}
+
+function stopTemporalPreview() {
+  if (temporalPreviewTimeline?.kill) {
+    temporalPreviewTimeline.kill();
+  }
+  temporalPreviewTimeline = null;
+  if (temporalPreviewFallbackTimer) {
+    window.clearInterval(temporalPreviewFallbackTimer);
+    temporalPreviewFallbackTimer = null;
+  }
+}
+
+function temporalPreviewState(shot, index = 0) {
+  const zoom = Math.max(1, asNumber(shot?.zoom, 1.04));
+  const centerX = clamp(shot?.center_x ?? 0.5, 0, 1);
+  const centerY = clamp(shot?.center_y ?? 0.5, 0, 1);
+  const movement = String(shot?.camera_movement || "").toLowerCase();
+  const panBias = movement.includes("left") ? -24 : movement.includes("right") ? 24 : 0;
+  const tiltBias = movement.includes("up") ? -20 : movement.includes("down") ? 20 : 0;
+  return {
+    scale: zoom,
+    x: (0.5 - centerX) * 130 + panBias,
+    y: (0.5 - centerY) * 100 + tiltBias,
+    actorX: (centerX - 0.5) * 72 + (index % 2 ? 10 : -8),
+    actorY: (centerY - 0.5) * 48,
+  };
+}
+
+function updateTemporalPreviewUi(progress, activeIndex) {
+  const progressEl = document.getElementById("temporalPreviewProgress");
+  if (progressEl) {
+    progressEl.style.width = `${Math.max(0, Math.min(100, progress * 100))}%`;
+  }
+  document.querySelectorAll("[data-temporal-shot]").forEach((node) => {
+    node.classList.toggle("is-active", Number(node.dataset.temporalShot) === Number(activeIndex));
+  });
+}
+
+function activeTemporalShotIndex(shots, elapsed) {
+  let cursor = 0;
+  for (let index = 0; index < shots.length; index += 1) {
+    cursor += Math.max(0.25, asNumber(shots[index]?.duration_seconds, 0.25)) * 0.55;
+    if (elapsed <= cursor) return index;
+  }
+  return Math.max(0, shots.length - 1);
+}
+
+function resetTemporalPreview() {
+  stopTemporalPreview();
+  const world = document.getElementById("temporalPreviewWorld");
+  const actor = document.getElementById("temporalPreviewActor");
+  if (window.gsap && world && actor) {
+    window.gsap.set(world, { x: 0, y: 0, scale: 1, transformOrigin: "50% 50%" });
+    window.gsap.set(actor, { x: 0, y: 0 });
+  } else {
+    if (world) world.style.transform = "translate3d(0,0,0) scale(1)";
+    if (actor) actor.style.transform = "translate3d(0,0,0)";
+  }
+  updateTemporalPreviewUi(0, -1);
+}
+
+function pauseTemporalPreview() {
+  if (temporalPreviewTimeline?.pause) {
+    temporalPreviewTimeline.pause();
+  }
+  if (temporalPreviewFallbackTimer) {
+    window.clearInterval(temporalPreviewFallbackTimer);
+    temporalPreviewFallbackTimer = null;
+  }
+}
+
+function ensureGsapLoaded() {
+  if (window.gsap) {
+    return Promise.resolve(window.gsap);
+  }
+  if (gsapLoadPromise) {
+    return gsapLoadPromise;
+  }
+  gsapLoadPromise = new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js";
+    script.async = true;
+    script.onload = () => resolve(window.gsap || null);
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+  return gsapLoadPromise;
+}
+
+async function playTemporalPreview() {
+  const scene = selectedScene();
+  const shots = sceneTemporalShots(scene);
+  const world = document.getElementById("temporalPreviewWorld");
+  const actor = document.getElementById("temporalPreviewActor");
+  if (!scene || !shots.length || !world || !actor) return;
+  resetTemporalPreview();
+  const durations = shots.map((shot) => Math.max(0.25, asNumber(shot.duration_seconds, 0.25)) * 0.55);
+  const total = durations.reduce((sum, duration) => sum + duration, 0) || 1;
+  const gsap = await ensureGsapLoaded();
+  if (gsap) {
+    let cursor = 0;
+    temporalPreviewTimeline = gsap.timeline({
+      paused: true,
+      onUpdate: () => {
+        updateTemporalPreviewUi(temporalPreviewTimeline.progress(), activeTemporalShotIndex(shots, temporalPreviewTimeline.time()));
+      },
+      onComplete: () => updateTemporalPreviewUi(1, shots.length - 1),
+    });
+    shots.forEach((shot, index) => {
+      const state = temporalPreviewState(shot, index);
+      const ease = String(shot.camera_movement || "").includes("dramatic") ? "power3.out" : "sine.inOut";
+      temporalPreviewTimeline.to(world, { x: state.x, y: state.y, scale: state.scale, duration: durations[index], ease }, cursor);
+      temporalPreviewTimeline.to(actor, { x: state.actorX, y: state.actorY, duration: durations[index], ease: "sine.inOut" }, cursor);
+      cursor += durations[index];
+    });
+    temporalPreviewTimeline.play(0);
+    return;
+  }
+  const started = performance.now();
+  temporalPreviewFallbackTimer = window.setInterval(() => {
+    const elapsed = Math.min(total, (performance.now() - started) / 1000);
+    const active = activeTemporalShotIndex(shots, elapsed);
+    const state = temporalPreviewState(shots[active], active);
+    world.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
+    actor.style.transform = `translate3d(${state.actorX}px, ${state.actorY}px, 0)`;
+    updateTemporalPreviewUi(elapsed / total, active);
+    if (elapsed >= total) pauseTemporalPreview();
+  }, 33);
 }
 
 function cameraClassName(camera) {
@@ -2207,6 +2475,27 @@ function getChecked(id) {
   return Boolean(document.getElementById(id)?.checked);
 }
 
+function sceneShotOverridesPayload(scene) {
+  return sceneShots(scene).map((shot, index) => {
+    const order = Number(shot.shot_order || index + 1);
+    return {
+      shot_id: String(shot.shot_id || "").trim(),
+      shot_order: order,
+      label: String(shot.label || shot.beat_type || `SHOT ${order}`).trim(),
+      caption: String(shot.caption || "").trim(),
+      bubble: String(shot.bubble || "").trim(),
+      duration_seconds: Math.max(0.25, asNumber(getValue(shotEditorId(order, "Duration"), shot.duration_seconds ?? 1), 1)),
+      camera_movement: getValue(shotEditorId(order, "Camera"), shot.camera_movement || scene?.camera_movement || "slow_push_in"),
+      camera_speed: Math.max(0.1, asNumber(getValue(shotEditorId(order, "Speed"), shot.camera_speed ?? scene?.camera_speed ?? 1), 1)),
+      zoom: Math.max(1, asNumber(getValue(shotEditorId(order, "Zoom"), shot.zoom ?? 1), 1)),
+      hold_in_ratio: asNumber(shot.hold_in_ratio, 0),
+      hold_out_ratio: asNumber(shot.hold_out_ratio, 0),
+      center_x: asNumber(shot.center_x, 0.5),
+      center_y: asNumber(shot.center_y, 0.5),
+    };
+  });
+}
+
 function scenePatchPayload() {
   const scene = selectedScene();
   const cropBox = document.getElementById("sceneCropXInput")
@@ -2233,6 +2522,7 @@ function scenePatchPayload() {
     crop_box: cropBox,
     sfx_type: getValue("sceneSfxTypeInput", scene?.sfx_type || "auto"),
     audio_manifest: sceneAudioManifestPayload(scene),
+    shot_overrides: sceneShotOverridesPayload(scene),
   };
 }
 
@@ -2808,6 +3098,103 @@ async function finishTimelineDrag(event) {
   }
 }
 
+function findShotByOrder(shots, order) {
+  const numericOrder = Number(order || 0);
+  return shots.find((shot, index) => Number(shot.shot_order || index + 1) === numericOrder) || null;
+}
+
+function setSceneShotDuration(scene, order, duration) {
+  const sceneShot = findShotByOrder(sceneShots(scene), order);
+  if (sceneShot) {
+    sceneShot.duration_seconds = duration;
+  }
+  const spec = scene?.temporal_spec && typeof scene.temporal_spec === "object" ? scene.temporal_spec : null;
+  const temporalShot = spec ? findShotByOrder(Array.isArray(spec.shots) ? spec.shots : [], order) : null;
+  if (temporalShot) {
+    temporalShot.duration_seconds = duration;
+  }
+  const input = document.getElementById(shotEditorId(order, "Duration"));
+  if (input) {
+    input.value = duration.toFixed(2);
+  }
+}
+
+function startTemporalShotDrag(event, handle) {
+  const scene = selectedScene();
+  const preview = handle.closest("[data-temporal-preview]");
+  const strip = handle.closest(".temporal-preview-strip");
+  const shotNode = handle.closest("[data-temporal-shot]");
+  const order = Number(handle.dataset.shotOrder || shotNode?.dataset.shotOrder || 0);
+  const shot = findShotByOrder(sceneTemporalShots(scene), order);
+  if (!scene || !preview || !strip || !shot || !order) return;
+  event.preventDefault();
+  event.stopPropagation();
+  pauseTemporalPreview();
+  const shots = sceneTemporalShots(scene);
+  const total = shots.reduce((sum, item) => sum + Math.max(0.25, asNumber(item.duration_seconds, 0.25)), 0) || 1;
+  const stripWidth = Math.max(160, strip.getBoundingClientRect().width);
+  const pointerId = "pointerId" in event ? event.pointerId : "mouse";
+  state.temporalShotDrag = {
+    pointerId,
+    sceneOrder: Number(scene.order || state.selectedSceneOrder || 0),
+    order,
+    strip,
+    shotNode,
+    startX: event.clientX,
+    startDuration: Math.max(0.25, asNumber(shot.duration_seconds, 0.25)),
+    activeDuration: Math.max(0.25, asNumber(shot.duration_seconds, 0.25)),
+    secondsPerPx: total / stripWidth,
+  };
+  if ("pointerId" in event) {
+    handle.setPointerCapture?.(event.pointerId);
+  }
+  document.body.style.cursor = "ew-resize";
+}
+
+function updateTemporalShotStrip(drag) {
+  const scene = selectedScene();
+  const shots = sceneTemporalShots(scene);
+  const total = shots.reduce((sum, item) => sum + Math.max(0.25, asNumber(item.duration_seconds, 0.25)), 0) || 1;
+  const nodes = drag.strip.querySelectorAll("[data-temporal-shot]");
+  nodes.forEach((node) => {
+    const order = Number(node.dataset.shotOrder || 0);
+    const shot = findShotByOrder(shots, order);
+    if (!shot) return;
+    const duration = Math.max(0.25, asNumber(shot.duration_seconds, 0.25));
+    node.style.flex = `${Math.max(20, (duration / total) * 100)}`;
+    node.dataset.duration = String(duration);
+  });
+  const summary = document.querySelector("[data-temporal-summary]");
+  if (summary) {
+    summary.textContent = `${shots.length} shots / ${total.toFixed(1)}s`;
+  }
+}
+
+function handleTemporalShotMove(event) {
+  const drag = state.temporalShotDrag;
+  if (!drag) return;
+  if ("pointerId" in event && drag.pointerId !== event.pointerId) return;
+  event.preventDefault?.();
+  const step = event.shiftKey ? 0.01 : 0.05;
+  const deltaSeconds = (event.clientX - drag.startX) * drag.secondsPerPx;
+  const nextDuration = Math.max(0.25, Math.round((drag.startDuration + deltaSeconds) / step) * step);
+  drag.activeDuration = Number(nextDuration.toFixed(2));
+  const scene = selectedScene();
+  if (!scene || Number(scene.order || 0) !== drag.sceneOrder) return;
+  setSceneShotDuration(scene, drag.order, drag.activeDuration);
+  updateTemporalShotStrip(drag);
+}
+
+function finishTemporalShotDrag(event) {
+  const drag = state.temporalShotDrag;
+  if (!drag) return;
+  if ("pointerId" in event && drag.pointerId !== event.pointerId) return;
+  event.preventDefault?.();
+  state.temporalShotDrag = null;
+  document.body.style.cursor = "";
+  showToast("Shot duration updated. Save scene to persist.");
+}
+
 function startSfxDrag(event, anchor) {
   const track = anchor.closest(".sfx-track");
   const sceneOrder = Number(anchor.dataset.sceneOrder || state.selectedSceneOrder || 0);
@@ -3052,6 +3439,9 @@ async function handleClick(event) {
     if (action === "save-comfyui-url") return saveComfyUIUrl();
     if (action === "check-comfyui") return loadComfyUIStatus();
     if (action === "open-comfyui") return openComfyUI();
+    if (action === "temporal-preview-play") return playTemporalPreview();
+    if (action === "temporal-preview-pause") return pauseTemporalPreview();
+    if (action === "temporal-preview-reset") return resetTemporalPreview();
     if (action === "build-project") return buildProject();
     if (action === "export-project") return exportProject();
     if (action === "fill-missing-assets") return fillMissingAssets(["image", "audio", "video"], "补齐全部缺口");
@@ -3126,6 +3516,11 @@ async function boot() {
   clearProjectPoll();
   appRoot.addEventListener("click", handleClick);
   appRoot.addEventListener("mousedown", (event) => {
+    const temporalShotHandle = event.target.closest?.('[data-action="temporal-shot-resize"]');
+    if (temporalShotHandle) {
+      startTemporalShotDrag(event, temporalShotHandle);
+      return;
+    }
     const sfxAnchor = event.target.closest?.("[data-sfx-anchor]");
     if (sfxAnchor) {
       startSfxDrag(event, sfxAnchor);
@@ -3138,22 +3533,27 @@ async function boot() {
   appRoot.addEventListener("input", handleInput);
   document.addEventListener("pointermove", (event) => {
     handleTimelineMove(event);
+    handleTemporalShotMove(event);
     updateSfxDragPosition(event);
   });
   document.addEventListener("pointerup", (event) => {
     finishTimelineDrag(event);
+    finishTemporalShotDrag(event);
     finishSfxDrag(event);
   });
   document.addEventListener("pointercancel", (event) => {
     finishTimelineDrag(event);
+    finishTemporalShotDrag(event);
     finishSfxDrag(event);
   });
   document.addEventListener("mousemove", (event) => {
     handleTimelineMove(event);
+    handleTemporalShotMove(event);
     updateSfxDragPosition(event);
   });
   document.addEventListener("mouseup", (event) => {
     finishTimelineDrag(event);
+    finishTemporalShotDrag(event);
     finishSfxDrag(event);
   });
   document.addEventListener("keydown", (event) => {

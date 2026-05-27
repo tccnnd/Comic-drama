@@ -39,9 +39,12 @@ from scripts.director_classifier import (
     classify_scenes_batch,
 )
 from scripts.bgm_matcher import select_bgm_for_scene
+from scripts.comfyui_patcher import patch_workflow
 from scripts.prompt_compiler import PromptCompiler, find_project_root
 from scripts.subtitle_style import build_ass_document
 from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
+from scripts.video_provider_adapters import VideoRenderRequest, render_remote_video_provider
+from video_providers import get_video_provider_spec, normalize_video_provider as resolve_video_provider_name
 
 edge_tts = tts_engines.edge_tts
 
@@ -327,6 +330,8 @@ class StoryScene:
     pacing: str = ""
     subject_focus: str = ""
     director_meta: dict[str, Any] | None = None
+    production_bible: dict[str, Any] = field(default_factory=dict)
+    temporal_spec: dict[str, Any] = field(default_factory=dict)
     character_prompt_compilation: str = ""
     negative_prompt_compilation: str = ""
     validation_failed: bool = False
@@ -1392,7 +1397,7 @@ def inject_comfyui_workflow(
         raise ValueError("ComfyUI workflow template must be a JSON object.")
     checkpoint_name = str(checkpoint_name or "").strip()
     if not checkpoint_name:
-        raise ValueError("COMFYUI_CHECKPOINT_NAME is required for ComfyUI rendering.")
+        raise ValueError("COMFYUI_CHECKPOINT_NAME / COMFYUI_VIDEO_CHECKPOINT_NAME is required for ComfyUI rendering.")
 
     graph = deepcopy(template)
     checkpoint_node_id: str | None = None
@@ -1752,6 +1757,159 @@ def build_scene_beats(scene: StoryScene, total_duration: float, spoken_text: str
             "duration": durations[3],
         },
     ]
+
+
+def build_scene_graph(scene: StoryScene) -> dict[str, object]:
+    spoken_text = split_dialogue_speaker(scene.dialogue)[1] or scene.dialogue
+    beat_specs = build_scene_beats(scene, float(scene.duration or 0.0), spoken_text)
+    camera_track = {
+        "movement": str(scene.camera_movement or scene.camera or "").strip(),
+        "speed": float(scene.camera_speed or 1.0),
+        "shot_count": len(beat_specs),
+        "beat_labels": [str(beat.get("label") or "") for beat in beat_specs],
+        "beat_types": [str(beat.get("beat_type") or "") for beat in beat_specs],
+    }
+    cursor = 0.0
+    shots: list[dict[str, object]] = []
+    for index, beat in enumerate(beat_specs, start=1):
+        duration = max(0.25, float(beat.get("duration") or 0.0))
+        shots.append(
+            {
+                "shot_id": f"scene_{scene.scene:03d}_shot_{index:02d}",
+                "shot_order": index,
+                "label": str(beat.get("label") or beat.get("beat_type") or f"SHOT {index}").strip(),
+                "beat_type": str(beat.get("beat_type") or "").strip(),
+                "title": str(scene.title or "").strip(),
+                "caption": str(beat.get("caption") or "").strip(),
+                "bubble": str(beat.get("bubble") or "").strip(),
+                "start_seconds": round(cursor, 3),
+                "duration_seconds": round(duration, 3),
+                "end_seconds": round(min(float(scene.duration or 0.0), cursor + duration), 3),
+                "camera_movement": str(scene.camera_movement or scene.camera or "").strip(),
+                "camera_speed": float(scene.camera_speed or 1.0),
+                "zoom": float(beat.get("zoom") or 1.0),
+                "hold_in_ratio": float(beat.get("hold_in_ratio") or 0.0),
+                "hold_out_ratio": float(beat.get("hold_out_ratio") or 0.0),
+                "center_x": float(beat.get("center_x") or 0.5),
+                "center_y": float(beat.get("center_y") or 0.5),
+                "speaker": str(scene.speaker or split_dialogue_speaker(scene.dialogue)[0] or "").strip(),
+                "dialogue": spoken_text.strip(),
+                "emotion": str(scene.emotion_tone or scene.emotion or "").strip(),
+                "scene_intent": str(scene.scene_intent or "").strip(),
+                "subject_focus": str(scene.subject_focus or "").strip(),
+            }
+        )
+        cursor += duration
+    return {"camera_track": camera_track, "shots": shots}
+
+
+def build_scene_temporal_spec(scene: StoryScene, duration: float, *, width: int = 1080, height: int = 1920, fps: int = 24) -> dict[str, Any]:
+    graph = deepcopy(build_scene_graph(scene))
+    shots: list[dict[str, Any]] = []
+    for raw in graph.get("shots", []) or []:
+        if not isinstance(raw, dict):
+            continue
+        shots.append(
+            {
+                "shot_id": raw.get("shot_id"),
+                "shot_order": raw.get("shot_order"),
+                "label": raw.get("label"),
+                "beat_type": raw.get("beat_type"),
+                "start_seconds": raw.get("start_seconds"),
+                "duration_seconds": raw.get("duration_seconds"),
+                "end_seconds": raw.get("end_seconds"),
+                "camera_movement": raw.get("camera_movement"),
+                "camera_speed": raw.get("camera_speed"),
+                "zoom": raw.get("zoom"),
+                "hold_in_ratio": raw.get("hold_in_ratio"),
+                "hold_out_ratio": raw.get("hold_out_ratio"),
+                "center_x": raw.get("center_x"),
+                "center_y": raw.get("center_y"),
+                "caption": raw.get("caption"),
+                "bubble": raw.get("bubble"),
+                "speaker": raw.get("speaker"),
+                "dialogue": raw.get("dialogue"),
+                "emotion": raw.get("emotion"),
+                "scene_intent": raw.get("scene_intent"),
+                "subject_focus": raw.get("subject_focus"),
+            }
+        )
+    return {
+        "version": 1,
+        "kind": "scene_temporal_video_spec",
+        "scene": scene.scene,
+        "title": scene.title,
+        "duration_seconds": round(float(duration or scene.duration or 0.0), 3),
+        "size": {"width": int(width), "height": int(height), "fps": int(fps)},
+        "camera_track": graph.get("camera_track") or {},
+        "shots": shots,
+        "continuity_rules": {
+            "generate_continuous_video": True,
+            "avoid_static_pan_only_motion": True,
+            "preserve_character_environment_contact": True,
+            "preserve_lighting_direction": True,
+            "preserve_scene_geometry": True,
+        },
+    }
+
+
+def scene_consistency_spec(scene: StoryScene) -> dict[str, Any]:
+    bible = deepcopy(scene.production_bible) if isinstance(scene.production_bible, dict) else {}
+    current = bible.get("current_scene") if isinstance(bible.get("current_scene"), dict) else {}
+    return {
+        "version": 1,
+        "kind": "scene_consistency_spec",
+        "scene": scene.scene,
+        "title": scene.title,
+        "active_characters": current.get("active_characters") if isinstance(current, dict) else [],
+        "character_prompt": scene.character_prompt_compilation,
+        "negative_prompt": scene.negative_prompt_compilation,
+        "primary_reference": {
+            "path": scene.primary_reference_image_path,
+            "meta": deepcopy(scene.primary_reference_meta) if isinstance(scene.primary_reference_meta, dict) else {},
+        },
+        "rules": bible.get("rules") if isinstance(bible.get("rules"), dict) else {
+            "preserve_character_identity": True,
+            "keep_lighting_continuous_within_scene": True,
+            "keep_environment_geometry_stable": True,
+        },
+    }
+
+
+def temporal_spec_prompt_lines(temporal_spec: dict[str, Any], consistency_spec: dict[str, Any]) -> list[str]:
+    lines = [
+        "Generate a real continuous video, not a still image with pan/zoom.",
+        "Keep motion temporally coherent across the whole shot.",
+        "Keep characters physically grounded in the environment with stable lighting and scale.",
+    ]
+    shots = temporal_spec.get("shots") if isinstance(temporal_spec, dict) else []
+    if isinstance(shots, list) and shots:
+        compact = []
+        for shot in shots[:6]:
+            if not isinstance(shot, dict):
+                continue
+            compact.append(
+                f"{shot.get('shot_order')}: {shot.get('label')} {shot.get('camera_movement')} "
+                f"{shot.get('duration_seconds')}s focus=({shot.get('center_x')},{shot.get('center_y')})"
+            )
+        if compact:
+            lines.append("Shot timing plan: " + " | ".join(compact))
+    active = consistency_spec.get("active_characters") if isinstance(consistency_spec, dict) else []
+    if isinstance(active, list) and active:
+        character_bits = []
+        for character in active[:4]:
+            if not isinstance(character, dict):
+                continue
+            bit = ", ".join(
+                str(character.get(key) or "").strip()
+                for key in ("name", "appearance_core", "clothing_style")
+                if str(character.get(key) or "").strip()
+            )
+            if bit:
+                character_bits.append(bit)
+        if character_bits:
+            lines.append("Character continuity: " + " | ".join(character_bits))
+    return lines
 
 
 def create_keyframe(scene: StoryScene, run_dir: Path) -> Path:
@@ -2195,13 +2353,7 @@ def download_comfyui_asset(asset_info: dict, out_path: Path) -> None:
         out_path.write_bytes(response.read())
 
 
-def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration: float, out_path: Path, run_dir: Path) -> Path:
-    workflow_path = comfyui_video_workflow_path()
-    if not workflow_path.exists():
-        raise FileNotFoundError(f"ComfyUI video workflow template not found: {workflow_path}")
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    debug_dir = run_dir / "debug"
+def build_scene_video_prompts(scene: StoryScene, duration: float, run_dir: Path) -> tuple[str, str]:
     prompt_parts = [clean_comfyui_visual_prompt(scene.visual), infer_character_appearance_hint(scene)]
     if scene.character_prompt_compilation:
         prompt_parts.append(str(scene.character_prompt_compilation).strip())
@@ -2210,6 +2362,20 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
     prompt_parts.append(
         "continuous motion, expressive acting, consistent lighting, stable character-environment relationship"
     )
+    temporal_spec = (
+        deepcopy(scene.temporal_spec)
+        if isinstance(scene.temporal_spec, dict) and scene.temporal_spec
+        else build_scene_temporal_spec(
+            scene,
+            duration,
+            width=int(env_float("VIDEO_WIDTH", default=1080)),
+            height=int(env_float("VIDEO_HEIGHT", default=1920)),
+            fps=int(env_float("VIDEO_FPS", default=24)),
+        )
+    )
+    consistency = scene_consistency_spec(scene)
+    scene.temporal_spec = temporal_spec
+    prompt_parts.extend(temporal_spec_prompt_lines(temporal_spec, consistency))
     prompt_text = anime_video_prompt(
         ", ".join(part for part in prompt_parts if str(part).strip()),
         title=scene.title,
@@ -2231,8 +2397,11 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
             list(scene.characters or []),
             speaker=scene.speaker,
         )
+        compiled_positive = ", ".join(
+            part for part in [compiled.positive, *temporal_spec_prompt_lines(temporal_spec, consistency)] if str(part).strip()
+        )
         prompt_text = anime_video_prompt(
-            compiled.positive,
+            compiled_positive,
             title=scene.title,
             characters=scene.characters,
             camera=scene.camera,
@@ -2240,21 +2409,42 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
             duration=duration,
         )
 
+    negative_text = " ".join(
+        part
+        for part in [
+            ANIME_NEGATIVE_PROMPT,
+            ANIME_NEGATIVE_PROMPT_EXTRA,
+            scene.negative_prompt_compilation,
+        ]
+        if part
+    )
+    return prompt_text, negative_text
+
+
+def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration: float, out_path: Path, run_dir: Path) -> Path:
+    workflow_path = comfyui_video_workflow_path()
+    if not workflow_path.exists():
+        raise FileNotFoundError(f"ComfyUI video workflow template not found: {workflow_path}")
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    debug_dir = run_dir / "debug"
+    prompt_text, negative_text = build_scene_video_prompts(scene, duration, run_dir)
+    temporal_spec = scene.temporal_spec or build_scene_temporal_spec(
+        scene,
+        duration,
+        width=int(env_float("VIDEO_WIDTH", default=1080)),
+        height=int(env_float("VIDEO_HEIGHT", default=1920)),
+        fps=int(env_float("VIDEO_FPS", default=24)),
+    )
+    consistency_spec = scene_consistency_spec(scene)
+
     workflow = load_json(workflow_path)
     prompt_id = f"comicdrama-video-{scene.scene:02}-{int(time.time() * 1000)}"
     client_id = f"client-{random.randint(100000, 999999)}"
     keyframe_info = comfyui_upload_image(keyframe_path)
     replacements = {
         "__PROMPT__": prompt_text,
-        "__NEGATIVE__": " ".join(
-            part
-            for part in [
-                ANIME_NEGATIVE_PROMPT,
-                ANIME_NEGATIVE_PROMPT_EXTRA,
-                scene.negative_prompt_compilation,
-            ]
-            if part
-        ),
+        "__NEGATIVE__": negative_text,
         "__SEED__": scene.scene * 20011 + 97,
         "__WIDTH__": int(env_float("VIDEO_WIDTH", default=1080)),
         "__HEIGHT__": int(env_float("VIDEO_HEIGHT", default=1920)),
@@ -2271,8 +2461,8 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
         "__SCENE_CAMERA__": scene.camera,
         "__SCENE_EMOTION__": scene.emotion,
         "__CHARACTER_DESCRIPTIONS__": scene.character_descriptions,
-        "__VIDEO_CHECKPOINT_NAME__": env_value("COMFYUI_VIDEO_CHECKPOINT_NAME", default=""),
-        "__VIDEO_LORA_NAME__": env_optional_value("COMFYUI_VIDEO_LORA_NAME", default=""),
+        "__VIDEO_CHECKPOINT_NAME__": comfyui_checkpoint_name(),
+        "__VIDEO_LORA_NAME__": comfyui_lora_name(),
         "__VIDEO_LORA_STRENGTH_MODEL__": env_float("COMFYUI_VIDEO_LORA_STRENGTH_MODEL", default=0.7),
         "__VIDEO_LORA_STRENGTH_CLIP__": env_float("COMFYUI_VIDEO_LORA_STRENGTH_CLIP", default=0.7),
         "__VIDEO_IP_ADAPTER_WEIGHT__": env_float("COMFYUI_VIDEO_IP_ADAPTER_WEIGHT", default=0.65),
@@ -2297,6 +2487,8 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
             "keyframe_info": keyframe_info,
             "duration": duration,
             "prompt_text": prompt_text,
+            "temporal_spec": temporal_spec,
+            "consistency_spec": consistency_spec,
         },
     )
     write_debug_json(debug_dir / f"scene_{scene.scene:02}_video_filled_workflow.json", injected)
@@ -2413,8 +2605,8 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
     ip_adapter_weight = env_float("COMFYUI_IP_ADAPTER_WEIGHT", default=0.65)
     if reference_info.get("placeholder"):
         ip_adapter_weight = min(ip_adapter_weight, env_float("COMFYUI_PLACEHOLDER_IP_ADAPTER_WEIGHT", default=0.0))
-    checkpoint_name = env_value("COMFYUI_CHECKPOINT_NAME", default="")
-    lora_name = env_optional_value("COMFYUI_LORA_NAME", default="")
+    checkpoint_name = comfyui_checkpoint_name()
+    lora_name = comfyui_lora_name()
     style_preset = comfyui_style_preset()
     replacements = {
         "__PROMPT__": prompt_text,
@@ -2451,6 +2643,13 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
         "__CHARACTER_COUNT__": len(scene.character_references or []),
     }
     scene.consistency_meta = _build_consistency_meta(scene, reference_info, ip_adapter_weight)
+    workflow = patch_workflow(
+        workflow,
+        positive_prompt="__PROMPT__\n__CHARACTER_DESCRIPTIONS__",
+        negative_prompt="blurry, noisy, messy, lowres, jpeg, artifacts, ill, distorted, malformed, watermark, __NEGATIVE__",
+        reference_image_filename="__PRIMARY_REFERENCE_IMAGE__",
+        ipadapter_weight=ip_adapter_weight,
+    )
     injected = inject_comfyui_workflow(
         workflow,
         checkpoint_name=checkpoint_name,
@@ -2544,22 +2743,15 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
 
 
 def normalize_video_provider(provider: str | None = None) -> str:
-    value = (provider or "auto").strip().lower()
-    if value == "auto":
-        value = env_value("VIDEO_PROVIDER", default="local").strip().lower() or "local"
-    aliases = {
-        "2.5d": "local",
-        "kenburns": "local",
-        "keyframe": "local",
-        "self_hosted": "comfyui",
-        "self-hosted": "comfyui",
-        "video_model": "comfyui",
-    }
-    value = aliases.get(value, value)
-    if value not in {"local", "comfyui"}:
-        print(f"[video] Unknown video provider '{value}', falling back to local")
-        return "local"
-    return value
+    return resolve_video_provider_name(provider)
+
+
+def comfyui_checkpoint_name() -> str:
+    return env_value("COMFYUI_CHECKPOINT_NAME", "COMFYUI_VIDEO_CHECKPOINT_NAME", default="")
+
+
+def comfyui_lora_name() -> str:
+    return env_optional_value("COMFYUI_LORA_NAME", default=env_optional_value("COMFYUI_VIDEO_LORA_NAME", default=""))
 
 
 DIRECTOR_SYSTEM_PROMPT = """
@@ -4526,16 +4718,62 @@ def render_clip(
     scene_audio = mix_scene_sfx(ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=project_root)
 
     visual_generated = False
-    provider = normalize_video_provider(video_provider)
-    if provider == "comfyui":
+    provider_spec = get_video_provider_spec(video_provider)
+    provider = provider_spec.id
+    if provider_spec.backend == "comfyui":
         try:
-            print(f"[video] Rendering scene {scene_id} with ComfyUI video provider")
+            print(f"[video] Rendering scene {scene_id} with {provider_spec.label} video provider")
             render_scene_video_comfyui(scene, keyframe, clip_duration, visual_path, run_dir)
             visual_generated = True
         except Exception as exc:
             if env_bool("VIDEO_STRICT", "COMFYUI_VIDEO_STRICT", default=False):
                 raise
-            print(f"[video] ComfyUI video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
+            print(f"[video] {provider_spec.label} video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
+    elif provider_spec.backend == "remote":
+        try:
+            print(f"[video] Rendering scene {scene_id} with {provider_spec.label} remote video provider")
+            prompt_text, negative_text = build_scene_video_prompts(scene, clip_duration, run_dir)
+            temporal_spec = scene.temporal_spec or build_scene_temporal_spec(
+                scene,
+                clip_duration,
+                width=int(env_float("VIDEO_WIDTH", default=1080)),
+                height=int(env_float("VIDEO_HEIGHT", default=1920)),
+                fps=int(env_float("VIDEO_FPS", default=24)),
+            )
+            consistency_spec = scene_consistency_spec(scene)
+            render_remote_video_provider(
+                VideoRenderRequest(
+                    scene=scene.scene,
+                    title=scene.title,
+                    prompt=prompt_text,
+                    negative_prompt=negative_text,
+                    keyframe_path=keyframe,
+                    out_path=visual_path,
+                    run_dir=run_dir,
+                    duration=clip_duration,
+                    width=int(env_float("VIDEO_WIDTH", default=1080)),
+                    height=int(env_float("VIDEO_HEIGHT", default=1920)),
+                    fps=int(env_float("VIDEO_FPS", default=24)),
+                    camera=scene.camera,
+                    emotion=scene.emotion,
+                    dialogue=scene.dialogue,
+                    characters=tuple(scene.characters or []),
+                    temporal_spec=temporal_spec,
+                    consistency_spec=consistency_spec,
+                ),
+                provider_spec,
+                ffmpeg=ffmpeg,
+                run_guarded=run_guarded,
+                timeout_s=render_timeout(clip_duration) + 300,
+            )
+            visual_generated = True
+        except Exception as exc:
+            strict_name = f"{provider.upper().replace('-', '_')}_VIDEO_STRICT"
+            if env_bool("VIDEO_STRICT", strict_name, default=False):
+                raise
+            print(f"[video] {provider_spec.label} remote video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
+    elif provider_spec.backend != "local":
+        raise ValueError(f"Unsupported video provider backend: {provider_spec.backend}")
 
     if not visual_generated:
         d = clip_duration
@@ -4919,7 +5157,7 @@ def main() -> None:
     parser.add_argument("--planner", choices=["auto", "rule", "llm"], default="auto", help="Storyboard planner to use.")
     parser.add_argument("--scene-count", type=int, default=5, help="Number of storyboard scenes for LLM planning.")
     parser.add_argument("--keyframe-provider", choices=["auto", "local", "comfyui"], default="auto", help="Keyframe renderer backend.")
-    parser.add_argument("--video-provider", choices=["auto", "local", "comfyui"], default="auto", help="Scene video renderer backend.")
+    parser.add_argument("--video-provider", type=str, default="auto", help="Scene video provider id (for example: auto, local, comfyui).")
     parser.add_argument("--voice-provider", choices=["auto", "edge", "local", "silent"], default="auto", help="Voice renderer backend.")
     args = parser.parse_args()
 
@@ -4960,6 +5198,20 @@ def main() -> None:
         )
 
     storyboard_path = run_dir / "storyboard.json"
+    storyboard_scenes: list[dict[str, object]] = []
+    storyboard_shot_count = 0
+    for item in assets:
+        scene_graph = build_scene_graph(item["scene"])
+        storyboard_scene = {
+            **asdict(item["scene"]),
+            "voice_duration": item["voice_duration"],
+            "clip_duration": item["clip_duration"],
+            "keyframe": str(item["keyframe"]),
+            "voice": str(item["voice"]),
+            **scene_graph,
+        }
+        storyboard_scenes.append(storyboard_scene)
+        storyboard_shot_count += len(scene_graph.get("shots") or [])
     storyboard_path.write_text(
         json.dumps(
             {
@@ -4968,16 +5220,12 @@ def main() -> None:
                 "keyframe_provider": keyframe_provider,
                 "video_provider": video_provider,
                 "voice_provider": voice_provider,
-                "scenes": [
-                    {
-                        **asdict(item["scene"]),
-                        "voice_duration": item["voice_duration"],
-                        "clip_duration": item["clip_duration"],
-                        "keyframe": str(item["keyframe"]),
-                        "voice": str(item["voice"]),
-                    }
-                    for item in assets
-                ],
+                "scenes": storyboard_scenes,
+                "scene_graph": {
+                    "version": 1,
+                    "scene_count": len(storyboard_scenes),
+                    "shot_count": storyboard_shot_count,
+                },
             },
             ensure_ascii=False,
             indent=2,
