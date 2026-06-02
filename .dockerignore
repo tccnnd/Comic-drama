@@ -1,0 +1,9 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+workspace/
+outputs/
+*.log
+.env
+node_modules/

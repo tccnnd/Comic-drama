@@ -4,35 +4,23 @@
     "inputs": {
       "ckpt_name": "__CHECKPOINT_NAME__"
     },
-    "_meta": {
-      "title": "Checkpoint Loader"
-    }
+    "_meta": {"title": "Checkpoint"}
   },
   "2": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "clip": [
-        "1",
-        1
-      ],
+      "clip": ["1", 1],
       "text": "__PROMPT__"
     },
-    "_meta": {
-      "title": "Positive Prompt"
-    }
+    "_meta": {"title": "Positive"}
   },
   "3": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "clip": [
-        "1",
-        1
-      ],
-      "text": "blurry, noisy, low quality, watermark, text, logo, __NEGATIVE__"
+      "clip": ["1", 1],
+      "text": "__NEGATIVE__"
     },
-    "_meta": {
-      "title": "Negative Prompt"
-    }
+    "_meta": {"title": "Negative"}
   },
   "4": {
     "class_type": "EmptyLatentImage",
@@ -41,9 +29,7 @@
       "height": "__HEIGHT__",
       "batch_size": 1
     },
-    "_meta": {
-      "title": "Empty Latent"
-    }
+    "_meta": {"title": "Latent"}
   },
   "5": {
     "class_type": "KSampler",
@@ -51,57 +37,30 @@
       "seed": "__SEED__",
       "steps": "__STEPS__",
       "cfg": "__CFG__",
-      "sampler_name": "euler",
+      "sampler_name": "euler_ancestral",
       "scheduler": "normal",
       "denoise": 1,
-      "model": [
-        "1",
-        0
-      ],
-      "positive": [
-        "2",
-        0
-      ],
-      "negative": [
-        "3",
-        0
-      ],
-      "latent_image": [
-        "4",
-        0
-      ]
+      "model": ["1", 0],
+      "positive": ["2", 0],
+      "negative": ["3", 0],
+      "latent_image": ["4", 0]
     },
-    "_meta": {
-      "title": "KSampler"
-    }
+    "_meta": {"title": "KSampler"}
   },
   "6": {
     "class_type": "VAEDecode",
     "inputs": {
-      "samples": [
-        "5",
-        0
-      ],
-      "vae": [
-        "1",
-        2
-      ]
+      "samples": ["5", 0],
+      "vae": ["1", 2]
     },
-    "_meta": {
-      "title": "VAE Decode"
-    }
+    "_meta": {"title": "VAEDecode"}
   },
   "7": {
     "class_type": "SaveImage",
     "inputs": {
       "filename_prefix": "comicdrama_asset",
-      "images": [
-        "6",
-        0
-      ]
+      "images": ["6", 0]
     },
-    "_meta": {
-      "title": "Save Image"
-    }
+    "_meta": {"title": "SaveImage"}
   }
 }

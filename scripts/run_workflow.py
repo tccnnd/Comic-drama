@@ -192,7 +192,7 @@ ANIME_STYLE_SUFFIX_EXTRA = (
     "避免写实摄影感、真人皮肤质感、3D感、海报感、信息板感、漫画气泡和条漫分格感。"
 )
 
-ANIME_NEGATIVE_PROMPT_EXTRA = "low quality, blurry, realistic, photorealistic, live action, 3d, cgi, skin pores, photo, bad anatomy, deformed face, duplicate face, extra head"
+ANIME_NEGATIVE_PROMPT_EXTRA = "sketch, lineart, monochrome, greyscale, black and white, uncolored, pencil drawing, rough sketch, low quality, blurry, realistic, photorealistic, live action, 3d, cgi, skin pores, photo, bad anatomy, deformed face, duplicate face, extra head"
 
 COMFYUI_STYLE_PRESETS = {
     "anime_fallback": {
@@ -267,6 +267,11 @@ def infer_character_appearance_hint(scene: "StoryScene") -> str:
 
 
 def clean_comfyui_visual_prompt(text: str) -> str:
+    """Clean and normalize a visual prompt for ComfyUI/SD consumption.
+
+    Removes Chinese narrative instructions and formatting artifacts while
+    preserving quality tags, character descriptions, and visual keywords.
+    """
     raw = " ".join(str(text or "").split())
     if not raw:
         return ""
@@ -281,8 +286,13 @@ def clean_comfyui_visual_prompt(text: str) -> str:
     raw = re.sub(r"^分镜\s*\d+\s*[；;,，]?\s*", "", raw)
     raw = raw.replace("场景标题：", " ").replace("角色：", " ").replace("镜头：", " ").replace("情绪：", " ")
     raw = raw.replace("音效：", " ").replace("旁白：", " ").replace("台词：", " ")
+    # Normalize separators: convert Chinese semicolons/commas to standard commas
+    raw = raw.replace("；", ", ").replace("，", ", ").replace("、", ", ")
     raw = re.sub(r"\s+", " ", raw).strip(" ；;,，。")
-    return raw
+    # Collapse multiple commas
+    raw = re.sub(r",\s*,+", ",", raw)
+    raw = re.sub(r"^\s*,\s*", "", raw)
+    return raw.strip(", ")
 
 
 @dataclass
@@ -1413,11 +1423,14 @@ def inject_comfyui_workflow(
         if class_type == "CheckpointLoaderSimple":
             checkpoint_node_id = str(node_id)
             inputs["ckpt_name"] = checkpoint_name
+        elif class_type == "UNETLoader":
+            checkpoint_node_id = str(node_id)
+            inputs["unet_name"] = checkpoint_name
         elif class_type == "LoraLoader":
             lora_node_id = str(node_id)
 
     if checkpoint_node_id is None:
-        raise ValueError("ComfyUI workflow is missing CheckpointLoaderSimple.")
+        raise ValueError("ComfyUI workflow is missing CheckpointLoaderSimple or UNETLoader.")
 
     if lora_node_id and not str(lora_name or "").strip():
         for node in graph.values():
@@ -1850,6 +1863,213 @@ def build_scene_temporal_spec(scene: StoryScene, duration: float, *, width: int 
             "preserve_lighting_direction": True,
             "preserve_scene_geometry": True,
         },
+    }
+
+
+def _timeline_scene_field(scene: dict[str, Any], key: str, default: Any = "") -> Any:
+    if isinstance(scene, dict) and key in scene:
+        value = scene.get(key)
+        if value not in (None, ""):
+            return value
+    assets = scene.get("assets") if isinstance(scene, dict) and isinstance(scene.get("assets"), dict) else {}
+    if isinstance(assets, dict) and key in assets:
+        value = assets.get(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _scene_media_reference(scene: dict[str, Any], kind: str) -> dict[str, str]:
+    if kind == "image":
+        path = str(_timeline_scene_field(scene, "keyframe", "") or _timeline_scene_field(scene, "image_path", "") or _timeline_scene_field(scene, "primary_reference_image_path", "")).strip()
+        url = str(_timeline_scene_field(scene, "keyframe_url", "") or _timeline_scene_field(scene, "image_url", "") or _timeline_scene_field(scene, "primary_reference_image_url", "")).strip()
+    elif kind == "audio":
+        path = str(_timeline_scene_field(scene, "voice", "") or _timeline_scene_field(scene, "audio_path", "") or _timeline_scene_field(scene, "reference_audio_path", "")).strip()
+        url = str(_timeline_scene_field(scene, "voice_url", "") or _timeline_scene_field(scene, "audio_url", "") or _timeline_scene_field(scene, "reference_audio_url", "")).strip()
+    elif kind == "video":
+        path = str(_timeline_scene_field(scene, "video", "") or _timeline_scene_field(scene, "video_path", "") or _timeline_scene_field(scene, "final_video_path", "")).strip()
+        url = str(_timeline_scene_field(scene, "video_url", "") or _timeline_scene_field(scene, "final_video_url", "")).strip()
+    else:
+        path = str(_timeline_scene_field(scene, "subtitle_path", "") or _timeline_scene_field(scene, "subtitles_path", "")).strip()
+        url = str(_timeline_scene_field(scene, "subtitle_url", "") or _timeline_scene_field(scene, "subtitles_url", "")).strip()
+    return {"path": path, "url": url}
+
+
+def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
+    scenes_raw = project.get("scenes", []) if isinstance(project, dict) else []
+    scenes: list[dict[str, Any]] = [scene for scene in scenes_raw if isinstance(scene, dict)]
+    scenes.sort(key=lambda scene: int(scene.get("order") or 0))
+
+    project_id = str(project.get("project_id") or "").strip() if isinstance(project, dict) else ""
+    title = str(project.get("title") or "").strip() if isinstance(project, dict) else ""
+    settings = project.get("settings") if isinstance(project, dict) and isinstance(project.get("settings"), dict) else {}
+    size = {"width": 1080, "height": 1920, "fps": 24}
+    total_duration = 0.0
+    picture_items: list[dict[str, Any]] = []
+    audio_items: list[dict[str, Any]] = []
+    transitions: list[dict[str, Any]] = []
+    scene_index: list[dict[str, Any]] = []
+
+    for index, scene in enumerate(scenes, start=1):
+        order = int(scene.get("order") or index)
+        scene_id = str(scene.get("scene_id") or f"scene_{order:03d}").strip()
+        scene_title = str(scene.get("title") or f"Scene {order}").strip()
+        duration = float(scene.get("duration_seconds") or scene.get("clip_duration") or scene.get("voice_duration") or 0.0)
+        duration = round(max(0.25, duration), 3)
+        start_seconds = round(total_duration, 3)
+        end_seconds = round(start_seconds + duration, 3)
+        total_duration = end_seconds
+        temporal_spec = scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
+        shots_source = temporal_spec.get("shots") if isinstance(temporal_spec, dict) else None
+        if not isinstance(shots_source, list) or not shots_source:
+            shots_source = scene.get("shots") if isinstance(scene.get("shots"), list) else []
+        shot_timeline: list[dict[str, Any]] = []
+        cursor = 0.0
+        for shot_index, raw_shot in enumerate(shots_source or [], start=1):
+            if not isinstance(raw_shot, dict):
+                continue
+            shot_duration = max(0.25, float(raw_shot.get("duration_seconds") or 0.0))
+            shot_start = round(cursor, 3)
+            shot_end = round(shot_start + shot_duration, 3)
+            shot_timeline.append(
+                {
+                    "shot_id": str(raw_shot.get("shot_id") or f"{scene_id}_shot_{shot_index:02d}"),
+                    "shot_order": int(raw_shot.get("shot_order") or shot_index),
+                    "label": str(raw_shot.get("label") or raw_shot.get("beat_type") or f"SHOT {shot_index}").strip(),
+                    "beat_type": str(raw_shot.get("beat_type") or "").strip(),
+                    "start_seconds": shot_start,
+                    "duration_seconds": round(shot_duration, 3),
+                    "end_seconds": shot_end,
+                    "camera_movement": str(raw_shot.get("camera_movement") or scene.get("camera_movement") or scene.get("camera") or "").strip(),
+                    "camera_speed": float(raw_shot.get("camera_speed") or scene.get("camera_speed") or 1.0),
+                    "zoom": float(raw_shot.get("zoom") or 1.0),
+                    "hold_in_ratio": float(raw_shot.get("hold_in_ratio") or 0.0),
+                    "hold_out_ratio": float(raw_shot.get("hold_out_ratio") or 0.0),
+                    "center_x": float(raw_shot.get("center_x") or 0.5),
+                    "center_y": float(raw_shot.get("center_y") or 0.5),
+                    "speaker": str(raw_shot.get("speaker") or scene.get("speaker") or "").strip(),
+                    "dialogue": str(raw_shot.get("dialogue") or scene.get("dialogue") or "").strip(),
+                    "emotion": str(raw_shot.get("emotion") or scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                    "scene_intent": str(raw_shot.get("scene_intent") or scene.get("scene_intent") or "").strip(),
+                    "subject_focus": str(raw_shot.get("subject_focus") or scene.get("subject_focus") or "").strip(),
+                }
+            )
+            cursor += shot_duration
+        video_ref = _scene_media_reference(scene, "video")
+        image_ref = _scene_media_reference(scene, "image")
+        picture_ref = video_ref if video_ref.get("path") or video_ref.get("url") else image_ref
+        picture_item = {
+            "item_type": "clip",
+            "clip_id": f"{scene_id}_picture",
+            "scene_id": scene_id,
+            "scene_order": order,
+            "name": scene_title,
+            "start_seconds": start_seconds,
+            "duration_seconds": duration,
+            "end_seconds": end_seconds,
+            "source_range": {"start_seconds": 0.0, "duration_seconds": duration},
+            "media_reference": picture_ref,
+            "metadata": {
+                "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "pacing": str(scene.get("pacing") or "").strip(),
+                "camera_movement": str(scene.get("camera_movement") or scene.get("camera") or "").strip(),
+                "scene_intent": str(scene.get("scene_intent") or "").strip(),
+                "subject_focus": str(scene.get("subject_focus") or "").strip(),
+                "production_bible": deepcopy(scene.get("production_bible") or {}) if isinstance(scene.get("production_bible"), dict) else {},
+                "temporal_spec": deepcopy(temporal_spec) if isinstance(temporal_spec, dict) else {},
+            },
+            "shot_timeline": shot_timeline,
+        }
+        audio_item = {
+            "item_type": "clip",
+            "clip_id": f"{scene_id}_audio",
+            "scene_id": scene_id,
+            "scene_order": order,
+            "name": scene_title,
+            "start_seconds": start_seconds,
+            "duration_seconds": duration,
+            "end_seconds": end_seconds,
+            "source_range": {"start_seconds": 0.0, "duration_seconds": duration},
+            "media_reference": _scene_media_reference(scene, "audio"),
+            "metadata": {
+                "speaker": str(scene.get("speaker") or "").strip(),
+                "voice_profile": str(scene.get("voice_profile") or "").strip(),
+                "voice_engine": str(scene.get("voice_engine") or "").strip(),
+                "voice_id": str(scene.get("voice_id") or "").strip(),
+                "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+            },
+        }
+        picture_items.append(picture_item)
+        audio_items.append(audio_item)
+        scene_index.append(
+            {
+                "scene_id": scene_id,
+                "scene_order": order,
+                "title": scene_title,
+                "clip_id": picture_item["clip_id"],
+                "shot_count": len(shot_timeline),
+                "start_seconds": start_seconds,
+                "duration_seconds": duration,
+                "end_seconds": end_seconds,
+            }
+        )
+        if index < len(scenes):
+            next_scene = scenes[index]
+            next_order = int(next_scene.get("order") or index + 1)
+            next_scene_id = str(next_scene.get("scene_id") or f"scene_{next_order:03d}").strip()
+            transition_kind = _scene_transition(scene.get("emotion_tone") or scene.get("emotion") or "", next_scene.get("emotion_tone") or next_scene.get("emotion") or "")
+            transition_duration = 0.0 if transition_kind == "cut" else 0.2 if transition_kind == "xfade" else 0.3
+            transitions.append(
+                {
+                    "transition_id": f"{scene_id}_to_{next_scene_id}",
+                    "from_scene_id": scene_id,
+                    "to_scene_id": next_scene_id,
+                    "from_order": order,
+                    "to_order": next_order,
+                    "kind": transition_kind,
+                    "duration_seconds": transition_duration,
+                }
+            )
+
+    return {
+        "version": 1,
+        "kind": "canonical_timeline",
+        "schema": "otio-inspired",
+        "project_id": project_id,
+        "title": title or "Storyboard Timeline",
+        "frame_rate": int(size["fps"]),
+        "resolution": {"width": int(size["width"]), "height": int(size["height"])},
+        "duration_seconds": round(total_duration, 3),
+        "scene_count": len(scene_index),
+        "shot_count": sum(len(item.get("shot_timeline") or []) for item in picture_items),
+        "summary": {
+            "scene_count": len(scene_index),
+            "shot_count": sum(len(item.get("shot_timeline") or []) for item in picture_items),
+            "transition_count": len(transitions),
+        },
+        "metadata": {
+            "project_id": project_id,
+            "title": title,
+            "style_id": str(project.get("style_id") or "").strip() if isinstance(project, dict) else "",
+            "episode_pacing": deepcopy(settings.get("episode_pacing")) if isinstance(settings.get("episode_pacing"), dict) else {},
+            "production_bible": deepcopy(project.get("production_bible") or {}) if isinstance(project, dict) and isinstance(project.get("production_bible"), dict) else {},
+        },
+        "tracks": [
+            {
+                "track_id": "picture",
+                "track_type": "video",
+                "name": "Picture",
+                "children": picture_items,
+            },
+            {
+                "track_id": "dialogue",
+                "track_type": "audio",
+                "name": "Dialogue",
+                "children": audio_items,
+            },
+        ],
+        "transitions": transitions,
+        "scene_index": scene_index,
     }
 
 
@@ -2300,12 +2520,11 @@ def submit_comfyui_prompt(workflow: dict, prompt_id: str, client_id: str) -> dic
         "prompt_id": prompt_id,
     }
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = Request(
-        f"{comfyui_base_url()}/prompt",
-        data=data,
-        headers={"Content-Type": "application/json", **comfyui_auth_headers()},
-        method="POST",
-    )
+    url = f"{comfyui_base_url()}/prompt"
+    request = Request(url, data=data, method="POST")
+    request.add_header("Content-Type", "application/json")
+    for k, v in comfyui_auth_headers().items():
+        request.add_header(k, v)
     try:
         with urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -2319,7 +2538,10 @@ def poll_comfyui_history(prompt_id: str, timeout_s: int = 300) -> dict:
     url = f"{comfyui_base_url()}/history/{prompt_id}"
     while time.time() < deadline:
         try:
-            with urlopen(Request(url, headers=comfyui_auth_headers()), timeout=30) as response:
+            req = Request(url)
+            for k, v in comfyui_auth_headers().items():
+                req.add_header(k, v)
+            with urlopen(req, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if prompt_id in payload:
                 return payload[prompt_id]
@@ -2337,7 +2559,11 @@ def download_comfyui_image(image_info: dict, out_path: Path) -> None:
         "subfolder": image_info.get("subfolder", ""),
         "type": image_info.get("type", "output"),
     }
-    with urlopen(Request(f"{comfyui_base_url()}/view?{urlencode(query)}", headers=comfyui_auth_headers()), timeout=60) as response:
+    url = f"{comfyui_base_url()}/view?{urlencode(query)}"
+    req = Request(url)
+    for k, v in comfyui_auth_headers().items():
+        req.add_header(k, v)
+    with urlopen(req, timeout=60) as response:
         out_path.write_bytes(response.read())
 
 
@@ -2349,18 +2575,33 @@ def download_comfyui_asset(asset_info: dict, out_path: Path) -> None:
         "subfolder": asset_info.get("subfolder", ""),
         "type": asset_info.get("type", "output"),
     }
-    with urlopen(Request(f"{comfyui_base_url()}/view?{urlencode(query)}", headers=comfyui_auth_headers()), timeout=60) as response:
+    url = f"{comfyui_base_url()}/view?{urlencode(query)}"
+    req = Request(url)
+    for k, v in comfyui_auth_headers().items():
+        req.add_header(k, v)
+    with urlopen(req, timeout=60) as response:
         out_path.write_bytes(response.read())
 
 
 def build_scene_video_prompts(scene: StoryScene, duration: float, run_dir: Path) -> tuple[str, str]:
-    prompt_parts = [clean_comfyui_visual_prompt(scene.visual), infer_character_appearance_hint(scene)]
+    """Build optimized positive and negative prompts for scene video generation.
+
+    Prompt structure:
+    1. Quality tags (masterpiece, best quality)
+    2. Scene visual description (cleaned)
+    3. Character appearance anchors
+    4. Motion/composition tags
+    """
+    # Quality prefix for better generation
+    quality_prefix = "masterpiece, best quality, full color, vibrant colors, digital painting, colored, highly detailed"
+
+    prompt_parts = [quality_prefix, clean_comfyui_visual_prompt(scene.visual), infer_character_appearance_hint(scene)]
     if scene.character_prompt_compilation:
         prompt_parts.append(str(scene.character_prompt_compilation).strip())
     if scene.character_descriptions:
         prompt_parts.append(f"character descriptions: {scene.character_descriptions}")
     prompt_parts.append(
-        "continuous motion, expressive acting, consistent lighting, stable character-environment relationship"
+        "continuous motion, expressive acting, consistent lighting, stable character-environment relationship, cinematic composition"
     )
     temporal_spec = (
         deepcopy(scene.temporal_spec)
@@ -2409,11 +2650,12 @@ def build_scene_video_prompts(scene: StoryScene, duration: float, run_dir: Path)
             duration=duration,
         )
 
-    negative_text = " ".join(
+    negative_text = ", ".join(
         part
         for part in [
-            ANIME_NEGATIVE_PROMPT,
+            "worst quality, low quality, normal quality",
             ANIME_NEGATIVE_PROMPT_EXTRA,
+            "bad anatomy, bad hands, extra fingers, fewer fingers, extra limbs, deformed, disfigured, watermark, text, signature",
             scene.negative_prompt_compilation,
         ]
         if part
@@ -2559,14 +2801,19 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     debug_dir = run_dir / "debug"
 
-    prompt_parts = [clean_comfyui_visual_prompt(scene.visual)]
+    # Quality prefix for better keyframe generation
+    quality_prefix = "masterpiece, best quality, full color, vibrant colors, digital painting, colored, highly detailed"
+
+    prompt_parts = [quality_prefix, clean_comfyui_visual_prompt(scene.visual)]
     prompt_parts.append(infer_character_appearance_hint(scene))
     if scene.character_prompt_compilation:
         prompt_parts.append(scene.character_prompt_compilation)
     if scene.character_descriptions:
-        prompt_parts.append(f"角色设定：{scene.character_descriptions}")
+        prompt_parts.append(scene.character_descriptions)
+    # Add composition tags
+    prompt_parts.append("cinematic composition, dramatic lighting")
     prompt_text = anime_visual_prompt(
-        "；".join(part for part in prompt_parts if part),
+        ", ".join(part for part in prompt_parts if part),
         title=scene.title,
         characters=scene.characters,
         camera=scene.camera,
@@ -2579,14 +2826,18 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
         if scene.character_prompt_compilation:
             prompt_source_parts.append(str(scene.character_prompt_compilation).strip())
         if scene.character_descriptions:
-            prompt_source_parts.append(f"角色设定：{scene.character_descriptions}")
+            prompt_source_parts.append(scene.character_descriptions)
         compiled = compiler.compile(
-            "，".join(part for part in prompt_source_parts if part),
+            ", ".join(part for part in prompt_source_parts if part),
             list(scene.characters or []),
             speaker=scene.speaker,
         )
+        # Prepend quality tags to compiled output
+        compiled_with_quality = ", ".join(
+            part for part in [quality_prefix, compiled.positive, "cinematic composition, dramatic lighting"] if str(part).strip()
+        )
         prompt_text = anime_visual_prompt(
-            compiled.positive,
+            compiled_with_quality,
             title=scene.title,
             characters=scene.characters,
             camera=scene.camera,
@@ -2610,11 +2861,12 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
     style_preset = comfyui_style_preset()
     replacements = {
         "__PROMPT__": prompt_text,
-        "__NEGATIVE__": " ".join(
+        "__NEGATIVE__": ", ".join(
             part
             for part in [
-                ANIME_NEGATIVE_PROMPT,
+                "worst quality, low quality, normal quality",
                 ANIME_NEGATIVE_PROMPT_EXTRA,
+                "bad anatomy, bad hands, extra fingers, fewer fingers, extra limbs, deformed, disfigured, watermark, text, signature",
                 scene.negative_prompt_compilation,
             ]
             if part
@@ -2728,6 +2980,9 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
         return create_keyframe(scene, run_dir)
     if provider == "comfyui":
         return render_keyframe_comfyui(scene, run_dir)
+    if provider == "cloud":
+        return _generate_keyframe_cloud(scene, run_dir)
+    # Auto mode: try ComfyUI -> cloud -> local
     try:
         return render_keyframe_comfyui(scene, run_dir)
     except Exception as exc:
@@ -2735,11 +2990,52 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
             errors = scene.consistency_meta.setdefault("errors", [])
             if str(exc) not in errors:
                 errors.append(str(exc))
-            scene.consistency_meta.setdefault("fallback_used", "local_keyframe")
         if env_bool("COMFYUI_STRICT", "KEYFRAME_STRICT", default=False):
             raise
-        print(f"[keyframe] ComfyUI unavailable, falling back to local renderer: {exc}")
-        return create_keyframe(scene, run_dir)
+        print(f"[keyframe] ComfyUI unavailable, trying cloud provider: {exc}")
+        # Try cloud text-to-image
+        try:
+            return _generate_keyframe_cloud(scene, run_dir)
+        except Exception as cloud_exc:
+            print(f"[keyframe] Cloud provider also failed: {cloud_exc}")
+            if isinstance(scene.consistency_meta, dict):
+                scene.consistency_meta.setdefault("fallback_used", "local_keyframe")
+            print("[keyframe] Falling back to local renderer")
+            return create_keyframe(scene, run_dir)
+
+
+def _generate_keyframe_cloud(scene: StoryScene, run_dir: Path) -> Path:
+    """Generate keyframe via cloud text-to-image API."""
+    from backend.keyframe_providers import generate_keyframe_dashscope, build_keyframe_prompt
+
+    # Build character info for prompt
+    characters: list[dict] = []
+    for ref in (scene.character_references or []) if hasattr(scene, "character_references") else []:
+        if isinstance(ref, dict):
+            characters.append(ref)
+
+    # Build prompt
+    positive, negative = build_keyframe_prompt(
+        scene.visual,
+        characters,
+        style_suffix=scene.character_prompt_compilation or "",
+    )
+
+    scene_id = f"{scene.scene:02}"
+    output_path = run_dir / f"scene_{scene_id}_keyframe.png"
+    width = int(env_float("COMFYUI_WIDTH", default=832))
+    height = int(env_float("COMFYUI_HEIGHT", default=1216))
+
+    result = generate_keyframe_dashscope(
+        prompt=positive,
+        negative_prompt=negative,
+        width=width,
+        height=height,
+        output_path=output_path,
+    )
+    if result and result.exists():
+        return result
+    raise RuntimeError("Cloud keyframe generation failed or returned no image")
 
 
 def normalize_video_provider(provider: str | None = None) -> str:
@@ -3155,6 +3451,26 @@ def _apply_director_rule_recommendation(scene: StoryScene) -> None:
 
 
 def _apply_director_classification_to_scenes(scenes: list[StoryScene], model: str | None = None) -> None:
+    """Apply director classification to scenes.
+
+    Uses rule-based classification by default for speed.
+    Set DIRECTOR_USE_LLM=1 in .env to use LLM classification (slower but more accurate).
+    """
+    use_llm = os.environ.get("DIRECTOR_USE_LLM", "0").strip().lower() in {"1", "true", "yes"}
+
+    if not use_llm:
+        # Fast path: rule-based classification (instant)
+        for scene in scenes:
+            if getattr(scene, "validation_failed", False):
+                apply_default_classification(scene, reason="validation_failed")
+                continue
+            try:
+                apply_rules_classification(scene, _apply_director_rule_recommendation)
+            except Exception as exc:
+                apply_default_classification(scene, reason=str(exc))
+        return
+
+    # Slow path: LLM classification
     model_name = (model or os.environ.get("LLM_MODEL", "").strip()).strip()
     eligible: list[tuple[int, StoryScene]] = [
         (index, scene) for index, scene in enumerate(scenes) if not getattr(scene, "validation_failed", False)
@@ -4730,48 +5046,69 @@ def render_clip(
                 raise
             print(f"[video] {provider_spec.label} video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
     elif provider_spec.backend == "remote":
-        try:
-            print(f"[video] Rendering scene {scene_id} with {provider_spec.label} remote video provider")
-            prompt_text, negative_text = build_scene_video_prompts(scene, clip_duration, run_dir)
-            temporal_spec = scene.temporal_spec or build_scene_temporal_spec(
-                scene,
-                clip_duration,
-                width=int(env_float("VIDEO_WIDTH", default=1080)),
-                height=int(env_float("VIDEO_HEIGHT", default=1920)),
-                fps=int(env_float("VIDEO_FPS", default=24)),
-            )
-            consistency_spec = scene_consistency_spec(scene)
-            render_remote_video_provider(
-                VideoRenderRequest(
-                    scene=scene.scene,
-                    title=scene.title,
-                    prompt=prompt_text,
-                    negative_prompt=negative_text,
-                    keyframe_path=keyframe,
-                    out_path=visual_path,
-                    run_dir=run_dir,
-                    duration=clip_duration,
+        max_retries = int(env_float("VIDEO_MAX_RETRIES", default=2))
+        retry_delay = env_float("VIDEO_RETRY_DELAY_SECONDS", default=5.0)
+        last_exc = None
+        for attempt in range(1, max_retries + 2):
+            try:
+                print(f"[video] Rendering scene {scene_id} with {provider_spec.label} remote video provider (attempt {attempt}/{max_retries + 1})")
+                prompt_text, negative_text = build_scene_video_prompts(scene, clip_duration, run_dir)
+                temporal_spec = scene.temporal_spec or build_scene_temporal_spec(
+                    scene,
+                    clip_duration,
                     width=int(env_float("VIDEO_WIDTH", default=1080)),
                     height=int(env_float("VIDEO_HEIGHT", default=1920)),
                     fps=int(env_float("VIDEO_FPS", default=24)),
-                    camera=scene.camera,
-                    emotion=scene.emotion,
-                    dialogue=scene.dialogue,
-                    characters=tuple(scene.characters or []),
-                    temporal_spec=temporal_spec,
-                    consistency_spec=consistency_spec,
-                ),
-                provider_spec,
-                ffmpeg=ffmpeg,
-                run_guarded=run_guarded,
-                timeout_s=render_timeout(clip_duration) + 300,
-            )
-            visual_generated = True
-        except Exception as exc:
-            strict_name = f"{provider.upper().replace('-', '_')}_VIDEO_STRICT"
-            if env_bool("VIDEO_STRICT", strict_name, default=False):
-                raise
-            print(f"[video] {provider_spec.label} remote video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
+                )
+                consistency_spec = scene_consistency_spec(scene)
+                render_remote_video_provider(
+                    VideoRenderRequest(
+                        scene=scene.scene,
+                        title=scene.title,
+                        prompt=prompt_text,
+                        negative_prompt=negative_text,
+                        keyframe_path=keyframe,
+                        out_path=visual_path,
+                        run_dir=run_dir,
+                        duration=clip_duration,
+                        width=int(env_float("VIDEO_WIDTH", default=1080)),
+                        height=int(env_float("VIDEO_HEIGHT", default=1920)),
+                        fps=int(env_float("VIDEO_FPS", default=24)),
+                        camera=scene.camera,
+                        emotion=scene.emotion,
+                        dialogue=scene.dialogue,
+                        characters=tuple(scene.characters or []),
+                        temporal_spec=temporal_spec,
+                        consistency_spec=consistency_spec,
+                    ),
+                    provider_spec,
+                    ffmpeg=ffmpeg,
+                    run_guarded=run_guarded,
+                    timeout_s=render_timeout(clip_duration) + 300,
+                )
+                visual_generated = True
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt <= max_retries:
+                    # Use longer backoff for rate limiting / quota errors
+                    error_str = str(exc).lower()
+                    if "429" in error_str or "quota" in error_str or "饱和" in error_str:
+                        backoff = max(retry_delay, 30.0)  # At least 30s for quota issues
+                        print(f"[video] {provider_spec.label} attempt {attempt} rate-limited for scene {scene_id}. Waiting {backoff:.0f}s...")
+                    else:
+                        backoff = retry_delay
+                        print(f"[video] {provider_spec.label} attempt {attempt} failed for scene {scene_id}: {exc}. Retrying in {backoff:.0f}s...")
+                    time.sleep(backoff)
+                    retry_delay = min(retry_delay * 2.0, 120.0)
+                else:
+                    strict_name = f"{provider.upper().replace('-', '_')}_VIDEO_STRICT"
+                    if env_bool("VIDEO_STRICT", strict_name, default=False):
+                        raise
+                    fallback_mode = env_value("VIDEO_FALLBACK_MODE", default="report").strip().lower()
+                    if fallback_mode == "strict":
+                        raise
+                    print(f"[video] {provider_spec.label} remote video provider failed for scene {scene_id} after {attempt} attempts; falling back to 2.5D clip: {exc}")
     elif provider_spec.backend != "local":
         raise ValueError(f"Unsupported video provider backend: {provider_spec.backend}")
 
@@ -5212,6 +5549,15 @@ def main() -> None:
         }
         storyboard_scenes.append(storyboard_scene)
         storyboard_shot_count += len(scene_graph.get("shots") or [])
+    canonical_timeline = build_canonical_timeline(
+        {
+            "project_id": run_dir.name,
+            "title": str(storyboard_scenes[0].get("title") or "Storyboard Timeline") if storyboard_scenes else "Storyboard Timeline",
+            "scenes": storyboard_scenes,
+        }
+    )
+    canonical_timeline_path = run_dir / "canonical_timeline.json"
+    canonical_timeline_path.write_text(json.dumps(canonical_timeline, ensure_ascii=False, indent=2), encoding="utf-8")
     storyboard_path.write_text(
         json.dumps(
             {
@@ -5220,6 +5566,8 @@ def main() -> None:
                 "keyframe_provider": keyframe_provider,
                 "video_provider": video_provider,
                 "voice_provider": voice_provider,
+                "canonical_timeline_path": str(canonical_timeline_path),
+                "canonical_timeline": canonical_timeline,
                 "scenes": storyboard_scenes,
                 "scene_graph": {
                     "version": 1,

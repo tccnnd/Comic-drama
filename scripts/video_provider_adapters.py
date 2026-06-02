@@ -49,6 +49,51 @@ def _env(prefix: str, name: str, default: str = "") -> str:
     return os.environ.get(f"{prefix}_{name}", default).strip()
 
 
+def _kling_jwt_token(access_key: str, secret_key: str) -> str:
+    """Generate a JWT token for Kling official API authentication."""
+    import hashlib
+    import hmac
+
+    header = {"alg": "HS256", "typ": "JWT"}
+    now = int(time.time())
+    payload = {
+        "iss": access_key,
+        "exp": now + 1800,  # 30 minutes
+        "nbf": now - 5,
+        "iat": now,
+    }
+
+    def _b64url(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+    header_b64 = _b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}"
+    signature = hmac.new(
+        secret_key.encode("utf-8"),
+        signing_input.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return f"{signing_input}.{_b64url(signature)}"
+
+
+def _kling_auth_headers(prefix: str, api_key: str) -> dict[str, str]:
+    """Build auth headers for Kling. Uses JWT if SECRET_KEY is available."""
+    secret_key = _env(prefix, "SECRET_KEY")
+    if secret_key:
+        token = _kling_jwt_token(api_key, secret_key)
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
 def _env_any(prefix: str, names: tuple[str, ...], default: str = "") -> str:
     for name in names:
         value = _env(prefix, name)
@@ -265,6 +310,12 @@ def _detect_route(prefix: str, spec: VideoProviderSpec, model: str) -> str:
         return "volc"
     if "kling" in name:
         return "kling"
+    if "happyhorse" in name or "wan" in name:
+        return "dashscope"
+    # Auto-detect dashscope from submit path
+    submit_path = _env(prefix, "SUBMIT_PATH")
+    if submit_path and ("aigc/video-generation" in submit_path or "alibailian" in submit_path or "dashscope" in submit_path):
+        return "dashscope"
     return "unified"
 
 
@@ -532,6 +583,236 @@ def _render_openai_official(
     return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
 
 
+def _render_dashscope(
+    request: VideoRenderRequest,
+    spec: VideoProviderSpec,
+    prefix: str,
+    model: str,
+    base_url: str,
+    headers: dict[str, str],
+    *,
+    timeout_s: int,
+    ffmpeg: str | None,
+    run_guarded: Callable[..., Any] | None,
+    submit_url: str = "",
+    poll_url_template: str = "",
+) -> Path:
+    """Render video via DashScope/Bailian API (Happy Horse via Moyin relay).
+
+    API format:
+    - Submit: POST with X-DashScope-Async header, nested input/parameters body
+    - Poll: GET /api/v1/tasks/{task_id}
+    - Result: output.video_url in success response
+    """
+    first_frame_url = _first_frame_url(request, prefix, headers)
+
+    if not first_frame_url:
+        img_data = request.keyframe_path.read_bytes()
+        import base64 as _b64
+        suffix = request.keyframe_path.suffix.lower()
+        mime = "image/png" if suffix == ".png" else "image/jpeg"
+        first_frame_url = f"data:{mime};base64,{_b64.b64encode(img_data).decode('ascii')}"
+
+    # Clean prompt for DashScope/Happy Horse:
+    # Remove verbose Chinese instructions, keep visual description and character anchors
+    prompt_text = _clean_dashscope_prompt(request.prompt)
+    if len(prompt_text) > 1500:
+        prompt_text = prompt_text[:1497] + "..."
+
+    duration = max(5, min(10, int(round(float(request.duration)))))
+    resolution = _env(prefix, "RESOLUTION", "720P")
+
+    body: dict[str, Any] = {
+        "model": model,
+        "input": {
+            "prompt": prompt_text,
+            "img_url": first_frame_url,
+        },
+        "parameters": {
+            "resolution": resolution,
+            "duration": duration,
+            "prompt_extend": _env(prefix, "PROMPT_EXTEND", "true").lower() in {"1", "true", "yes", "on"},
+            "watermark": _env(prefix, "WATERMARK", "false").lower() in {"1", "true", "yes", "on"},
+        },
+    }
+
+    negative_prompt = request.negative_prompt.strip()
+    if negative_prompt:
+        body["input"]["negative_prompt"] = negative_prompt[:500]
+
+    _write_debug(request.run_dir, request.scene, f"{spec.id}_dashscope_submit_payload", body)
+
+    submit_headers = dict(headers)
+    submit_headers["X-DashScope-Async"] = "enable"
+    submit_headers["Content-Type"] = "application/json"
+
+    root = base_url.rstrip("/")
+    submit_endpoint = submit_url or _env(prefix, "SUBMIT_PATH", "/api/v1/services/aigc/video-generation/video-synthesis")
+    response = _json_request(
+        _join_url(root, submit_endpoint),
+        body,
+        submit_headers,
+        timeout=120,
+    )
+    _write_debug(request.run_dir, request.scene, f"{spec.id}_dashscope_submit_response", response)
+
+    output = response.get("output", {})
+    if isinstance(output, dict):
+        task_id = str(output.get("task_id") or "").strip()
+    else:
+        task_id = ""
+    if not task_id:
+        task_id = _extract_task_id(response)
+    if not task_id:
+        raise VideoProviderError(f"{spec.label} DashScope submit did not return a task_id: {json.dumps(response, ensure_ascii=False)}")
+
+    task_status = str(output.get("task_status") or "").upper() if isinstance(output, dict) else ""
+    if task_status == "FAILED":
+        code = response.get("code", "")
+        message = response.get("message", "")
+        raise VideoProviderError(f"{spec.label} task immediately failed: {code} - {message}")
+
+    poll_path = poll_url_template or _env(prefix, "POLL_PATH", "/api/v1/tasks/{task_id}")
+    poll_endpoint = _join_url(root, poll_path.replace("{task_id}", task_id))
+    poll_interval = max(3.0, _env_float(prefix, "POLL_INTERVAL_SECONDS", 10.0))
+
+    deadline = time.time() + timeout_s
+    result: dict[str, Any] = {}
+    while time.time() < deadline:
+        try:
+            poll_headers = dict(headers)
+            poll_headers.pop("Content-Type", None)
+            result = _json_request(poll_endpoint, None, poll_headers, timeout=60)
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise VideoProviderError(f"{spec.label} poll failed for task {task_id}: {exc}") from exc
+
+        _write_debug(request.run_dir, request.scene, f"{spec.id}_dashscope_poll_response", result)
+
+        poll_output = result.get("output", {})
+        if isinstance(poll_output, dict):
+            status = str(poll_output.get("task_status") or "").upper()
+            video_url = str(poll_output.get("video_url") or "").strip()
+        else:
+            status = _status(result).upper()
+            video_url = _extract_video_url(result)
+
+        if status == "SUCCEEDED" or video_url:
+            if video_url:
+                result["video_url"] = video_url
+            elif isinstance(poll_output, dict) and poll_output.get("video_url"):
+                result["video_url"] = poll_output["video_url"]
+            return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+
+        if status in {"FAILED", "CANCELED"}:
+            code = result.get("code", poll_output.get("code", "") if isinstance(poll_output, dict) else "")
+            message = result.get("message", poll_output.get("message", "") if isinstance(poll_output, dict) else "")
+            raise VideoProviderError(
+                f"{spec.label} task {task_id} failed: status={status}, code={code}, message={message}"
+            )
+
+        time.sleep(poll_interval)
+
+    raise VideoProviderError(f"{spec.label} task {task_id} timed out after {timeout_s}s.")
+
+
+def _clean_dashscope_prompt(raw_prompt: str) -> str:
+    """Clean a video prompt for DashScope/Happy Horse consumption.
+
+    Removes verbose instructions, translates common Chinese visual keywords to English.
+    """
+    import re as _re
+
+    text = str(raw_prompt or "").strip()
+    if not text:
+        return ""
+
+    # Remove long Chinese/English instruction blocks
+    patterns_to_remove = [
+        r"日系番剧风格[^,，]*[,，]?",
+        r"像真正的动画正片而不是解说稿[^,，]*[,，]?",
+        r"角色表演要明确[^,，]*[,，]?",
+        r"镜头要有动作感和情绪推进[^,，]*[,，]?",
+        r"避免旁白总结[^,，]*[,，]?",
+        r"人物设定要跟随角色名[^,，。]*[,，。]?",
+        r"不要跨性别或跨年龄漂移[^,，。]*[,，。]?",
+        r"避免写实摄影感[^,，。]*[,，。]?",
+        r"日系二维动画[^,，。]*[,，。]?",
+        r"Generate a real continuous video[^,.]*[,.]?",
+        r"Keep motion temporally coherent[^,.]*[,.]?",
+        r"Keep characters physically grounded[^,.]*[,.]?",
+        r"Shot timing plan:[^\n]*",
+        r"Character continuity:[^\n,]*,?\s*",
+        r"not a still image with pan/zoom\.\s*,?\s*",
+        r"vertical 9:16 anime drama video,?\s*",
+        r"cinematic time-continuous animation,?\s*",
+        r"stable character identity across frames,?\s*",
+        r"coherent scene motion and lighting continuity,?\s*",
+        r"character and environment relation remains stable,?\s*",
+        r"not a still image pan, real video motion with acting,?\s*",
+        r"continuous motion, expressive acting[^,]*,?\s*",
+        r"character descriptions:\s*",
+    ]
+    for pattern in patterns_to_remove:
+        text = _re.sub(pattern, "", text)
+
+    # Translate common Chinese visual keywords to English (longer phrases first)
+    cn_to_en = [
+        ("暴雨倾盆", "heavy rain pouring"),
+        ("暗红色闪电照亮", "dark red lightning illuminating "),
+        ("暗红色闪电", "dark red lightning"),
+        ("血魔教总坛", "blood demon sect main hall"),
+        ("黑色宫殿前尸横遍野", "dark palace with corpses scattered"),
+        ("黑色宫殿", "dark palace"),
+        ("尸横遍野", "corpses scattered"),
+        ("仰面倒地", "lying face up on ground wounded"),
+        ("持剑俯视", "holding sword looking down"),
+        ("雨水混着血水", "rain mixed with blood"),
+        ("面容冷峻", "cold stern expression"),
+        ("面容阴鸷", "sinister menacing expression"),
+        ("面容清秀", "handsome delicate face"),
+        ("黑色长发", "black long hair"),
+        ("黑色教主长袍", "black sect leader robe"),
+        ("黑色护法服", "black guardian robe"),
+        ("体型高大", "tall muscular build"),
+        ("身穿", "wearing "),
+        ("竖屏", "vertical "),
+        ("悲愤、绝望", "grief and despair"),
+        ("悲愤", "grief and anger"),
+        ("绝望", "despair"),
+        ("愤怒", "anger"),
+        ("紧张", "tension"),
+        ("平静", "calm"),
+        ("恐惧", "fear"),
+        ("喜悦", "joy"),
+        ("雨夜背叛", "rainy night betrayal"),
+        ("男", "male"),
+        ("女", "female"),
+        ("中年", "middle-aged"),
+        ("少年", "teenage boy"),
+        ("青年", "young man"),
+        ("老年", "elderly"),
+        ("，", ", "),
+        ("。", ". "),
+        ("、", " and "),
+    ]
+    for cn, en in cn_to_en:
+        text = text.replace(cn, en)
+
+    # Remove remaining Chinese characters that are likely narrative instructions
+    # Keep short Chinese (2-3 chars, likely names) but remove longer phrases (4+)
+    text = _re.sub(r"[\u4e00-\u9fff]{4,}", "", text)
+
+    # Clean up residual separators
+    text = _re.sub(r"[,，]\s*[,，]+", ", ", text)
+    text = _re.sub(r"^\s*[,，]\s*", "", text)
+    text = _re.sub(r"\s*[,，]\s*$", "", text)
+    text = _re.sub(r"\s+", " ", text).strip()
+    text = _re.sub(r",\s*,", ",", text)
+    text = text.strip(", ")
+
+    return text
+
+
 def _render_unified(
     request: VideoRenderRequest,
     spec: VideoProviderSpec,
@@ -726,11 +1007,14 @@ def render_remote_video_provider(
         )
 
     route = _detect_route(prefix, spec, model)
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    if route == "kling":
+        headers = _kling_auth_headers(prefix, api_key)
+    else:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
 
     _write_debug(
         request.run_dir,
@@ -787,6 +1071,18 @@ def render_remote_video_provider(
             )
         if route == "kling":
             return _render_kling(
+                request,
+                spec,
+                prefix,
+                model,
+                base_url,
+                headers,
+                submit_url=submit_url,
+                poll_url_template=poll_url,
+                **render_kwargs,
+            )
+        if route == "dashscope":
+            return _render_dashscope(
                 request,
                 spec,
                 prefix,

@@ -310,12 +310,37 @@ def synthesize_external_tts(
         raise RuntimeError(f"{normalized} is not configured")
 
     ensure_parent(out_path)
+    # If reference_audio_path points to a local file, encode as base64 for remote API
+    reference_audio_base64 = ""
+    if reference_audio_path:
+        ref_path = Path(reference_audio_path)
+        if not ref_path.is_absolute():
+            ref_path = ROOT / reference_audio_path
+        # If not found, try voice_samples/ directory
+        if not ref_path.is_file():
+            candidate = ROOT / "voice_samples" / Path(reference_audio_path).name
+            if candidate.is_file():
+                ref_path = candidate
+        # Also try replacing spaces with underscores
+        if not ref_path.is_file():
+            alt_name = Path(reference_audio_path).name.replace(" ", "_")
+            for search_dir in [ROOT, ROOT / "voice_samples"]:
+                candidate = search_dir / alt_name
+                if candidate.is_file():
+                    ref_path = candidate
+                    break
+        if ref_path.is_file():
+            reference_audio_base64 = base64.b64encode(ref_path.read_bytes()).decode("ascii")
+            print(f"[tts] {normalized} reference audio loaded: {ref_path} ({ref_path.stat().st_size // 1024}KB, b64={len(reference_audio_base64)} chars)")
+        else:
+            print(f"[tts] {normalized} reference audio NOT FOUND: tried {reference_audio_path} → {ref_path}")
     payload = {
         "text": text,
         "voice": voice,
         "provider": normalized,
         "voice_id": voice_id,
         "reference_audio_path": reference_audio_path,
+        "reference_audio_base64": reference_audio_base64,
         "reference_text": reference_text,
         "emotion": emotion,
         "rate": rate,
@@ -390,6 +415,42 @@ def synthesize_external_tts(
 
     if not valid_audio_file(out_path):
         raise RuntimeError(f"{normalized} produced an empty or unusable audio file")
+
+    # Post-process with ffmpeg: apply pitch shift and volume adjustment
+    # OmniVoice doesn't support these natively, so we do it after generation
+    needs_postprocess = (pitch != 0.0 and abs(pitch) > 0.5) or (volume != 1.0 and abs(volume - 1.0) > 0.05)
+    if needs_postprocess and valid_audio_file(out_path):
+        try:
+            from backend.project_models import get_ffmpeg_exe
+            ffmpeg_exe = get_ffmpeg_exe()
+            filters = []
+            # Pitch shift using asetrate + aresample (semitones to rate ratio)
+            if pitch != 0.0 and abs(pitch) > 0.5:
+                # pitch in semitones: +2 = higher, -2 = lower
+                pitch_factor = 2.0 ** (pitch / 12.0)
+                target_rate = int(24000 * pitch_factor)
+                filters.append(f"asetrate={target_rate},aresample=24000")
+            # Volume
+            if volume != 1.0 and abs(volume - 1.0) > 0.05:
+                filters.append(f"volume={volume}")
+            if filters:
+                import subprocess as _sp
+                tmp_path = out_path.with_suffix(".tmp.wav")
+                out_path.rename(tmp_path)
+                cmd = [
+                    ffmpeg_exe, "-y", "-i", str(tmp_path),
+                    "-af", ",".join(filters),
+                    "-acodec", "pcm_s16le", "-ar", "24000", "-ac", "1",
+                    str(out_path),
+                ]
+                _sp.run(cmd, capture_output=True, timeout=15)
+                tmp_path.unlink(missing_ok=True)
+                if not valid_audio_file(out_path):
+                    # Restore original if postprocess failed
+                    if tmp_path.exists():
+                        tmp_path.rename(out_path)
+        except Exception as exc:
+            print(f"[tts] post-process failed (pitch/volume), using raw audio: {exc}")
 
 
 def engine_chain(engine: str) -> list[str]:

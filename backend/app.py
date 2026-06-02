@@ -3,6 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 import re
 import subprocess
 import sys
@@ -212,7 +216,7 @@ class CreateTaskRequest(BaseModel):
     scene_count: int = Field(default=5, ge=1, le=12)
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
     video_provider: str = "auto"
-    voice_provider: Literal["auto", "edge", "local", "silent"] = "auto"
+    voice_provider: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
 
 
 class CreateTaskResponse(BaseModel):
@@ -230,7 +234,7 @@ class CreateProjectRequest(BaseModel):
     scene_count: int = Field(default=5, ge=1, le=12)
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
     video_provider: str = "auto"
-    voice_provider: Literal["auto", "edge", "local", "silent"] = "auto"
+    voice_provider: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
 
 
 class UpdateProjectRequest(BaseModel):
@@ -345,9 +349,9 @@ class VoicePreviewRequest(BaseModel):
     voice: str
     text: str = Field(default="这是一次漫剧配音试听。", min_length=1, max_length=120)
     engine: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
-    rate: float = Field(default=1.0, ge=0.5, le=2.0)
+    rate: float = Field(default=1.0, ge=0.1, le=5.0)
     pitch: float = Field(default=0.0, ge=-24.0, le=24.0)
-    volume: float = Field(default=1.0, ge=0.0, le=2.0)
+    volume: float = Field(default=1.0, ge=0.0, le=5.0)
     voice_id: str = ""
     reference_audio_path: str = ""
     reference_text: str = ""
@@ -505,7 +509,7 @@ async def load_voice_catalog_data() -> list[dict]:
                 VOICE_CATALOG_CACHE.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 return catalog
         except Exception as exc:
-            print(f"[tts] Failed to load live voice catalog: {exc}")
+            logger.error("Failed to load live voice catalog: %s", exc)
 
     return DEFAULT_VOICE_CATALOG
 
@@ -628,7 +632,10 @@ def comfyui_is_local_url() -> bool:
 
 def read_comfyui_json(path: str, timeout: float = 3.0) -> dict:
     headers = comfyui_auth_headers()
-    request = Request(f"{comfyui_base_url()}{path}", headers=headers)
+    url = f"{comfyui_base_url()}{path}"
+    request = Request(url)
+    for key, value in headers.items():
+        request.add_header(key, value)
     with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -765,6 +772,70 @@ def character_consistency_status(project_id: str, char_name: str) -> dict:
     return check_character_consistency(project, WORKSPACE / project_id, char_name)
 
 
+@app.get("/api/projects/{project_id}/consistency-report")
+def project_consistency_report(project_id: str) -> dict:
+    """Generate a consistency validation report for all scenes in a project."""
+    try:
+        load_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    from backend.consistency_validator import generate_consistency_report
+    return generate_consistency_report(project_id)
+
+
+@app.get("/api/projects/{project_id}/export-otio")
+def export_otio(project_id: str) -> dict:
+    """Export project timeline in OpenTimelineIO format."""
+    try:
+        project = load_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    from backend.timeline_export import export_project_to_otio, save_otio_file
+    from backend.project_models import project_dir
+    proj_dir = project_dir(project_id)
+    timeline = export_project_to_otio(project, proj_dir)
+    output_path = proj_dir / "export" / f"{project_id}.otio"
+    save_otio_file(timeline, output_path)
+    return {
+        "timeline": timeline,
+        "file_path": str(output_path),
+        "url": f"/workspace/{project_id}/export/{project_id}.otio",
+    }
+
+
+@app.get("/api/projects/{project_id}/cost-estimate")
+def project_cost_estimate(project_id: str, provider: str = "") -> dict:
+    """Estimate rendering cost for a project."""
+    try:
+        project = load_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    from backend.provider_router import estimate_project_cost
+    return estimate_project_cost(project, provider)
+
+
+@app.post("/api/projects/{project_id}/scenes/{scene_order}/candidates/{kind}/select")
+def select_scene_candidate(project_id: str, scene_order: int, kind: str, candidate_id: str) -> dict:
+    """Select a specific candidate for a scene asset."""
+    try:
+        project = load_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    scene = next((s for s in project.get("scenes", []) if int(s.get("order", 0)) == scene_order), None)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    from backend.candidate_manager import get_scene_candidates, select_candidate
+    candidates = get_scene_candidates(scene, kind)
+    if not candidates:
+        raise HTTPException(status_code=404, detail="No candidates found")
+    selected = select_candidate(candidates, candidate_id)
+    if not selected:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    # Save project with updated selection
+    save_project(project)
+    return {"selected": selected, "candidates": candidates}
+
+
 @app.get("/api/voice-presets")
 def voice_presets() -> dict:
     return format_voice_presets(load_voice_presets())
@@ -827,6 +898,63 @@ def save_tts_providers_endpoint(payload: TTSProviderSettingsRequest) -> dict:
     }
 
 
+@app.get("/api/bgm-library")
+def bgm_library() -> dict:
+    """List available BGM files organized by style."""
+    bgm_root = ROOT / "assets" / "audio" / "bgm"
+    library: dict[str, list[dict]] = {}
+    if bgm_root.exists():
+        for style_dir in sorted(bgm_root.iterdir()):
+            if style_dir.is_dir() and not style_dir.name.startswith("_"):
+                files = []
+                for f in sorted(style_dir.iterdir()):
+                    if f.suffix.lower() in {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}:
+                        files.append({
+                            "name": f.stem,
+                            "path": f"assets/audio/bgm/{style_dir.name}/{f.name}",
+                            "size_kb": round(f.stat().st_size / 1024, 1),
+                        })
+                if files:
+                    library[style_dir.name] = files
+    return {"library": library, "root": str(bgm_root)}
+
+
+class BgmUploadRequest(BaseModel):
+    filename: str
+    style: str = "neutral"
+    data_url: str
+
+
+@app.post("/api/bgm-upload")
+def upload_bgm(payload: BgmUploadRequest) -> dict:
+    """Upload a BGM file to the library."""
+    if "," not in payload.data_url:
+        raise HTTPException(status_code=400, detail="Invalid data URL")
+    _, encoded = payload.data_url.split(",", 1)
+    import binascii
+    try:
+        raw = base64.b64decode(encoded)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid base64") from exc
+
+    style = payload.style.strip() or "neutral"
+    bgm_dir = ROOT / "assets" / "audio" / "bgm" / style
+    bgm_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sanitize filename
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-.]", "_", payload.filename.strip())
+    if not safe_name:
+        safe_name = f"bgm_{uuid.uuid4().hex[:8]}.mp3"
+    out_path = bgm_dir / safe_name
+    out_path.write_bytes(raw)
+
+    return {
+        "path": f"assets/audio/bgm/{style}/{safe_name}",
+        "style": style,
+        "size_kb": round(out_path.stat().st_size / 1024, 1),
+    }
+
+
 @app.post("/api/voice-preview")
 def create_voice_preview(payload: VoicePreviewRequest) -> dict:
     voice = payload.voice.strip()
@@ -835,6 +963,9 @@ def create_voice_preview(payload: VoicePreviewRequest) -> dict:
         raise HTTPException(status_code=400, detail="Voice is required")
     if payload.engine == "edge" and not re.match(r"^[A-Za-z0-9-]+Neural$", voice):
         raise HTTPException(status_code=400, detail="Invalid Edge TTS voice name")
+
+    logger.info("[voice-preview] engine=%s voice=%s voice_id=%s ref_audio=%s emotion=%s",
+                payload.engine, voice, payload.voice_id, payload.reference_audio_path, payload.emotion)
 
     preview_dir = OUTPUTS / "voice_previews"
     preview_dir.mkdir(parents=True, exist_ok=True)
@@ -1103,7 +1234,7 @@ def build_project_endpoint(project_id: str) -> dict:
             from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Failed")
-            print(f"[project] build failed for {project_id}: {exc}")
+            logger.error("build failed for %s: %s", project_id, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
@@ -1142,7 +1273,7 @@ def rerender_scene_image_endpoint(project_id: str, scene_order: int) -> dict:
             from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Image rerender failed")
-            print(f"[project] image rerender failed for {project_id} scene {scene_order}: {exc}")
+            logger.error("image rerender failed for %s scene %s: %s", project_id, scene_order, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
@@ -1165,7 +1296,7 @@ def rerender_scene_audio_endpoint(project_id: str, scene_order: int) -> dict:
             from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Audio rerender failed")
-            print(f"[project] audio rerender failed for {project_id} scene {scene_order}: {exc}")
+            logger.error("audio rerender failed for %s scene %s: %s", project_id, scene_order, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
@@ -1188,7 +1319,7 @@ def rerender_scene_video_endpoint(project_id: str, scene_order: int) -> dict:
             from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Video rerender failed")
-            print(f"[project] video rerender failed for {project_id} scene {scene_order}: {exc}")
+            logger.error("video rerender failed for %s scene %s: %s", project_id, scene_order, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
@@ -1217,7 +1348,7 @@ def rebuild_scene_endpoint(project_id: str, scene_order: int) -> dict:
             from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Scene rebuild failed")
-            print(f"[project] rebuild failed for {project_id} scene {scene_order}: {exc}")
+            logger.error("rebuild failed for %s scene %s: %s", project_id, scene_order, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
@@ -1241,7 +1372,7 @@ def fill_missing_assets_endpoint(project_id: str, payload: FillMissingAssetsRequ
             from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Asset repair failed")
-            print(f"[project] asset repair failed for {project_id}: {exc}")
+            logger.error("asset repair failed for %s: %s", project_id, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)

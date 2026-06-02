@@ -1,15 +1,18 @@
 {
-  "default": "zh-CN-XiaoxiaoNeural",
+  "default": "zh-CN-YunxiNeural",
   "voice_map": {
-    "narrator": "zh-CN-YunxiNeural",
+    "白云飞": "zh-CN-YunxiNeural",
+    "李青": "zh-CN-YunxiNeural",
+    "左护法": "zh-CN-YunyangNeural",
+    "赵虎": "zh-CN-YunjianNeural",
+    "旁白": "zh-CN-YunyangNeural",
+    "跟班": "zh-CN-YunxiaNeural",
+    "跟班甲": "zh-CN-YunxiaNeural",
+    "跟班乙": "zh-CN-YunxiaNeural",
     "female_lead": "zh-CN-XiaoxiaoNeural",
     "male_lead": "zh-CN-YunxiNeural",
-    "antagonist": "zh-CN-YunjianNeural",
-    "host": "zh-CN-YunyangNeural",
-    "child": "zh-CN-XiaobeiNeural",
-    "旁白": "zh-CN-YunxiNeural",
-    "林晚": "zh-CN-XiaoxiaoNeural",
-    "反派": "zh-CN-YunjianNeural",
-    "主持人": "zh-CN-YunyangNeural"
+    "male_villain": "zh-CN-YunyangNeural",
+    "male_bully": "zh-CN-YunjianNeural",
+    "narrator": "zh-CN-YunyangNeural"
   }
 }

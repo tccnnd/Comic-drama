@@ -1,0 +1,29 @@
+{
+  "files": {
+    "tension/epic_tension.mp3": {
+      "tags": [
+        "tension"
+      ]
+    },
+    "tension/dark_suspense.mp3": {
+      "tags": [
+        "tension"
+      ]
+    },
+    "action/battle_action.mp3": {
+      "tags": [
+        "action"
+      ]
+    },
+    "neutral/cinematic_neutral.mp3": {
+      "tags": [
+        "neutral"
+      ]
+    },
+    "action/martial_arts.mp3": {
+      "tags": [
+        "action"
+      ]
+    }
+  }
+}

@@ -1,105 +1,115 @@
 {
-  "default_style_id": "anime_standard",
+  "default_style_id": "manhwa_action",
   "styles": [
     {
       "id": "anime_standard",
       "name": "日系动画",
       "category": "system",
-      "positive_suffix": "anime key visual, studio anime style, cel shading, clean thin lines, flat colors, cinematic lighting, detailed background",
-      "negative_suffix": "photorealistic, realistic skin, 3d render, photograph, noisy, blurry, low quality",
+      "positive_suffix": "masterpiece, best quality, anime key visual, studio anime style, cel shading, clean thin lines, flat colors, cinematic lighting, detailed background, highly detailed",
+      "negative_suffix": "photorealistic, realistic skin, 3d render, photograph, noisy, blurry, low quality, worst quality, jpeg artifacts, watermark, text",
       "thumbnail": "styles/anime_standard.png",
-      "checkpoint_hint": "Anything-v5.0-PRT.safetensors",
-      "lora_hint": "anime-character-lora_v1.5.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "manhwa_soft",
       "name": "韩漫唯美",
       "category": "system",
-      "positive_suffix": "manhwa style, soft shading, pastel colors, elegant faces, glossy eyes, warm rim light, romantic atmosphere",
-      "negative_suffix": "photorealistic, harsh contrast, muddy colors, distorted hands, low detail, 3d render",
+      "positive_suffix": "masterpiece, best quality, manhwa style, Korean webtoon, soft shading, pastel colors, elegant faces, glossy eyes, warm rim light, romantic atmosphere, highly detailed, beautiful lighting",
+      "negative_suffix": "photorealistic, harsh contrast, muddy colors, distorted hands, low detail, 3d render, worst quality, jpeg artifacts, watermark",
       "thumbnail": "styles/manhwa_soft.png",
-      "checkpoint_hint": "manhwa-soft-v1.safetensors",
-      "lora_hint": "manhwa-aesthetic-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
+    },
+    {
+      "id": "manhwa_action",
+      "name": "韩漫武侠",
+      "category": "system",
+      "positive_suffix": "masterpiece, best quality, full color, vibrant colors, digital painting, colored, Korean manhwa style, webtoon, dark fantasy, martial arts, dynamic composition, dramatic lighting, sharp details, intense atmosphere, cinematic, highly detailed face and eyes, beautiful character design",
+      "negative_suffix": "sketch, lineart, monochrome, greyscale, black and white, uncolored, pencil drawing, rough sketch, photorealistic, 3d render, blurry, low quality, worst quality, deformed, bad anatomy, extra limbs, watermark, text, jpeg artifacts, childish, cute, chibi",
+      "thumbnail": "styles/manhwa_action.png",
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "gongfeng",
       "name": "纯正国风",
       "category": "system",
-      "positive_suffix": "chinese ink painting, traditional chinese art, hanfu, elegant composition, brush texture, misty atmosphere, classical beauty",
-      "negative_suffix": "photorealistic, western comic, neon colors, 3d render, plastic skin, blurry brushwork",
+      "positive_suffix": "masterpiece, best quality, chinese ink painting, traditional chinese art, hanfu, elegant composition, brush texture, misty atmosphere, classical beauty, highly detailed",
+      "negative_suffix": "photorealistic, western comic, neon colors, 3d render, plastic skin, blurry brushwork, worst quality, watermark",
       "thumbnail": "styles/gongfeng.png",
-      "checkpoint_hint": "guofeng-illustration.safetensors",
-      "lora_hint": "hanfu-ink-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "neon_action",
       "name": "激燃极光",
       "category": "system",
-      "positive_suffix": "dynamic lighting, neon glow, action scene, dramatic shadows, motion energy, sharp contrast, explosive composition",
-      "negative_suffix": "static pose, soft pastel, dull lighting, low energy, flat composition, blurry motion",
+      "positive_suffix": "masterpiece, best quality, dynamic lighting, neon glow, action scene, dramatic shadows, motion energy, sharp contrast, explosive composition, highly detailed",
+      "negative_suffix": "static pose, soft pastel, dull lighting, low energy, flat composition, blurry motion, worst quality, watermark",
       "thumbnail": "styles/neon_action.png",
-      "checkpoint_hint": "action-neon-v2.safetensors",
-      "lora_hint": "combat-intensity-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "western_comic",
       "name": "美漫硬朗",
       "category": "system",
-      "positive_suffix": "western comic style, bold lines, strong shadows, heroic composition, high contrast, graphic storytelling",
-      "negative_suffix": "anime style, watercolor, soft pastel, photorealistic, blurry outlines, low contrast",
+      "positive_suffix": "masterpiece, best quality, western comic style, bold lines, strong shadows, heroic composition, high contrast, graphic storytelling, highly detailed",
+      "negative_suffix": "anime style, watercolor, soft pastel, photorealistic, blurry outlines, low contrast, worst quality, watermark",
       "thumbnail": "styles/western_comic.png",
-      "checkpoint_hint": "western-comic-v1.safetensors",
-      "lora_hint": "bold-ink-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "semi_realistic",
       "name": "写实画报",
       "category": "system",
-      "positive_suffix": "semi-realistic, detailed illustration, magazine quality, clean skin texture, cinematic portrait, refined lighting",
-      "negative_suffix": "cartoonish, exaggerated proportions, low detail, flat face, blurry background, toy-like",
+      "positive_suffix": "masterpiece, best quality, semi-realistic, detailed illustration, magazine quality, clean skin texture, cinematic portrait, refined lighting, highly detailed",
+      "negative_suffix": "cartoonish, exaggerated proportions, low detail, flat face, blurry background, toy-like, worst quality, watermark",
       "thumbnail": "styles/semi_realistic.png",
-      "checkpoint_hint": "realistic-illustration-v1.safetensors",
-      "lora_hint": "editorial-portrait-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "picture_book",
       "name": "治愈绘本",
       "category": "system",
-      "positive_suffix": "children book illustration, warm colors, soft edges, watercolor texture, friendly atmosphere, comforting composition",
-      "negative_suffix": "dark horror, harsh shadows, photorealistic, metallic texture, noisy details, cold palette",
+      "positive_suffix": "masterpiece, best quality, children book illustration, warm colors, soft edges, watercolor texture, friendly atmosphere, comforting composition",
+      "negative_suffix": "dark horror, harsh shadows, photorealistic, metallic texture, noisy details, cold palette, worst quality, watermark",
       "thumbnail": "styles/picture_book.png",
-      "checkpoint_hint": "picture-book-v1.safetensors",
-      "lora_hint": "watercolor-soft-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "claymation",
       "name": "趣味黏土",
       "category": "system",
-      "positive_suffix": "claymation style, 3d clay figure, soft lighting, miniature set, handcrafted texture, playful charm",
-      "negative_suffix": "photorealistic, metallic shine, flat cartoon, noisy surface, high detail skin pores",
+      "positive_suffix": "masterpiece, best quality, claymation style, 3d clay figure, soft lighting, miniature set, handcrafted texture, playful charm",
+      "negative_suffix": "photorealistic, metallic shine, flat cartoon, noisy surface, high detail skin pores, worst quality, watermark",
       "thumbnail": "styles/claymation.png",
-      "checkpoint_hint": "claymation-toy-v1.safetensors",
-      "lora_hint": "miniature-clay-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "blindbox_3d",
       "name": "3D盲盒",
       "category": "system",
-      "positive_suffix": "3d chibi figure, blind box toy, studio lighting, simple background, collectible figure, glossy finish",
-      "negative_suffix": "photorealistic, realistic adult proportions, dark background, complex clutter, flat illustration",
+      "positive_suffix": "masterpiece, best quality, 3d chibi figure, blind box toy, studio lighting, simple background, collectible figure, glossy finish",
+      "negative_suffix": "photorealistic, realistic adult proportions, dark background, complex clutter, flat illustration, worst quality, watermark",
       "thumbnail": "styles/blindbox_3d.png",
-      "checkpoint_hint": "blindbox-figure-v1.safetensors",
-      "lora_hint": "chibi-collectible-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     },
     {
       "id": "one_piece_style",
       "name": "海贼王风格",
       "category": "system",
-      "positive_suffix": "one piece anime style, bold outlines, exaggerated proportions, energetic expressions, adventurous mood, colorful action",
-      "negative_suffix": "photorealistic, subdued colors, realistic anatomy, thin outlines, flat emotion, dark realism",
+      "positive_suffix": "masterpiece, best quality, one piece anime style, bold outlines, exaggerated proportions, energetic expressions, adventurous mood, colorful action",
+      "negative_suffix": "photorealistic, subdued colors, realistic anatomy, thin outlines, flat emotion, dark realism, worst quality, watermark",
       "thumbnail": "styles/one_piece_style.png",
-      "checkpoint_hint": "shonen-adventure-v1.safetensors",
-      "lora_hint": "shonen-exaggeration-lora.safetensors"
+      "checkpoint_hint": "illustriousXL_v0.1.safetensors",
+      "lora_hint": ""
     }
   ]
 }

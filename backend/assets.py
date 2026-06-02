@@ -12,7 +12,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.logger import get_logger
 from scripts.run_workflow import extract_json_object, load_env_file, post_llm_chat_completion
+
+logger = get_logger(__name__)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +51,7 @@ class Asset(BaseModel):
     voice_id: str = ""
     thumbnail: str | None = None
     status: AssetStatus = AssetStatus.PENDING
+    error: str = ""
     first_scene: int = 1
     created_at: str = ""
     updated_at: str = ""
@@ -544,6 +548,13 @@ def extract_assets_endpoint(project_id: str) -> dict[str, Any]:
 
 @asset_router.post("/{asset_id}/generate")
 def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
+    from backend.asset_generation import _check_comfyui_online
+
+    if not _check_comfyui_online():
+        raise HTTPException(
+            status_code=503,
+            detail="ComfyUI 服务不可达。请确认 ComfyUI 已启动，或 SSH 隧道已连接到远程 GPU 服务器。",
+        )
     try:
         asset = update_asset_status(project_id, asset_id, AssetStatus.GENERATING)
     except FileNotFoundError:
@@ -556,7 +567,7 @@ def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
         try:
             generate_asset_image(project_id, asset_id)
         except Exception as exc:
-            print(f"[assets] generation failed for {project_id}/{asset_id}: {exc}")
+            logger.error("generation failed for %s/%s: %s", project_id, asset_id, exc)
 
     threading.Thread(target=_run, daemon=True).start()
     return {
@@ -568,6 +579,13 @@ def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
 
 @asset_router.post("/generate-all")
 def generate_all_assets_endpoint(project_id: str) -> dict[str, Any]:
+    from backend.asset_generation import _check_comfyui_online
+
+    if not _check_comfyui_online():
+        raise HTTPException(
+            status_code=503,
+            detail="ComfyUI 服务不可达。请确认 ComfyUI 已启动，或 SSH 隧道已连接到远程 GPU 服务器。",
+        )
     try:
         with project_lock(project_id):
             store = load_asset_store(project_id)
@@ -585,7 +603,7 @@ def generate_all_assets_endpoint(project_id: str) -> dict[str, Any]:
         try:
             generate_all_assets(project_id)
         except Exception as exc:
-            print(f"[assets] batch generation failed for {project_id}: {exc}")
+            logger.error("batch generation failed for %s: %s", project_id, exc)
 
     threading.Thread(target=_run, daemon=True).start()
     return {

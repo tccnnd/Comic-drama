@@ -57,7 +57,10 @@ def _comfyui_auth_headers() -> dict[str, str]:
 
 
 def _read_comfyui_json(path: str, timeout: float) -> dict[str, Any]:
-    request = Request(f"{_comfyui_base_url()}{path}", headers=_comfyui_auth_headers())
+    url = f"{_comfyui_base_url()}{path}"
+    request = Request(url)
+    for key, value in _comfyui_auth_headers().items():
+        request.add_header(key, value)
     with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 

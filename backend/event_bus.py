@@ -7,6 +7,10 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class EventType:
     SCENE_UPDATED = "scene_updated"
@@ -66,7 +70,7 @@ class ProjectEventBus:
         try:
             queue.put_nowait(event)
         except asyncio.QueueFull:
-            print(f"[event_bus] subscriber queue full, dropped {event.get('type')} for {event.get('project_id')}")
+            logger.warning("subscriber queue full, dropped %s for %s", event.get('type'), event.get('project_id'))
 
     def publish_scene_updated(self, project_id: str, scene: dict[str, Any]) -> None:
         self.publish(

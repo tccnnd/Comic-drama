@@ -1,4 +1,6 @@
 .venv/
+data/_pydeps/
+.pytest_cache/
 outputs/
 workspace/
 .env

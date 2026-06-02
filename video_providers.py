@@ -114,8 +114,8 @@ def _register_defaults() -> None:
             id="xl",
             label="XL Aggregator",
             backend="remote",
-            aliases=("moyin", "memefast", "moyin-creator", "xl-aggregate"),
-            description="Aggregated video provider compatible with Moyin-style gateway routing",
+            aliases=("moyin", "memefast", "moyin-creator", "xl-aggregate", "happyhorse", "happy-horse"),
+            description="Aggregated video provider compatible with Moyin-style gateway routing (supports DashScope/Happy Horse)",
             config_env=(
                 "XL_API_KEY",
                 "XL_MODEL",

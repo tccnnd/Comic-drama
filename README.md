@@ -1,15 +1,74 @@
-# Comic Drama Workflow MVP
+# Comic Drama Workflow
 
-This is a local project-based prototype for a comic-drama generation workflow.
+An open-source AI comic-drama production workflow for turning a script into
+structured scenes, character assets, dialogue audio, storyboard review data,
+and an editorial timeline.
 
-The current version stores each project under `workspace/<project_id>/` and keeps the full asset chain visible on disk:
+The project is currently an early local-first prototype. It is designed for
+experiments around AI-assisted short drama, dynamic comics, and video-generation
+pipelines rather than for production hosting.
 
-1. Story text input
-2. Structured storyboard JSON
-3. Scene-level keyframes
-4. Scene-level TTS audio
-5. Scene-level 2.5D clips
-6. Final MP4 export
+## What It Does
+
+- Imports story text and turns it into structured storyboard scenes.
+- Extracts characters, speakers, dialogue, scene beats, props, and visual cues.
+- Maintains project assets on disk under `workspace/<project_id>/`.
+- Generates keyframes through local fallback rendering or ComfyUI.
+- Generates dialogue audio through pluggable TTS providers.
+- Builds 2.5D dynamic-comic clips and exports a final MP4.
+- Supports pluggable video providers for local, ComfyUI, Sora-style, Doubao,
+  Seedance, and aggregator-style gateways.
+- Produces an OTIO-inspired `canonical_timeline` for downstream renderers,
+  review tools, and future editing integrations.
+- Provides a local web workbench for project editing, character management,
+  scene review, rerendering, and export.
+
+## Why This Matters
+
+AI video generation is moving quickly, but creative workflows still need a
+stable production layer around models: script parsing, role continuity,
+timeline control, asset review, provider routing, and export management.
+
+This repository explores that middle layer. The goal is to make the production
+workflow reusable, auditable, and provider-agnostic so creators can swap models
+without rewriting the whole project structure.
+
+## Current Status
+
+Implemented:
+
+- Project scaffold and workspace artifact layout
+- Script-to-storyboard workflow
+- Role and dialogue extraction foundations
+- Character library and reference image upload
+- Scene-level keyframe, audio, and clip generation
+- Subtitle timing, BGM/SFX hooks, and enhanced dynamic-comic rendering
+- ComfyUI image workflow injection and validation
+- Self-hosted and remote video provider abstraction
+- Canonical timeline generation
+- Storyboard review canvas with status, rating, notes, and version comparison
+
+In progress:
+
+- Real continuous video generation as the primary scene renderer
+- Stronger global consistency governance across characters, light, camera, and
+  environment
+- Provider adapters for commercial and self-hosted video models
+- More complete screenplay import and director review workflows
+
+## Repository Layout
+
+```text
+backend/        FastAPI app, project runtime, local web API
+frontend/       Browser workbench UI
+scripts/        Main workflow runner and media pipeline
+workflows/      ComfyUI workflow templates
+docs/           Architecture notes and implementation plans
+inputs/         Sample scripts
+workspace/      Local project data, ignored for production use when needed
+outputs/        Render outputs
+video_providers.py
+```
 
 ## Setup
 
@@ -18,85 +77,94 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-## Run
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_workflow.py
-```
-
-Outputs are written to `outputs/<run_id>/`.
-
-## Optional LLM Storyboard Planner
-
-Copy `.env.example` to `.env`, then set your API key and OpenAI-compatible endpoint:
+Copy environment defaults when you need model or provider integrations:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Run with the LLM planner:
+## Run The Local Workflow
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_workflow.py --planner llm
+.\.venv\Scripts\python.exe scripts\run_workflow.py --input inputs\sample_story.txt
 ```
 
-If no LLM configuration is present, `--planner auto` falls back to the deterministic rule planner.
+Outputs are written to `outputs/<run_id>/`.
 
-The current visual layer renders a per-scene keyframe PNG locally and then turns it into a short animated clip. That gives you a stable replacement point for ComfyUI or any other image generator later.
-
-To use ComfyUI as the keyframe provider, set `KEYFRAME_PROVIDER=comfyui` and point `COMFYUI_WORKFLOW_PATH` at an exported workflow JSON template. The script will fill placeholder strings like `__PROMPT__`, `__NEGATIVE__`, `__SEED__`, `__WIDTH__`, and `__HEIGHT__` before sending the prompt.
-
-For audio, set `TTS_PROVIDER=edge` for online Chinese voices, `TTS_PROVIDER=local` for Windows SAPI/pyttsx3, or `TTS_PROVIDER=silent` as a fallback.
-
-To give different characters different voices, add a `voice_presets.json` file at the project root or point `VOICE_PRESETS_PATH` at another JSON file. The workflow will use the scene speaker or inferred role to pick a voice, and `TTS_EDGE_VOICE` still works as a global override when you want one voice for the whole show.
-
-For local external-provider testing, run:
-
-```powershell
-.\start_mock_tts_provider.bat
-```
-
-It serves `POST /tts` on `http://127.0.0.1:8010/tts` and can back all four external engine slots in `workspace/tts_provider_settings.json`.
-
-## Backend API
-
-Run the local API server:
+## Run The Web Workbench
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn backend.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open the workbench:
+Open:
 
 ```text
 http://127.0.0.1:8000/
 ```
 
-Create a project:
+The workbench supports project creation, script recognition, character assets,
+scene editing, review notes, rerendering, full build, and export.
+
+## Model And Provider Integrations
+
+### LLM Planner
+
+Set an OpenAI-compatible endpoint and key in `.env`, then run:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/projects -ContentType 'application/json' -Body '{"title":"霸总的限时娇妻","planner":"rule","keyframe_provider":"local","voice_provider":"auto","scene_count":5}'
+.\.venv\Scripts\python.exe scripts\run_workflow.py --planner llm
 ```
 
-The workbench now centers on:
+If no LLM configuration is present, `--planner auto` falls back to deterministic
+rules.
 
-- project scaffold creation
-- project-level editing
-- character library maintenance
-- character reference image upload
-- scene card editing
-- single-scene rerender
-- full project build and export
+### ComfyUI
 
-Project artifacts are exposed under `/workspace/<project_id>/...`.
+Set:
 
-## Next Replacement Points
+```env
+KEYFRAME_PROVIDER=comfyui
+COMFYUI_WORKFLOW_PATH=workflows/comfyui_keyframe_template.json
+COMFYUI_CHECKPOINT_NAME=v1-5-pruned-emaonly-fp16.safetensors
+COMFYUI_LORA_NAME=
+```
 
-- Replace `build_storyboard()` with an LLM structured output call.
-- Replace `render_keyframe()` with ComfyUI image generation.
-- Replace the local 2.5D clip step with ComfyUI, AnimateDiff, or image-to-video generation.
-- Replace placeholder audio with TTS.
-- Replace placeholder audio with TTS.
-- Wrap this script behind a FastAPI task endpoint and stream progress to the web UI.
+The workflow template is injected structurally at runtime. If `COMFYUI_LORA_NAME`
+is empty, the LoRA node is skipped and the checkpoint model is connected
+directly.
 
-See [target_modules_from_references.md](docs/target_modules_from_references.md) for the OpenToonz / OmniVoice-derived module map.
+### Video Providers
+
+The scene video provider registry is documented in
+[docs/self_hosted_video_provider.md](docs/self_hosted_video_provider.md).
+
+Supported provider shapes include:
+
+- `local`: built-in 2.5D dynamic-comic clip renderer
+- `comfyui`: self-hosted ComfyUI video workflow
+- `sora`: Sora-style submit/poll/download gateway
+- `doubao`: Doubao-style remote video gateway
+- `seedance`: Seedance-style remote video gateway
+- `aggregator`: Moyin/Happy Horse-style routing gateway
+
+## Canonical Timeline
+
+The workflow emits an OTIO-inspired canonical timeline object for downstream
+editing, provider routing, review, and export tools.
+
+See [docs/canonical_timeline.md](docs/canonical_timeline.md).
+
+## Roadmap
+
+See [docs/roadmap.md](docs/roadmap.md).
+
+## Contributing
+
+Contributions are welcome while the project is still in early architecture
+formation. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening issues
+or pull requests.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

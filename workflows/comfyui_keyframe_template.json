@@ -4,44 +4,23 @@
     "inputs": {
       "ckpt_name": "__CHECKPOINT_NAME__"
     },
-    "_meta": {
-      "title": "Checkpoint加载器"
-    }
-  },
-  "2": {
-    "class_type": "LoadImage",
-    "inputs": {
-      "image": "__PRIMARY_REFERENCE_IMAGE__"
-    },
-    "_meta": {
-      "title": "CHARACTER_REF_IMAGE"
-    }
+    "_meta": {"title": "Checkpoint"}
   },
   "3": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "clip": [
-        "11",
-        1
-      ],
-      "text": "__PROMPT__\n__CHARACTER_DESCRIPTIONS__"
+      "clip": ["1", 1],
+      "text": "__PROMPT__"
     },
-    "_meta": {
-      "title": "SCENE_PROMPT_POSITIVE"
-    }
+    "_meta": {"title": "POSITIVE"}
   },
   "4": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "clip": [
-        "11",
-        1
-      ],
-      "text": "blurry, noisy, messy, lowres, jpeg, artifacts, ill, distorted, malformed, watermark, __NEGATIVE__"
+      "clip": ["1", 1],
+      "text": "__NEGATIVE__"
     },
-    "_meta": {
-      "title": "SCENE_PROMPT_NEGATIVE"
-    }
+    "_meta": {"title": "NEGATIVE"}
   },
   "5": {
     "class_type": "EmptyLatentImage",
@@ -50,46 +29,7 @@
       "height": "__HEIGHT__",
       "batch_size": 1
     },
-    "_meta": {
-      "title": "空Latent"
-    }
-  },
-  "6": {
-    "class_type": "IPAdapterUnifiedLoader",
-    "inputs": {
-      "model": [
-        "11",
-        0
-      ],
-      "preset": "PLUS (high strength)"
-    },
-    "_meta": {
-      "title": "IPADAPTER_LOADER"
-    }
-  },
-  "7": {
-    "class_type": "IPAdapter",
-    "inputs": {
-      "model": [
-        "6",
-        0
-      ],
-      "ipadapter": [
-        "6",
-        1
-      ],
-      "image": [
-        "2",
-        0
-      ],
-      "weight": "__IP_ADAPTER_WEIGHT__",
-      "weight_type": "standard",
-      "start_at": 0,
-      "end_at": 1
-    },
-    "_meta": {
-      "title": "IPADAPTER_MAIN"
-    }
+    "_meta": {"title": "Latent"}
   },
   "8": {
     "class_type": "KSampler",
@@ -97,76 +37,30 @@
       "seed": "__SEED__",
       "steps": "__STEPS__",
       "cfg": "__CFG__",
-      "sampler_name": "euler",
+      "sampler_name": "euler_ancestral",
       "scheduler": "normal",
       "denoise": 1,
-      "model": [
-        "7",
-        0
-      ],
-      "positive": [
-        "3",
-        0
-      ],
-      "negative": [
-        "4",
-        0
-      ],
-      "latent_image": [
-        "5",
-        0
-      ]
+      "model": ["1", 0],
+      "positive": ["3", 0],
+      "negative": ["4", 0],
+      "latent_image": ["5", 0]
     },
-    "_meta": {
-      "title": "K采样器"
-    }
+    "_meta": {"title": "KSampler"}
   },
   "9": {
     "class_type": "VAEDecode",
     "inputs": {
-      "samples": [
-        "8",
-        0
-      ],
-      "vae": [
-        "1",
-        2
-      ]
+      "samples": ["8", 0],
+      "vae": ["1", 2]
     },
-    "_meta": {
-      "title": "VAE解码"
-    }
+    "_meta": {"title": "VAEDecode"}
   },
   "10": {
     "class_type": "SaveImage",
     "inputs": {
-      "filename_prefix": "comicdrama_ipadapter",
-      "images": [
-        "9",
-        0
-      ]
+      "filename_prefix": "comicdrama_scene",
+      "images": ["9", 0]
     },
-    "_meta": {
-      "title": "保存图像"
-    }
-  },
-  "11": {
-    "class_type": "LoraLoader",
-    "inputs": {
-      "model": [
-        "1",
-        0
-      ],
-      "clip": [
-        "1",
-        1
-      ],
-      "lora_name": "__LORA_NAME__",
-      "strength_model": "__LORA_STRENGTH_MODEL__",
-      "strength_clip": "__LORA_STRENGTH_CLIP__"
-    },
-    "_meta": {
-      "title": "Anime LoRA"
-    }
+    "_meta": {"title": "SaveImage"}
   }
 }
