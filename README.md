@@ -176,6 +176,7 @@ The repository includes:
 - Code of conduct
 - Changelog
 - Roadmap
+- Collaboration baseline for Codex, Kiro, and Cursor
 - Issue templates for bugs, features, and provider integrations
 - Pull request template
 
@@ -190,6 +191,10 @@ ai-video, generative-ai, comic, storyboard, comfyui, timeline, tts, video-genera
 Contributions are welcome while the project is still in early architecture
 formation. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening issues
 or pull requests.
+
+For AI-assisted development, read
+[docs/collaboration_baseline.md](docs/collaboration_baseline.md) and
+[AGENTS.md](AGENTS.md).
 
 ## Security
 

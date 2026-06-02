@@ -1,0 +1,63 @@
+---
+description: Collaboration rules for Comic Drama Workflow
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Comic Drama Workflow Cursor Rules
+
+Cursor is primarily responsible for focused frontend and local interaction
+work in this repository.
+
+## Preferred Cursor Tasks
+
+- UI layout and interaction fixes
+- `frontend/app.js` component-level edits
+- `frontend/styles.css` visual polish
+- review console ergonomics
+- metadata display
+- small documentation edits
+
+## Avoid Unless Explicitly Assigned
+
+- `scripts/run_workflow.py`
+- `backend/project_runtime.py`
+- `video_providers.py`
+- `scripts/video_provider_adapters.py`
+- `backend/video_generation.py`
+- provider routing architecture
+- canonical timeline schema changes
+
+If a task requires those files, ask for a Codex/Kiro handoff or an accepted
+spec first.
+
+## Frontend Check
+
+After editing `frontend/app.js`, run:
+
+```powershell
+node --check frontend\app.js
+```
+
+If local `node` is unavailable, ask the maintainer or Codex to run the bundled
+Node check.
+
+## UI Contract
+
+Do not invent backend fields casually. Prefer existing project fields:
+
+- `canonical_timeline`
+- `scene.assets`
+- `scene.review_meta`
+- `scene.provider_meta`
+- `scene.consistency_meta`
+- `scene.director_meta`
+- `scene.temporal_spec`
+
+For new fields, update or request a spec before implementing.
+
+## Coordination
+
+Do not make large unrelated refactors while polishing UI. Keep edits scoped and
+leave backend integration to Codex unless explicitly assigned.
