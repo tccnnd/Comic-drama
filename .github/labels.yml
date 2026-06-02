@@ -1,0 +1,27 @@
+- name: script-import
+  color: "1f77b4"
+  description: Script parsing, screenplay import, and storyboard planning.
+- name: character-consistency
+  color: "9467bd"
+  description: Character identity, references, and continuity.
+- name: timeline
+  color: "2ca02c"
+  description: Canonical timeline, editing, and export interchange.
+- name: video-provider
+  color: "ff7f0e"
+  description: Local, ComfyUI, remote, or aggregator video providers.
+- name: comfyui
+  color: "17becf"
+  description: ComfyUI workflow templates, validation, and runtime issues.
+- name: frontend
+  color: "bcbd22"
+  description: Web workbench and review UI.
+- name: docs
+  color: "7f7f7f"
+  description: Documentation, examples, and release notes.
+- name: research
+  color: "8c564b"
+  description: External references, experiments, or design investigation.
+- name: security
+  color: "d62728"
+  description: Credential handling, unsafe IO, or dependency risk.

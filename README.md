@@ -56,6 +56,13 @@ In progress:
 - Provider adapters for commercial and self-hosted video models
 - More complete screenplay import and director review workflows
 
+## Demo And Review Materials
+
+- [Demo guide](docs/demo.md)
+- [Roadmap](docs/roadmap.md)
+- [Initial release notes](docs/releases/v0.1.0.md)
+- [Codex open-source application notes](docs/open_source_application.md)
+
 ## Repository Layout
 
 ```text
@@ -159,11 +166,35 @@ See [docs/canonical_timeline.md](docs/canonical_timeline.md).
 
 See [docs/roadmap.md](docs/roadmap.md).
 
+## Repository Health
+
+The repository includes:
+
+- MIT license
+- Contribution guide
+- Security policy
+- Code of conduct
+- Changelog
+- Roadmap
+- Issue templates for bugs, features, and provider integrations
+- Pull request template
+
+Suggested GitHub topics:
+
+```text
+ai-video, generative-ai, comic, storyboard, comfyui, timeline, tts, video-generation, python, fastapi
+```
+
 ## Contributing
 
 Contributions are welcome while the project is still in early architecture
 formation. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening issues
 or pull requests.
+
+## Security
+
+Please read [SECURITY.md](SECURITY.md) before reporting vulnerabilities or
+sharing logs that may contain credentials.
 
 ## License
 
