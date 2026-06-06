@@ -185,6 +185,7 @@ export function renderTopbar(project) {
           <span class="summary-chip">分镜 ${summary.completed_scenes || 0}/${summary.total_scenes || 0}</span>
           <span class="summary-chip">素材 ${summary.asset_totals?.image || 0}/${summary.asset_totals?.audio || 0}/${summary.asset_totals?.video || 0}</span>
           <span class="summary-chip">角色 ${summary.total_characters || 0}</span>
+          ${renderContinuitySummaryChip(project)}
           ${renderVideoProviderStatus(project)}
           <span class="status-pill ${statusClass(runtime.status)}">${h(runtime.stage || runtime.status || "draft")} ${runtime.progress ?? 0}%</span>
         </div>
@@ -219,6 +220,45 @@ function renderVideoProviderStatus(project) {
   const ready = backend === "local" || missing === 0;
   const readiness = ready ? "ready" : `${missing} missing`;
   return `<span class="summary-chip provider-status ${ready ? "is-ready" : "is-missing"}" title="${h(`${configuredCount} configured, ${missing} missing`)}">Video: ${h(label)} / ${h(backend)} / ${h(readiness)}</span>`;
+}
+
+function projectContinuityLedger(project) {
+  const ledger = project?.continuity_ledger;
+  return ledger && typeof ledger === "object" ? ledger : {};
+}
+
+function sceneGovernance(scene) {
+  return scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
+}
+
+function governanceStatus(scene) {
+  return String(sceneGovernance(scene).status || "not_evaluated");
+}
+
+function governanceStatusClass(status) {
+  const value = String(status || "not_evaluated");
+  if (value === "pass") return "is-pass";
+  if (value === "warn") return "is-warn";
+  if (value === "fail") return "is-fail";
+  return "is-not-evaluated";
+}
+
+function governanceStatusLabel(status) {
+  const value = String(status || "not_evaluated");
+  if (value === "pass") return "Continuity pass";
+  if (value === "warn") return "Continuity warn";
+  if (value === "fail") return "Continuity fail";
+  return "Continuity not evaluated";
+}
+
+function renderContinuitySummaryChip(project) {
+  const counts = projectContinuityLedger(project).status_counts || {};
+  const fail = Number(counts.fail || 0);
+  const warn = Number(counts.warn || 0);
+  const pass = Number(counts.pass || 0);
+  const pending = Number(counts.not_evaluated || 0);
+  const status = fail ? "is-fail" : warn ? "is-warn" : pending ? "is-not-evaluated" : "is-pass";
+  return `<span class="summary-chip continuity-chip ${status}" title="${h(`pass ${pass}, warn ${warn}, fail ${fail}, not evaluated ${pending}`)}">Continuity ${h(pass)}/${h(warn)}/${h(fail)}</span>`;
 }
 
 export function renderTabs() {
@@ -1002,6 +1042,9 @@ export function renderStoryboardReviewCanvas(project) {
     acc[meta.status] = (acc[meta.status] || 0) + 1;
     return acc;
   }, {});
+  const ledger = projectContinuityLedger(project);
+  const counts = ledger.status_counts || {};
+  const blocked = Number(ledger.blocked_scene_count || 0);
   return `
     <div class="storyboard-review">
       <div class="review-summary">
@@ -1009,6 +1052,8 @@ export function renderStoryboardReviewCanvas(project) {
         <span>通过 ${h(summary.approved || 0)}</span>
         <span>需修改 ${h(summary.needs_work || 0)}</span>
         <span>阻塞 ${h(summary.blocked || 0)}</span>
+        <span>连贯 ${h(counts.pass || 0)} / ${h(counts.warn || 0)} / ${h(counts.fail || 0)}</span>
+        ${blocked ? `<span class="danger-text">治理阻塞 ${h(blocked)}</span>` : ""}
       </div>
       <div class="review-filter-bar">
         ${reviewFilterOptions.map(([value, label]) => `
@@ -1071,6 +1116,38 @@ function renderGenerationDetail(scene) {
   `;
 }
 
+function renderGovernanceBadge(scene) {
+  const status = governanceStatus(scene);
+  const governance = sceneGovernance(scene);
+  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const blocked = policy.mode === "block" && governance.deliverable === false;
+  return `<div class="governance-badge ${governanceStatusClass(status)}${blocked ? " is-blocked" : ""}">${h(governanceStatusLabel(status))}${blocked ? " · blocked" : ""}</div>`;
+}
+
+function renderGovernanceDetail(scene) {
+  const governance = sceneGovernance(scene);
+  const status = governanceStatus(scene);
+  const dimensions = governance.dimensions && typeof governance.dimensions === "object" ? governance.dimensions : {};
+  const dimensionRows = ["character", "lighting", "environment", "prop", "camera"]
+    .map((dimension) => {
+      const data = dimensions[dimension] && typeof dimensions[dimension] === "object" ? dimensions[dimension] : {};
+      const dimStatus = String(data.status || "not_evaluated");
+      const score = Number.isFinite(Number(data.score)) ? Number(data.score).toFixed(2) : "0.00";
+      return `<span class="governance-dimension ${governanceStatusClass(dimStatus)}" title="${h(data.reason || "")}">${h(dimension)} ${h(dimStatus)} ${h(score)}</span>`;
+    })
+    .join("");
+  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const offenders = Array.isArray(governance.offending_dimensions) ? governance.offending_dimensions : [];
+  return `
+    <div class="governance-detail ${governanceStatusClass(status)}">
+      <strong>${h(governanceStatusLabel(status))}</strong>
+      <span>${h(policy.mode || "report")} · ${h(policy.action || "recorded")} · ${governance.deliverable === false ? "not deliverable" : "deliverable"}</span>
+      <div class="governance-dimension-grid">${dimensionRows}</div>
+      ${offenders.length ? `<span class="danger-text">${h(offenders.join(" / "))}</span>` : ""}
+    </div>
+  `;
+}
+
 function renderStoryboardReviewCard(scene) {
   const assets = scene.assets || {};
   const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
@@ -1086,6 +1163,7 @@ function renderStoryboardReviewCard(scene) {
       <div class="storyboard-thumb">${media}</div>
       <div class="storyboard-review-card-body">
         ${renderGenerationBadge(scene)}
+        ${renderGovernanceBadge(scene)}
         <div class="storyboard-review-card-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
         <div class="storyboard-review-card-meta">${formatSeconds(scene.duration_seconds)} · ${h(scene.emotion_tone || scene.emotion || "")}</div>
         <div class="review-badge ${sClass}">${h(reviewStatusLabel(meta.status))}${meta.rating ? ` · ${h(meta.rating)}/5` : ""}</div>
@@ -1108,6 +1186,7 @@ function renderStoryboardReviewDetail(scene) {
       <div class="thumb-frame">${media}</div>
       <div class="section-stack">
         ${renderGenerationDetail(scene)}
+        ${renderGovernanceDetail(scene)}
         <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
         <div class="muted">${formatSeconds(scene.duration_seconds)} · ${h(scene.camera_movement || "镜头")} · ${h(scene.emotion_tone || scene.emotion || "")}</div>
         <div>${nl(scene.dialogue || "暂无台词")}</div>
@@ -1219,6 +1298,7 @@ export function renderSceneEditor(scene, project) {
         ${renderSceneClipInspector(scene)}
         ${renderCropEditor(scene)}
         ${renderSceneReadiness(scene)}
+        ${renderGovernanceDetail(scene)}
         ${renderProductionMeta(scene, project)}
         ${renderAssetLinks(scene)}
       </div>
@@ -1653,7 +1733,11 @@ export function renderExportView(project) {
 
 function renderExportReadiness(project) {
   const entries = projectAssetGapEntries(project);
-  if (!entries.length) {
+  const governanceEntries = (project.scenes || [])
+    .filter((scene) => sceneGovernance(scene).deliverable === false && sceneGovernance(scene).policy?.mode === "block")
+    .map((scene) => ({ scene, gaps: ["governance"] }));
+  const allEntries = [...entries, ...governanceEntries];
+  if (!allEntries.length) {
     return `
       <div class="scene-card">
         <div class="item-title">素材预检通过</div>
@@ -1663,10 +1747,10 @@ function renderExportReadiness(project) {
   }
   return `
     <div class="scene-card">
-      <div class="item-title">素材预检未通过 · ${entries.length} 个分镜</div>
+      <div class="item-title">素材预检未通过 · ${allEntries.length} 个分镜</div>
       <div class="item-meta">导出前需要先补齐以下缺口。</div>
       <div class="preview-list export-gap-list">
-        ${entries.map(({ scene, gaps }) => `
+        ${allEntries.map(({ scene, gaps }) => `
           <div class="preview-card">
             <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
             <div class="item-meta">${h(gaps.join(" / "))}</div>
