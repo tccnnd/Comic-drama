@@ -434,6 +434,20 @@ async function handleClick(event) {
     }
     if (action === "review-filter") {
       state.reviewFilter = button.dataset.reviewFilter || "all";
+      state.reviewTriageState = {
+        ...(state.reviewTriageState || {}),
+        review_status: state.reviewFilter,
+      };
+      render();
+      return;
+    }
+    if (action === "review-overview-filter" || action === "review-triage-set") {
+      setReviewTriageField(button.dataset.triageField, button.dataset.triageValue || "all");
+      render();
+      return;
+    }
+    if (action === "review-triage-reset") {
+      resetReviewTriage();
       render();
       return;
     }
@@ -539,8 +553,37 @@ async function handleClick(event) {
   }
 }
 
+function defaultReviewTriageState() {
+  return {
+    review_status: "all",
+    governance_status: "all",
+    provenance: "all",
+    deliverable: "all",
+    min_rating: 0,
+    sort: "scene_order",
+  };
+}
+
+function setReviewTriageField(field, value) {
+  if (!field) return;
+  const next = { ...defaultReviewTriageState(), ...(state.reviewTriageState || {}) };
+  next[field] = field === "min_rating" ? Math.max(0, Math.min(5, asNumber(value, 0))) : String(value || "all");
+  state.reviewTriageState = next;
+  if (field === "review_status") state.reviewFilter = next.review_status;
+}
+
+function resetReviewTriage() {
+  state.reviewTriageState = defaultReviewTriageState();
+  state.reviewFilter = "all";
+}
+
 function handleChange(event) {
   if (handleCropInput(event.target)) return;
+  if (event.target?.dataset?.action === "review-triage-input") {
+    setReviewTriageField(event.target.dataset.triageField, event.target.value);
+    render();
+    return;
+  }
   if (event.target?.id === "comfyuiBaseUrlInput") {
     const url = normalizeExternalUrl(event.target.value, "http://127.0.0.1:8188");
     if (url) {
@@ -585,6 +628,11 @@ function handleChange(event) {
 
 function handleInput(event) {
   if (handleCropInput(event.target)) return;
+  if (event.target?.dataset?.action === "review-triage-input") {
+    setReviewTriageField(event.target.dataset.triageField, event.target.value);
+    render();
+    return;
+  }
   if (state.modal && event.target?.dataset?.modalField) {
     const field = event.target.dataset.modalField;
     if (!state.modal.data.form) state.modal.data.form = {};

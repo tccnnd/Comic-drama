@@ -15,6 +15,10 @@ import {
   cameraOptions,
   reviewStatusOptions,
   reviewFilterOptions,
+  reviewGovernanceFilterOptions,
+  reviewProvenanceFilterOptions,
+  reviewDeliverableFilterOptions,
+  reviewSortOptions,
   TIMELINE_PX_PER_SECOND,
 } from "./state.js";
 import {
@@ -57,6 +61,8 @@ import {
   sceneReviewMeta,
   reviewStatusLabel,
   reviewStatusClass,
+  deriveReviewOverview,
+  applyReviewTriage,
 } from "./utils.js";
 import { renderVoiceCatalogDatalist } from "./api.js";
 import { stopTemporalPreview } from "./timeline.js";
@@ -1034,9 +1040,10 @@ function renderClipPreview(scene) {
 export function renderStoryboardReviewCanvas(project) {
   const scenes = timelineSceneItems(project);
   if (!scenes.length) return `<div class="empty-state">暂无 canonical timeline。</div>`;
-  const selected = selectedTimelineScene(project);
-  const filter = state.reviewFilter || "all";
-  const visibleScenes = filter === "all" ? scenes : scenes.filter((scene) => sceneReviewMeta(scene).status === filter);
+  const triage = activeReviewTriageState();
+  const visibleScenes = applyReviewTriage(scenes, triage);
+  const selected = visibleScenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || selectedTimelineScene(project);
+  const filter = triage.review_status;
   const summary = scenes.reduce((acc, scene) => {
     const meta = sceneReviewMeta(scene);
     acc[meta.status] = (acc[meta.status] || 0) + 1;
@@ -1047,6 +1054,8 @@ export function renderStoryboardReviewCanvas(project) {
   const blocked = Number(ledger.blocked_scene_count || 0);
   return `
     <div class="storyboard-review">
+      ${renderReviewOverviewHeader(project)}
+      ${renderReviewTriageBar(project)}
       <div class="review-summary">
         <span>${h(scenes.length)} 镜</span>
         <span>通过 ${h(summary.approved || 0)}</span>
@@ -1060,7 +1069,7 @@ export function renderStoryboardReviewCanvas(project) {
           <button class="filter-chip ${filter === value ? "is-active" : ""}" type="button" data-action="review-filter" data-review-filter="${h(value)}">${h(label)}</button>
         `).join("")}
       </div>
-      <div class="storyboard-review-grid">
+      <div class="storyboard-review-list">
         ${visibleScenes.length ? visibleScenes.map(renderStoryboardReviewCard).join("") : `<div class="empty-state">当前筛选下没有分镜。</div>`}
       </div>
       <div class="storyboard-review-detail">
@@ -1073,6 +1082,82 @@ export function renderStoryboardReviewCanvas(project) {
 function selectedTimelineScene(project = state.project) {
   const scenes = timelineSceneItems(project);
   return scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || scenes[0] || null;
+}
+
+function activeReviewTriageState() {
+  const triage = state.reviewTriageState && typeof state.reviewTriageState === "object" ? state.reviewTriageState : {};
+  return {
+    review_status: triage.review_status || state.reviewFilter || "all",
+    governance_status: triage.governance_status || "all",
+    provenance: triage.provenance || "all",
+    deliverable: triage.deliverable || "all",
+    min_rating: asNumber(triage.min_rating, 0),
+    sort: triage.sort || "scene_order",
+  };
+}
+
+function renderReviewOverviewHeader(project) {
+  const overview = deriveReviewOverview(project);
+  const continuity = overview.continuity || {};
+  const provenance = overview.provenance || {};
+  const review = overview.review || {};
+  const readiness = overview.readiness || {};
+  const reviewed = overview.total_scenes - (review.unreviewed || 0);
+  return `
+    <div class="review-overview">
+      ${renderReviewMetric("review_status", "all", "Scenes", overview.total_scenes)}
+      ${renderReviewMetric("review_status", "approved", "Approved", review.approved || 0)}
+      ${renderReviewMetric("review_status", "needs_work", "Needs work", review.needs_work || 0)}
+      ${renderReviewMetric("review_status", "blocked", "Review blocked", review.blocked || 0)}
+      ${renderReviewMetric("provenance", "real", "Real video", provenance.real || 0)}
+      ${renderReviewMetric("provenance", "fallback", "Fallback", provenance.fallback || 0)}
+      ${renderReviewMetric("governance_status", "fail", "Continuity fail", continuity.fail || 0, (continuity.fail || 0) ? "is-danger" : "")}
+      ${renderReviewMetric("deliverable", "blocked", "Export blocked", readiness.blocked || 0, readiness.blocked ? "is-danger" : "")}
+      <div class="review-overview-progress">
+        <span>Reviewed ${h(reviewed)} / ${h(overview.total_scenes)}</span>
+        <span>Continuity ${h(continuity.pass || 0)} / ${h(continuity.warn || 0)} / ${h(continuity.fail || 0)} / ${h(continuity.not_evaluated || 0)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderReviewMetric(field, value, label, count, extraClass = "") {
+  return `
+    <button class="review-metric ${h(extraClass)}" type="button" data-action="review-overview-filter" data-triage-field="${h(field)}" data-triage-value="${h(value)}">
+      <span>${h(label)}</span>
+      <strong>${h(count)}</strong>
+    </button>
+  `;
+}
+
+function renderReviewTriageBar(project) {
+  const triage = activeReviewTriageState();
+  const scenes = timelineSceneItems(project);
+  const visible = applyReviewTriage(scenes, triage).length;
+  return `
+    <div class="review-triage-bar">
+      <div class="review-triage-controls">
+        ${renderTriageSelect("governance_status", reviewGovernanceFilterOptions, triage.governance_status)}
+        ${renderTriageSelect("provenance", reviewProvenanceFilterOptions, triage.provenance)}
+        ${renderTriageSelect("deliverable", reviewDeliverableFilterOptions, triage.deliverable)}
+        <label class="triage-field"><span>Min rating</span><input type="number" min="0" max="5" step="0.5" value="${h(triage.min_rating || 0)}" data-action="review-triage-input" data-triage-field="min_rating"></label>
+        ${renderTriageSelect("sort", reviewSortOptions, triage.sort)}
+        <button type="button" class="ghost-button" data-action="review-triage-reset">Reset</button>
+        <span class="muted">${h(visible)} / ${h(scenes.length)} shown</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderTriageSelect(field, options, value) {
+  return `
+    <label class="triage-field">
+      <span>${h(field.replaceAll("_", " "))}</span>
+      <select data-action="review-triage-input" data-triage-field="${h(field)}">
+        ${options.map(([optionValue, optionLabel]) => `<option value="${h(optionValue)}" ${String(optionValue) === String(value) ? "selected" : ""}>${h(optionLabel)}</option>`).join("")}
+      </select>
+    </label>
+  `;
 }
 
 function sceneGenerationMeta(scene) {
@@ -1148,7 +1233,48 @@ function renderGovernanceDetail(scene) {
   `;
 }
 
+function renderReviewUnit(scene, project) {
+  const assets = scene.assets || {};
+  const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
+  const meta = sceneReviewMeta(scene);
+  const sClass = reviewStatusClass(meta.status);
+  const gaps = sceneAssetGaps(scene);
+  const governance = sceneGovernance(scene);
+  const blocked = governance?.policy?.mode === "block" && governance.deliverable === false;
+  const media = assets.image_url
+    ? `<img src="${h(assets.image_url)}" alt="">`
+    : assets.video_url
+      ? `<video src="${h(assets.video_url)}" muted playsinline preload="metadata"></video>`
+      : `<span>鏆傛棤鐢婚潰</span>`;
+  return `
+    <article class="review-unit ${active}" data-scene-order="${h(scene.order)}">
+      <button class="review-unit-main" type="button" data-action="select-scene" data-scene-order="${h(scene.order)}">
+        <div class="storyboard-thumb">${media}</div>
+        <div class="review-unit-body">
+          <div class="review-unit-head">
+            <strong>#${h(scene.order)} ${h(scene.title || "鍒嗛暅")}</strong>
+            <span>${formatSeconds(scene.duration_seconds)} 路 ${h(scene.emotion_tone || scene.emotion || "")}</span>
+          </div>
+          <div class="review-unit-badges">
+            ${renderGenerationBadge(scene)}
+            ${renderGovernanceBadge(scene)}
+            <span class="review-badge ${sClass}">${h(reviewStatusLabel(meta.status))}${meta.rating ? ` 路 ${h(meta.rating)}/5` : ""}</span>
+            <span class="asset-readiness ${gaps.length ? "is-warn" : "is-ready"}">${gaps.length ? `Missing ${h(gaps.join(" / "))}` : "Assets ready"}</span>
+            ${blocked ? `<span class="asset-readiness is-blocked">Export blocked</span>` : ""}
+          </div>
+          <div class="review-unit-summary">${nl(scene.dialogue || "鏆傛棤鍙拌瘝")}</div>
+          <div class="review-unit-details">
+            ${renderGenerationDetail(scene)}
+            ${renderGovernanceDetail(scene)}
+          </div>
+        </div>
+      </button>
+    </article>
+  `;
+}
+
 function renderStoryboardReviewCard(scene) {
+  return renderReviewUnit(scene, state.project);
   const assets = scene.assets || {};
   const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
   const meta = sceneReviewMeta(scene);

@@ -292,6 +292,128 @@ export function sceneReviewMeta(scene) {
   };
 }
 
+function sceneGovernanceStatus(scene) {
+  const governance = scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
+  return String(governance.status || "not_evaluated");
+}
+
+function sceneGovernanceBlocked(scene) {
+  const governance = scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
+  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  return policy.mode === "block" && governance.deliverable === false;
+}
+
+function sceneGenerationKind(scene) {
+  const meta = scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
+  if (!Object.keys(meta).length) return "unknown";
+  if (meta.fallback_used) return "fallback";
+  if (meta.is_real_video) return "real";
+  return "local";
+}
+
+function triageValue(triage, key, fallback = "all") {
+  const value = triage && typeof triage === "object" ? triage[key] : "";
+  return String(value || fallback);
+}
+
+function governanceSeverity(status) {
+  if (status === "fail") return 3;
+  if (status === "warn") return 2;
+  if (status === "not_evaluated") return 1;
+  return 0;
+}
+
+export function deriveReviewOverview(project = state.project) {
+  const scenes = timelineSceneItems(project);
+  const ledger = project?.continuity_ledger && typeof project.continuity_ledger === "object" ? project.continuity_ledger : {};
+  const ledgerCounts = ledger.status_counts && typeof ledger.status_counts === "object" ? ledger.status_counts : {};
+  const overview = {
+    total_scenes: scenes.length,
+    review: {
+      unreviewed: 0,
+      approved: 0,
+      needs_work: 0,
+      blocked: 0,
+      rated: 0,
+      unrated: 0,
+    },
+    provenance: {
+      real: 0,
+      fallback: 0,
+      local: 0,
+      unknown: 0,
+    },
+    continuity: {
+      pass: asNumber(ledgerCounts.pass, 0),
+      warn: asNumber(ledgerCounts.warn, 0),
+      fail: asNumber(ledgerCounts.fail, 0),
+      not_evaluated: asNumber(ledgerCounts.not_evaluated, 0),
+      blocked_scene_count: asNumber(ledger.blocked_scene_count, 0),
+    },
+    readiness: {
+      deliverable: 0,
+      blocked: 0,
+      asset_gaps: 0,
+    },
+  };
+
+  for (const scene of scenes) {
+    const review = sceneReviewMeta(scene);
+    const status = review.status || "unreviewed";
+    overview.review[status] = (overview.review[status] || 0) + 1;
+    if (review.rating > 0) overview.review.rated += 1;
+    else overview.review.unrated += 1;
+
+    overview.provenance[sceneGenerationKind(scene)] += 1;
+    if (sceneGovernanceBlocked(scene)) overview.readiness.blocked += 1;
+    else overview.readiness.deliverable += 1;
+    if (sceneAssetGaps(scene).length) overview.readiness.asset_gaps += 1;
+  }
+
+  const continuityTotal = overview.continuity.pass + overview.continuity.warn + overview.continuity.fail + overview.continuity.not_evaluated;
+  if (!continuityTotal && scenes.length) overview.continuity.not_evaluated = scenes.length;
+  return overview;
+}
+
+export function applyReviewTriage(scenes, triage = {}) {
+  const source = Array.isArray(scenes) ? scenes : [];
+  const reviewStatus = triageValue(triage, "review_status", triageValue(triage, "reviewFilter", "all"));
+  const governanceStatus = triageValue(triage, "governance_status");
+  const provenance = triageValue(triage, "provenance");
+  const deliverable = triageValue(triage, "deliverable");
+  const minRating = Math.max(0, Math.min(5, asNumber(triage?.min_rating, 0)));
+  const sort = triageValue(triage, "sort", "scene_order");
+
+  const filtered = source.filter((scene) => {
+    const review = sceneReviewMeta(scene);
+    if (reviewStatus !== "all" && review.status !== reviewStatus) return false;
+    if (governanceStatus !== "all" && sceneGovernanceStatus(scene) !== governanceStatus) return false;
+    if (provenance !== "all" && sceneGenerationKind(scene) !== provenance) return false;
+    if (minRating > 0 && review.rating < minRating) return false;
+    if (deliverable === "blocked" && !sceneGovernanceBlocked(scene)) return false;
+    if (deliverable === "deliverable" && sceneGovernanceBlocked(scene)) return false;
+    if (deliverable === "asset_gaps" && !sceneAssetGaps(scene).length) return false;
+    return true;
+  });
+
+  return filtered.slice().sort((a, b) => {
+    if (sort === "rating_desc") {
+      const diff = sceneReviewMeta(b).rating - sceneReviewMeta(a).rating;
+      if (diff) return diff;
+    }
+    if (sort === "governance_severity") {
+      const diff = governanceSeverity(sceneGovernanceStatus(b)) - governanceSeverity(sceneGovernanceStatus(a));
+      if (diff) return diff;
+    }
+    if (sort === "fallback_first") {
+      const aScore = sceneGenerationKind(a) === "fallback" ? 1 : 0;
+      const bScore = sceneGenerationKind(b) === "fallback" ? 1 : 0;
+      if (bScore - aScore) return bScore - aScore;
+    }
+    return Number(a?.order || 0) - Number(b?.order || 0);
+  });
+}
+
 export function reviewStatusLabel(status) {
   const entry = reviewStatusOptions.find(([value]) => value === status);
   return entry ? entry[1] : "未审";
