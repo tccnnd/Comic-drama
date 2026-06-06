@@ -1007,6 +1007,30 @@ select:focus {
   align-items: end;
 }
 
+.review-batch-bar {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px;
+}
+
+.review-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.review-batch-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .triage-field {
   min-width: 132px;
   display: grid;
@@ -1107,6 +1131,9 @@ select:focus {
 
 .review-unit {
   min-width: 0;
+  display: grid;
+  gap: 7px;
+  border: 1px solid transparent;
 }
 
 .review-unit-main {
@@ -1198,6 +1225,14 @@ select:focus {
 .asset-readiness.is-blocked {
   color: var(--danger);
   border-color: rgba(255, 101, 101, 0.35);
+}
+
+.review-unit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  padding: 0 10px 8px 98px;
 }
 
 .storyboard-thumb {

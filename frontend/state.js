@@ -40,6 +40,13 @@ export const state = {
     min_rating: 0,
     sort: "scene_order",
   },
+  reviewBatchRerender: {
+    running: false,
+    action: "",
+    total: 0,
+    completed: 0,
+    results: [],
+  },
   modal: null,
   assets: {
     characters: [],

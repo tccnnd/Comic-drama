@@ -77,18 +77,18 @@ Work is split into two slices to isolate risk:
 
 ## Slice B — Rerender actions
 
-- [ ] 10. Per-scene rerender controls (`frontend/render.js` + `events.js` + `api.js`)
+- [x] 10. Per-scene rerender controls (`frontend/render.js` + `events.js` + `api.js`)
   - Buttons for image / audio / video / full rebuild mapping 1:1 to existing
     endpoints (`rerender_scene_image/audio/video`, `generate_scene_assets`).
     Dispatch via the existing async task/event path; non-blocking.
   - _Requirements: 5.1, 5.3, NFR-4, Property 5_
 
-- [ ] 11. Post-rerender refresh
+- [x] 11. Post-rerender refresh
   - On a scene's rerender completion, refresh that scene's provenance +
     governance in its review unit from the updated snapshot.
   - _Requirements: 5.4, AC-6, Property 6_
 
-- [ ] 12. Batch rerender over filtered set (`frontend/render.js` + `events.js`)
+- [x] 12. Batch rerender over filtered set (`frontend/render.js` + `events.js`)
   - `renderBatchRerenderBar`: act on the current filtered set, run **serially**,
     show progress (n/total), report per-scene outcomes, and continue on failure
     (fail-isolated). Explicit confirmation stating scene count and cost/duration.
@@ -96,27 +96,32 @@ Work is split into two slices to isolate risk:
     sequence.
   - _Requirements: 5.2, 5.3, NFR-4, NFR-5, Property 5_
 
-- [ ] 13. Slice B checks
+- [x] 13. Slice B checks
   - `node --check` on edited modules; verify per-scene + batch dispatch use
     existing endpoints only; confirm batch confirmation, serial progress, and
     fail-isolation behavior.
   - _Requirements: AC-5, AC-6, AC-8_
 
-- [ ] 14. (Optional) backend read aggregation
+- [x] 14. (Optional) backend read aggregation
   - ONLY if an overview count is not client-derivable: add a read-only
     aggregation over existing snapshot fields in `backend/project_runtime.py`;
     `py_compile` + a targeted test. Skip if unnecessary.
+  - Skipped: all counts are derivable from the existing snapshot; no backend
+    read aggregation was needed.
   - _Requirements: 6.2, NFR-2, NFR-6_
 
-- [ ] 15. Docs update
+- [x] 15. Docs update
   - Document the review console (overview, triage, review unit, rerender
     actions) in `docs/`.
   - _Requirements: project doc-update rule_
 
-- [ ] 16. Checkpoint — run required checks
+- [x] 16. Checkpoint — run required checks
   - `node --check` on all edited frontend modules; helper unit tests; any
     backend read-aggregation `py_compile` + test. Visual smoke is expected to be
     environment-gated (in-app browser blocks localhost) — record as pending.
+  - Completed locally: `node --check` passed for `frontend/app.js`, `api.js`,
+    `events.js`, `render.js`, `state.js`, and `utils.js`; helper tests passed.
+    Browser visual smoke remains environment-gated.
   - _Requirements: AC-8_
 
 ## Task Dependency Graph
@@ -152,10 +157,19 @@ Work is split into two slices to isolate risk:
   (`unreviewed/approved/needs_work/blocked`; provenance `real/fallback/local/
   unknown`); design.md §Data Contracts used illustrative names — reconcile the
   design example to these if it is ever treated as authoritative.
-- Slice B (rerender actions): tasks 10–14. Per-scene + serial batch rerender via
-  existing endpoints, with confirmation/progress/per-scene outcomes and
-  fail-isolation.
-- Wrap-up: tasks 15–16 (docs, checks).
+- Slice B (DONE — local, uncommitted): tasks 10–14. `runSceneAction` in
+  `frontend/api.js` maps to existing scene endpoints only; per-scene rerender
+  buttons (image/audio/video/full) in the review unit; serial batch rerender
+  over the current filtered set in `events.js` (`window.confirm` gate, n/total
+  progress, per-scene ok/failed outcomes, fail-isolated continue);
+  non-persisted `reviewBatchRerender` run-state in `state.js`; batch bar +
+  styles. Task 14 (backend read aggregation) intentionally skipped — all counts
+  client-derivable. No backend/provider/scheduler/governance/workflow changes;
+  no new endpoints; `_external/Toonflow-app` untouched.
+- Wrap-up (DONE — local, uncommitted): tasks 15–16. `docs/director_review_console.md`
+  added; `node --check` on app/api/events/render/state/utils pass; helper tests
+  pass. Browser visual smoke remains environment-gated (in-app browser blocks
+  localhost).
 
 ## Notes
 

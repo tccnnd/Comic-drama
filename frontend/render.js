@@ -1145,6 +1145,7 @@ function renderReviewTriageBar(project) {
         <button type="button" class="ghost-button" data-action="review-triage-reset">Reset</button>
         <span class="muted">${h(visible)} / ${h(scenes.length)} shown</span>
       </div>
+      ${renderBatchRerenderBar(visible)}
     </div>
   `;
 }
@@ -1158,6 +1159,34 @@ function renderTriageSelect(field, options, value) {
       </select>
     </label>
   `;
+}
+
+function renderBatchRerenderBar(visibleCount) {
+  const batch = state.reviewBatchRerender && typeof state.reviewBatchRerender === "object" ? state.reviewBatchRerender : {};
+  const running = Boolean(batch.running);
+  const results = Array.isArray(batch.results) ? batch.results : [];
+  const latest = results.slice(-4);
+  return `
+    <div class="review-batch-bar">
+      <div class="review-batch-actions">
+        <span class="section-label">Filtered rerender</span>
+        ${renderBatchButton("rerender-image", "Image", visibleCount, running)}
+        ${renderBatchButton("rerender-audio", "Audio", visibleCount, running)}
+        ${renderBatchButton("rerender-video", "Video", visibleCount, running)}
+        ${renderBatchButton("rebuild-scene", "Full", visibleCount, running)}
+      </div>
+      ${running || results.length ? `
+        <div class="review-batch-progress">
+          <span>${running ? "Running" : "Last batch"} ${h(batch.completed || 0)} / ${h(batch.total || 0)}</span>
+          ${latest.map((item) => `<span class="${item.status === "failed" ? "danger-text" : "muted"}">#${h(item.order)} ${h(item.status)}${item.message ? `: ${h(item.message)}` : ""}</span>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderBatchButton(action, label, visibleCount, running) {
+  return `<button class="ghost-button small" type="button" data-action="review-batch-rerender" data-batch-action="${h(action)}" ${running || !visibleCount ? "disabled" : ""}>${h(label)}</button>`;
 }
 
 function sceneGenerationMeta(scene) {
@@ -1269,6 +1298,13 @@ function renderReviewUnit(scene, project) {
           </div>
         </div>
       </button>
+      <div class="review-unit-actions">
+        <span class="section-label">Rerender</span>
+        <button class="ghost-button small" type="button" data-action="rerender-image" data-scene-order="${h(scene.order)}">Image</button>
+        <button class="ghost-button small" type="button" data-action="rerender-audio" data-scene-order="${h(scene.order)}">Audio</button>
+        <button class="ghost-button small" type="button" data-action="rerender-video" data-scene-order="${h(scene.order)}">Video</button>
+        <button class="ghost-button small" type="button" data-action="rebuild-scene" data-scene-order="${h(scene.order)}">Full</button>
+      </div>
     </article>
   `;
 }
