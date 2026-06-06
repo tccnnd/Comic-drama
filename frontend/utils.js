@@ -105,6 +105,8 @@ export function timelineSceneItems(project = state.project) {
     const scene = sceneByOrder.get(order) || {};
     const assets = { ...(scene.assets || {}) };
     const media = clip.media_reference && typeof clip.media_reference === "object" ? clip.media_reference : {};
+    const clipMetadata = clip.metadata && typeof clip.metadata === "object" ? clip.metadata : {};
+    const clipGeneration = clipMetadata.generation && typeof clipMetadata.generation === "object" ? clipMetadata.generation : null;
     if (media.url && !assets.video_url && String(media.path || "").toLowerCase().endsWith(".mp4")) assets.video_url = media.url;
     if (media.url && !assets.image_url && !String(media.path || "").toLowerCase().endsWith(".mp4")) assets.image_url = media.url;
     return {
@@ -117,6 +119,7 @@ export function timelineSceneItems(project = state.project) {
       end_seconds: asNumber(clip.end_seconds, 0),
       timeline_clip_id: clip.clip_id || "",
       timeline_media_reference: media,
+      generation_meta: scene.generation_meta || clipGeneration || {},
       assets,
     };
   });

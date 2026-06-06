@@ -271,6 +271,7 @@ export async function loadProjects(selectNewest = true) {
 export async function loadProject(projectId) {
   const project = await apiJson(`${API.projects}/${encodeURIComponent(projectId)}`);
   setCurrentProject(project);
+  await loadVideoProviderStatus(project?.settings?.video_provider || "auto");
   if (state.activeTab === "assets") {
     await loadAssets(project.project_id, { force: true, silent: true });
   }
@@ -321,6 +322,22 @@ export async function loadTtsProviders() {
   } catch (error) {
     console.warn(error);
   }
+}
+
+export async function loadVideoProviderStatus(provider = state.project?.settings?.video_provider || "auto") {
+  state.videoProviderStatusLoading = true;
+  state.videoProviderStatusError = "";
+  try {
+    const providersPayload = await apiJson("/api/video-providers");
+    state.videoProviders = Array.isArray(providersPayload?.providers) ? providersPayload.providers : [];
+    state.videoProviderStatus = await apiJson(`/api/video-providers/status?provider=${encodeURIComponent(provider || "auto")}`);
+  } catch (error) {
+    state.videoProviderStatus = null;
+    state.videoProviderStatusError = error.message || String(error);
+  } finally {
+    state.videoProviderStatusLoading = false;
+  }
+  render();
 }
 
 export async function loadComfyUIStatus() {

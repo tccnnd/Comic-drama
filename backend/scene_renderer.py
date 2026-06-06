@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from scripts.run_workflow import (
+    build_shot_plan,
     generate_keyframe,
     load_env_file,
-    render_clip,
+    render_clip_with_meta,
     render_voice_track,
     wav_duration,
 )
+from backend.video_generation import generation_meta_from_result, video_fallback_mode
 
 from backend.project_models import (
     _scene_from_payload,
@@ -218,6 +220,23 @@ def update_scene_consistency_meta(
         return _save_project_with_scene_event(project, scene_order)
 
 
+def update_scene_generation_meta(
+    project_id: str,
+    scene_order: int,
+    generation_meta: dict[str, Any] | None,
+    shot_plan: dict[str, Any] | None,
+) -> dict[str, Any]:
+    with project_lock(project_id):
+        from backend.project_runtime import load_project, _save_project_with_scene_event
+        project = load_project(project_id)
+        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        if scene is None:
+            raise KeyError(f"Scene {scene_order} not found")
+        scene["generation_meta"] = deepcopy(generation_meta) if isinstance(generation_meta, dict) else {}
+        scene["shot_plan"] = deepcopy(shot_plan) if isinstance(shot_plan, dict) else build_shot_plan(scene)
+        return _save_project_with_scene_event(project, scene_order)
+
+
 def sync_scene_duration(project_id: str, scene_order: int, duration_seconds: float) -> dict[str, Any]:
     with project_lock(project_id):
         from backend.project_runtime import load_project, _save_project_with_scene_event
@@ -368,7 +387,7 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
         sync_scene_duration(project_id, scene_order, synced_duration)
         scene_obj.duration = synced_duration
         clip_duration = max(scene_obj.duration, wav_duration(audio_path) if audio_path.exists() else scene_obj.duration)
-        clip_path = render_clip(
+        clip_path, render_result = render_clip_with_meta(
             ffmpeg,
             scene_obj,
             directory,
@@ -383,6 +402,9 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
             video_provider=video_provider,
         )
         result = update_scene_asset(project_id, scene_order, "video", clip_path)
+        scene_for_plan = {**scene, "duration_seconds": clip_duration}
+        generation_meta = generation_meta_from_result(render_result, requested_provider=video_provider, fallback_mode=video_fallback_mode())
+        result = update_scene_generation_meta(project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan))
 
         # Post-generation consistency validation
         try:
@@ -480,7 +502,7 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
         update_scene_asset(project_id, scene_order, "audio", voice_path)
 
         clip_duration = max(scene_obj.duration, voice_duration)
-        clip_path = render_clip(
+        clip_path, render_result = render_clip_with_meta(
             ffmpeg,
             scene_obj,
             directory,
@@ -495,6 +517,9 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
             video_provider=video_provider,
         )
         update_scene_asset(project_id, scene_order, "video", clip_path)
+        scene_for_plan = {**scene, "duration_seconds": clip_duration}
+        generation_meta = generation_meta_from_result(render_result, requested_provider=video_provider, fallback_mode=video_fallback_mode())
+        update_scene_generation_meta(project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan))
         with project_lock(project_id):
             from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
             project = load_project(project_id)

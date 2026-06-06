@@ -24,6 +24,13 @@ OpenTimelineIO Python package at runtime.
   "frame_rate": 24,
   "resolution": { "width": 1080, "height": 1920 },
   "duration_seconds": 43.1,
+  "summary": {
+    "scene_count": 6,
+    "shot_count": 14,
+    "transition_count": 5,
+    "real_video_scene_count": 5,
+    "fallback_scene_count": 1
+  },
   "tracks": [
     {
       "track_id": "picture",
@@ -65,14 +72,34 @@ Each picture clip represents one scene cut:
     "pacing": "medium",
     "camera_movement": "slow_push",
     "production_bible": {},
-    "temporal_spec": {}
+    "temporal_spec": {},
+    "shot_plan_source": "temporal_spec",
+    "generation": {
+      "version": 1,
+      "provider_id": "doubao",
+      "provider_label": "Doubao",
+      "backend": "remote",
+      "requested_provider": "auto",
+      "is_real_video": true,
+      "fallback_used": false,
+      "attempts": 1,
+      "duration_seconds": 4.2,
+      "error": "",
+      "warnings": [],
+      "fallback_mode": "report",
+      "generated_at": "2026-06-06T12:00:00Z"
+    }
   },
   "shot_timeline": []
 }
 ```
 
 The `shot_timeline` remains scene-relative. The clip start/end fields are
-project-relative.
+project-relative. `metadata.generation` mirrors the latest persisted
+`scene.generation_meta` so review and export tools can distinguish real video
+from local 2.5D fallback output. `summary.real_video_scene_count` and
+`summary.fallback_scene_count` count only scenes with known generation
+provenance.
 
 ## Current Producers
 

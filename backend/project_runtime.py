@@ -23,6 +23,7 @@ from scripts.run_workflow import (
     StoryScene,
     analyze_script_workflow,
     build_canonical_timeline,
+    build_shot_plan,
     build_storyboard,
     coerce_scene,
     default_audio_style,
@@ -373,6 +374,13 @@ def load_project(project_id: str) -> dict[str, Any]:
     if isinstance(project, dict):
         hydrate_character_cards(project)
         project.setdefault("style_guide", "")
+        for scene in project.get("scenes", []):
+            if not isinstance(scene, dict):
+                continue
+            if not isinstance(scene.get("generation_meta"), dict):
+                scene["generation_meta"] = {}
+            if not isinstance(scene.get("shot_plan"), dict):
+                scene["shot_plan"] = build_shot_plan(scene)
         # Sync visual data from AssetStore into project.characters
         from backend.character_sync import sync_characters_from_assets
         sync_characters_from_assets(project, project_id)
@@ -503,6 +511,10 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
             )
     for scene in snapshot.get("scenes", []):
         scene["crop_box"] = normalize_crop_box(scene.get("crop_box"))
+        if not isinstance(scene.get("generation_meta"), dict):
+            scene["generation_meta"] = {}
+        if not isinstance(scene.get("shot_plan"), dict):
+            scene["shot_plan"] = build_shot_plan(scene)
         for key, value in default_drama_config().items():
             scene.setdefault(key, value)
         _ensure_audio_manifest(scene)

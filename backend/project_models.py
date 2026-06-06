@@ -330,6 +330,8 @@ def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
         "pacing": scene.pacing or "",
         "subject_focus": scene.subject_focus or "",
         "director_meta": deepcopy(scene.director_meta) if isinstance(scene.director_meta, dict) else {},
+        "shot_plan": {},
+        "generation_meta": {},
         "character_prompt_compilation": scene.character_prompt_compilation or "",
         "negative_prompt_compilation": scene.negative_prompt_compilation or "",
         "shot_overrides": [],
