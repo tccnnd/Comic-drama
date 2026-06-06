@@ -5,6 +5,47 @@ All notable changes to this project will be documented here.
 The project currently uses pre-release versioning while the workflow structure
 is still evolving.
 
+## [0.4.0] - 2026-06-06
+
+Feature line: **director-review-console** — evolve the storyboard review canvas,
+in place, into a production review-and-rerender console that triages and acts on
+the provenance (v0.2.0) and governance (v0.3.0) data already in the snapshot.
+
+### Added
+
+- Live-derived review overview (`deriveReviewOverview`) and pure triage helper
+  (`applyReviewTriage`) in `frontend/utils.js` — no new persisted schema.
+- Console overview header: continuity ledger counts, real-vs-fallback
+  provenance counts, and review progress; metrics drive the triage filter.
+- Triage bar: filter by review status, governance status, provenance,
+  deliverability, and rating; sort by scene order, rating, governance severity,
+  or fallback-first. Client-side, state-backed.
+- Unified per-scene review unit composing the existing v0.2.0 generation and
+  v0.3.0 governance badges/detail with review state and asset readiness;
+  graceful unknown/not_evaluated for legacy projects.
+- Per-scene rerender controls (image / audio / video / full rebuild) mapping to
+  existing scene endpoints via `runSceneAction`.
+- Serial batch rerender over the current filtered set: explicit confirmation,
+  n/total progress, per-scene outcomes, and fail-isolated continuation.
+- Console documentation (`docs/director_review_console.md`) and frontend helper
+  tests (`tests/test_review_console_helpers.mjs`).
+
+### Changed
+
+- The review canvas is reorganized in place into the console; the prior review
+  filter/summary is preserved as a compatibility entry while triage drives the
+  visible results.
+
+### Known Limitations
+
+- Browser visual smoke of the console is unverified in this environment (the
+  in-app browser blocks localhost with `ERR_BLOCKED_BY_CLIENT`); JS syntax is
+  validated via `node --check` and helper logic via tests.
+- Batch rerender is serial by design (no concurrency) and reviewer-initiated;
+  governance-driven automatic rerender (`regenerate`) remains deferred.
+- The console depends on v0.2.0 provenance and v0.3.0 governance data; on a
+  baseline without them, scenes display unknown/not_evaluated states.
+
 ## [0.3.0] - 2026-06-06
 
 Feature line: **global-consistency-governance** — manage continuity across
