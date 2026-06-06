@@ -5,6 +5,62 @@ All notable changes to this project will be documented here.
 The project currently uses pre-release versioning while the workflow structure
 is still evolving.
 
+## [0.3.0] - 2026-06-06
+
+Feature line: **global-consistency-governance** — manage continuity across
+character, lighting, environment, prop, and camera dimensions, with a per-scene
+verdict, a project-level ledger, and `report`/`block` policy. No automatic
+regeneration in this release.
+
+### Added
+
+- Two stateless validator checks in `consistency_validator.py`:
+  `validate_prop_continuity` (recurring-prop similarity vs a reference; missing
+  reference degrades to a non-failing `info`) and `evaluate_camera_continuity`
+  (rules-based heuristic flagging unmotivated camera-family / speed changes).
+- `props` registry in the production bible (`build_production_bible`): recurring
+  objects with description, owning characters/scenes, and optional reference
+  image.
+- New governance orchestrator `backend/consistency_governance.py`:
+  - `evaluate_scene_governance` — aggregates all five dimension checks into a
+    per-scene verdict (`pass`/`warn`/`fail`/`not_evaluated`) with per-dimension
+    score, threshold, and reason; persisted at `scene["governance"]`.
+  - `apply_governance_policy` — `report` (record only) or `block` (mark
+    `deliverable=false` on `fail`); default `report` via
+    `CONSISTENCY_POLICY_MODE`.
+  - `build_continuity_ledger` — project rollup: status counts, per-dimension
+    pass rates, offending scenes, blocked-scene count.
+- `update_scene_governance` persistence helper and render-site wiring that
+  records a verdict after video rerender/rebuild.
+- Project snapshot now includes `continuity_ledger`; the review console shows a
+  project continuity chip, per-scene verdict badges (with a blocked marker), and
+  a five-dimension detail view.
+- Export readiness blocks scenes that are `block`-mode and not deliverable.
+- Governance contract docs (`docs/continuity_governance.md`) and tests in
+  `tests/test_consistency_governance.py` / `tests/test_scene_graph.py`.
+
+### Changed
+
+- Continuity validation moves from advisory-only logging to a structured,
+  persisted verdict plus a project-level ledger; the validator remains a
+  stateless scoring engine, with policy and state owned by the new orchestrator.
+- Legacy projects without `props` / `governance` are normalized on load and via
+  snapshot (`not_evaluated`), and continue to load, render, and export
+  unchanged.
+
+### Known Limitations
+
+- Browser visual smoke of the review-console continuity display is unverified
+  in this environment (the in-app browser blocks localhost with
+  `ERR_BLOCKED_BY_CLIENT`); JS syntax is validated via `node --check` and
+  backend logic via tests.
+- A `regenerate` policy mode (governance-driven re-render) is intentionally
+  deferred to a later spec to avoid a render feedback loop;
+  `CONSISTENCY_MAX_RETRIES` remains validator/runtime config and is non-operative
+  for governance policy.
+- Continuity scoring uses histogram/structural-hash similarity; embedding-based
+  identity/motion analysis is a future upgrade.
+
 ## [0.2.0] - 2026-06-06
 
 Feature line: **video-provider-mainline** — make real video generation the
