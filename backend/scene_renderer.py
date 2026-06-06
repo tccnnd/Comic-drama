@@ -220,6 +220,23 @@ def update_scene_consistency_meta(
         return _save_project_with_scene_event(project, scene_order)
 
 
+def update_scene_governance(
+    project_id: str,
+    scene_order: int,
+    governance: dict[str, Any] | None,
+) -> dict[str, Any]:
+    with project_lock(project_id):
+        from backend.project_runtime import load_project, _save_project_with_scene_event
+        from backend.consistency_governance import _normalized_governance
+
+        project = load_project(project_id)
+        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        if scene is None:
+            raise KeyError(f"Scene {scene_order} not found")
+        scene["governance"] = deepcopy(governance) if isinstance(governance, dict) else _normalized_governance(scene)
+        return _save_project_with_scene_event(project, scene_order)
+
+
 def update_scene_generation_meta(
     project_id: str,
     scene_order: int,
@@ -251,6 +268,47 @@ def sync_scene_duration(project_id: str, scene_order: int, duration_seconds: flo
         scene["duration_seconds"] = normalized
         _invalidate_scene_assets(scene, ["duration_seconds"])
         return _save_project_with_scene_event(project, scene_order)
+
+
+def _evaluate_and_persist_scene_governance(project_id: str, scene_order: int, image_path: Path | None) -> dict[str, Any] | None:
+    try:
+        with project_lock(project_id):
+            from backend.project_runtime import load_project
+
+            project = load_project(project_id)
+            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            if scene is None:
+                raise KeyError(f"Scene {scene_order} not found")
+            prev_scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if isinstance(item, dict) and int(item.get("order", 0)) == scene_order - 1
+                ),
+                None,
+            )
+            prev_image = scene_latest_path(project_id, prev_scene, "image") if prev_scene else None
+            scene_copy = deepcopy(scene)
+            project_copy = deepcopy(project)
+            prev_scene_copy = deepcopy(prev_scene) if isinstance(prev_scene, dict) else None
+
+        from backend.consistency_governance import _normalized_governance, evaluate_scene_governance
+        from backend.consistency_validator import CONSISTENCY_VALIDATION_ENABLED
+
+        if not CONSISTENCY_VALIDATION_ENABLED:
+            verdict = _normalized_governance(scene_copy)
+        else:
+            verdict = evaluate_scene_governance(
+                project_copy,
+                scene_copy,
+                images={"current_image": image_path} if image_path else {},
+                prev_image=prev_image,
+                prev_scene=prev_scene_copy,
+            )
+        return update_scene_governance(project_id, scene_order, verdict)
+    except Exception as exc:
+        logger.warning("[governance] failed to evaluate scene %d: %s", scene_order, exc)
+        return None
 
 
 def rerender_scene_image(project_id: str, scene_order: int) -> dict[str, Any]:
@@ -405,46 +463,12 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
         scene_for_plan = {**scene, "duration_seconds": clip_duration}
         generation_meta = generation_meta_from_result(render_result, requested_provider=video_provider, fallback_mode=video_fallback_mode())
         result = update_scene_generation_meta(project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan))
-
-        # Post-generation consistency validation
-        try:
-            from backend.consistency_validator import validate_scene_generation, CONSISTENCY_VALIDATION_ENABLED
-            if CONSISTENCY_VALIDATION_ENABLED and image_path and image_path.exists():
-                from backend.character_manager import scene_character_refs
-                char_refs = scene_character_refs(project, scene)
-                # Find previous scene's keyframe for continuity check
-                prev_scene = next(
-                    (s for s in project.get("scenes", [])
-                     if isinstance(s, dict) and int(s.get("order", 0)) == scene_order - 1),
-                    None,
-                )
-                prev_image = scene_latest_path(project_id, prev_scene, "image") if prev_scene else None
-                validation = validate_scene_generation(
-                    image_path,
-                    character_references=char_refs,
-                    previous_scene_image=prev_image,
-                    scene_order=scene_order,
-                )
-                if not validation.passed:
-                    logger.warning(
-                        "[consistency] Scene %d validation warnings: %s",
-                        scene_order, validation.warnings[:3],
-                    )
-                # Store validation result in consistency_meta
-                meta = getattr(scene_obj, "consistency_meta", None)
-                if isinstance(meta, dict):
-                    meta["validation_score"] = validation.score
-                    meta["validation_passed"] = validation.passed
-                    meta["validation_warnings"] = validation.warnings[:5]
-                    update_scene_consistency_meta(project_id, scene_order, meta, scene_obj.primary_reference_meta)
-        except Exception as val_exc:
-            logger.warning("[consistency] Validation failed for scene %d: %s", scene_order, val_exc)
-
+        _evaluate_and_persist_scene_governance(project_id, scene_order, image_path)
         with project_lock(project_id):
             from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
             project = load_project(project_id)
             _append_scene_history(project, scene_order, "rerender-video", "done", "重合成完成")
-            _save_project_with_scene_event(project, scene_order)
+            result = _save_project_with_scene_event(project, scene_order)
         return result
     except Exception as exc:
         if "scene_obj" in locals() and getattr(scene_obj, "consistency_meta", None):
@@ -520,6 +544,7 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
         scene_for_plan = {**scene, "duration_seconds": clip_duration}
         generation_meta = generation_meta_from_result(render_result, requested_provider=video_provider, fallback_mode=video_fallback_mode())
         update_scene_generation_meta(project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan))
+        _evaluate_and_persist_scene_governance(project_id, scene_order, image_path)
         with project_lock(project_id):
             from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
             project = load_project(project_id)

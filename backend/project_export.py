@@ -45,9 +45,20 @@ def _export_issue_item(scene: dict[str, Any], missing: list[str]) -> dict[str, A
     }
 
 
+def _governance_blocks_export(scene: dict[str, Any]) -> bool:
+    governance = scene.get("governance")
+    if not isinstance(governance, dict):
+        return False
+    policy = governance.get("policy") if isinstance(governance.get("policy"), dict) else {}
+    return (
+        str(policy.get("mode") or "").strip().lower() == "block"
+        and governance.get("deliverable") is False
+    )
+
+
 def validate_export_assets(project_id: str, scenes: list[dict[str, Any]]) -> None:
     items: list[dict[str, Any]] = []
-    totals = {"image": 0, "audio": 0, "video": 0}
+    totals = {"image": 0, "audio": 0, "video": 0, "governance": 0}
     if not scenes:
         raise ExportAssetReadinessError(
             {
@@ -71,6 +82,8 @@ def validate_export_assets(project_id: str, scenes: list[dict[str, Any]]) -> Non
         if str(scene.get("dialogue") or "").strip():
             if not scene_asset_file_exists(project_id, scene, "audio"):
                 missing.append("audio")
+        if _governance_blocks_export(scene):
+            missing.append("governance")
         if missing:
             for kind in missing:
                 totals[kind] += 1

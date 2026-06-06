@@ -221,6 +221,7 @@ class TestBuildProductionBible:
         assert bible["title"] == "测试项目"
         assert bible["style_id"] == "anime_standard"
         assert "characters" in bible
+        assert "props" in bible
         assert "scene_continuity" in bible
         assert "rules" in bible
 
@@ -292,3 +293,41 @@ class TestBuildProductionBible:
         }
         bible = build_production_bible(project)
         assert bible["scene_continuity"] == []
+
+    def test_props_registry_extracted_and_linked_to_scene_continuity(self):
+        project = {
+            "project_id": "test",
+            "title": "",
+            "style_id": "",
+            "characters": [],
+            "props": [
+                {
+                    "id": "jade_pendant",
+                    "name": "Jade Pendant",
+                    "summary": "Green pendant on a red cord",
+                    "owner_characters": ["Lin"],
+                    "scenes": ["scene_002"],
+                    "reference_image_path": "props/jade.png",
+                    "reference_meta": {"source": "manual"},
+                },
+                "invalid",
+            ],
+            "scenes": [
+                {"scene_id": "scene_002", "order": 2, "props": ["jade_pendant", "Jade Pendant"]},
+            ],
+        }
+
+        bible = build_production_bible(project)
+
+        assert bible["props"] == [
+            {
+                "prop_id": "jade_pendant",
+                "name": "Jade Pendant",
+                "description": "Green pendant on a red cord",
+                "owner_characters": ["Lin"],
+                "scenes": ["scene_002"],
+                "reference_image_path": "props/jade.png",
+                "reference_meta": {"source": "manual"},
+            }
+        ]
+        assert bible["scene_continuity"][0]["props"] == ["jade_pendant", "Jade Pendant"]

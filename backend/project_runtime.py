@@ -42,6 +42,7 @@ from scripts.run_workflow import (
 from backend.asset_retention import cleanup_project_versions
 from backend.event_bus import project_event_bus
 from backend.styles import get_default_style_id
+from backend.consistency_governance import _normalized_governance, build_continuity_ledger
 
 # ─── Re-exports from project_models ───────────────────────────────────────────
 from backend.project_models import (  # noqa: F401
@@ -137,6 +138,7 @@ from backend.scene_renderer import (  # noqa: F401
     sync_scene_duration,
     update_scene_asset,
     update_scene_consistency_meta,
+    update_scene_governance,
 )
 
 # ─── Re-exports from project_export ──────────────────────────────────────────
@@ -374,13 +376,23 @@ def load_project(project_id: str) -> dict[str, Any]:
     if isinstance(project, dict):
         hydrate_character_cards(project)
         project.setdefault("style_guide", "")
+        if not isinstance(project.get("props"), list):
+            project["props"] = []
+        bible = project.get("production_bible")
+        if isinstance(bible, dict) and not isinstance(bible.get("props"), list):
+            bible["props"] = []
         for scene in project.get("scenes", []):
             if not isinstance(scene, dict):
                 continue
+            if not isinstance(scene.get("props"), list):
+                scene["props"] = []
+            else:
+                scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
             if not isinstance(scene.get("generation_meta"), dict):
                 scene["generation_meta"] = {}
             if not isinstance(scene.get("shot_plan"), dict):
                 scene["shot_plan"] = build_shot_plan(scene)
+            scene["governance"] = _normalized_governance(scene)
         # Sync visual data from AssetStore into project.characters
         from backend.character_sync import sync_characters_from_assets
         sync_characters_from_assets(project, project_id)
@@ -511,10 +523,15 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
             )
     for scene in snapshot.get("scenes", []):
         scene["crop_box"] = normalize_crop_box(scene.get("crop_box"))
+        if not isinstance(scene.get("props"), list):
+            scene["props"] = []
+        else:
+            scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
         if not isinstance(scene.get("generation_meta"), dict):
             scene["generation_meta"] = {}
         if not isinstance(scene.get("shot_plan"), dict):
             scene["shot_plan"] = build_shot_plan(scene)
+        scene["governance"] = _normalized_governance(scene)
         for key, value in default_drama_config().items():
             scene.setdefault(key, value)
         _ensure_audio_manifest(scene)
@@ -598,6 +615,7 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         "scenes": scene_graph_entries,
     }
     snapshot["production_bible"] = build_production_bible(snapshot)
+    snapshot["continuity_ledger"] = build_continuity_ledger(snapshot)
     snapshot["canonical_timeline"] = build_canonical_timeline(snapshot)
     return snapshot
 
