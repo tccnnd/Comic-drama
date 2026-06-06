@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -45,11 +46,66 @@ class VideoGenerationResult:
     error: str = ""
     warnings: list[str] | None = None
     last_frame_path: str = ""  # For cross-scene continuity
+    backend: str = ""
+    fallback_used: bool = False
 
 
 # ---------------------------------------------------------------------------
 # Cross-scene continuity
 # ---------------------------------------------------------------------------
+
+def video_fallback_mode() -> str:
+    """Return the effective fallback policy for video generation."""
+    from scripts.run_workflow import env_bool
+
+    if env_bool("VIDEO_STRICT", default=False):
+        return "strict"
+    mode = os.environ.get("VIDEO_FALLBACK_MODE", VIDEO_FALLBACK_MODE).strip().lower()
+    if mode not in {"report", "strict", "silent"}:
+        return "report"
+    return mode
+
+
+def sanitize_generation_error(value: object, *, limit: int = 500) -> str:
+    """Sanitize provider errors before persisting them in project JSON."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"(?i)(api[_-]?key|token|authorization|bearer|secret)=([^&\s]+)", r"\1=<redacted>", text)
+    text = re.sub(r"(?i)(authorization:\s*bearer\s+)[^\s]+", r"\1<redacted>", text)
+    text = re.sub(r"https?://[^\s?]+\?[^\s]*", lambda match: match.group(0).split("?", 1)[0], text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit]
+
+
+def generation_meta_from_result(
+    result: VideoGenerationResult,
+    requested_provider: str = "",
+    fallback_mode: str = "",
+) -> dict[str, Any]:
+    """Serialize video generation provenance for scene persistence."""
+    warnings = result.warnings if isinstance(result.warnings, list) else []
+    backend = str(result.backend or "").strip()
+    if not backend:
+        backend = "local"
+        if result.is_real_video:
+            backend = "remote" if str(result.provider_id or "").lower() not in {"comfyui"} else "comfyui"
+    fallback_used = bool(result.fallback_used or (not result.is_real_video and str(result.provider_id or "").lower() != "local"))
+    return {
+        "version": 1,
+        "provider_id": str(result.provider_id or "").strip(),
+        "provider_label": str(result.provider_label or "").strip(),
+        "backend": backend,
+        "requested_provider": str(requested_provider or "").strip(),
+        "is_real_video": bool(result.is_real_video),
+        "fallback_used": fallback_used,
+        "attempts": int(result.attempts or 0),
+        "duration_seconds": float(result.duration_seconds or 0.0),
+        "error": sanitize_generation_error(result.error),
+        "warnings": [sanitize_generation_error(item, limit=240) for item in warnings if str(item or "").strip()],
+        "fallback_mode": fallback_mode or video_fallback_mode(),
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
 
 def extract_last_frame(video_path: Path, output_path: Path) -> Path | None:
     """Extract the last frame from a video for cross-scene continuity bridging."""
@@ -225,6 +281,8 @@ def generate_scene_video_with_retry(
                     attempts=attempts,
                     duration_seconds=clip_duration,
                     output_path=str(visual_output_path),
+                    backend=provider_spec.backend,
+                    fallback_used=False,
                 )
 
             elif provider_spec.backend == "remote":
@@ -292,6 +350,8 @@ def generate_scene_video_with_retry(
                     attempts=attempts,
                     duration_seconds=clip_duration,
                     output_path=str(visual_output_path),
+                    backend=provider_spec.backend,
+                    fallback_used=False,
                 )
 
             else:
@@ -306,6 +366,8 @@ def generate_scene_video_with_retry(
                     duration_seconds=clip_duration,
                     output_path=str(visual_output_path),
                     warnings=["Using 2.5D local renderer (no video generation provider configured)"],
+                    backend="local",
+                    fallback_used=False,
                 )
 
         except Exception as exc:
@@ -322,9 +384,7 @@ def generate_scene_video_with_retry(
             continue
 
     # All retries exhausted
-    fallback_mode = VIDEO_FALLBACK_MODE
-    if env_bool("VIDEO_STRICT", default=False):
-        fallback_mode = "strict"
+    fallback_mode = video_fallback_mode()
 
     if fallback_mode == "strict":
         raise RuntimeError(
@@ -335,14 +395,16 @@ def generate_scene_video_with_retry(
     warnings = [
         f"视频生成失败，已回退到 2.5D 动态漫画模式（{provider_spec.label} 重试 {attempts} 次后失败: {last_error}）",
     ]
+    if fallback_mode == "silent":
+        warnings = []
     logger.warning(
         "[video] Scene %s: all %d attempts failed, falling back to 2.5D. Last error: %s",
         scene_id, attempts, last_error,
     )
     return VideoGenerationResult(
         scene_order=scene_obj.scene,
-        provider_id="local",
-        provider_label="Local 2.5D (fallback)",
+        provider_id=provider_spec.id,
+        provider_label=provider_spec.label,
         success=True,
         is_real_video=False,
         attempts=attempts,
@@ -350,6 +412,8 @@ def generate_scene_video_with_retry(
         output_path=str(visual_output_path),
         error=last_error,
         warnings=warnings,
+        backend="local",
+        fallback_used=True,
     )
 
 

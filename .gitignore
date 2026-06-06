@@ -1,5 +1,6 @@
 .venv/
 data/_pydeps/
+data/tmp_pytest*/
 .pytest_cache/
 outputs/
 workspace/

@@ -45,6 +45,7 @@ from scripts.subtitle_style import build_ass_document
 from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
 from scripts.video_provider_adapters import VideoRenderRequest, render_remote_video_provider
 from video_providers import get_video_provider_spec, normalize_video_provider as resolve_video_provider_name
+from backend.video_generation import VideoGenerationResult, generation_meta_from_result, video_fallback_mode
 
 edge_tts = tts_engines.edge_tts
 
@@ -1895,6 +1896,117 @@ def _scene_media_reference(scene: dict[str, Any], kind: str) -> dict[str, str]:
     return {"path": path, "url": url}
 
 
+def _scene_duration_seconds(scene: dict[str, Any]) -> float:
+    duration = scene.get("duration_seconds") or scene.get("clip_duration") or scene.get("voice_duration") or 0.0
+    try:
+        return round(max(0.25, float(duration)), 3)
+    except (TypeError, ValueError):
+        return 4.0
+
+
+def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
+    """Build the persisted, scene-relative shot plan contract for a scene."""
+    if not isinstance(scene, dict):
+        scene = {}
+    order = int(scene.get("order") or scene.get("scene") or 1)
+    scene_id = str(scene.get("scene_id") or f"scene_{order:03d}").strip()
+    duration = _scene_duration_seconds(scene)
+    temporal_spec = scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
+    shots_source = temporal_spec.get("shots") if isinstance(temporal_spec, dict) else None
+    if not isinstance(shots_source, list) or not shots_source:
+        shots_source = []
+    source = "temporal_spec" if shots_source else "synthesized"
+
+    shot_timeline: list[dict[str, Any]] = []
+    cursor = 0.0
+    for shot_index, raw_shot in enumerate(shots_source or [], start=1):
+        if not isinstance(raw_shot, dict):
+            continue
+        try:
+            raw_duration = float(raw_shot.get("duration_seconds") or raw_shot.get("duration") or 0.0)
+        except (TypeError, ValueError):
+            raw_duration = 0.0
+        shot_duration = max(0.25, raw_duration)
+        shot_start = round(cursor, 3)
+        shot_end = round(shot_start + shot_duration, 3)
+        shot_timeline.append(
+            {
+                "shot_id": str(raw_shot.get("shot_id") or f"{scene_id}_shot_{shot_index:02d}"),
+                "shot_order": int(raw_shot.get("shot_order") or shot_index),
+                "label": str(raw_shot.get("label") or raw_shot.get("beat_type") or f"SHOT {shot_index}").strip(),
+                "beat_type": str(raw_shot.get("beat_type") or "").strip(),
+                "start_seconds": shot_start,
+                "duration_seconds": round(shot_duration, 3),
+                "end_seconds": shot_end,
+                "camera_movement": str(raw_shot.get("camera_movement") or scene.get("camera_movement") or scene.get("camera") or "").strip(),
+                "camera_speed": float(raw_shot.get("camera_speed") or scene.get("camera_speed") or 1.0),
+                "zoom": float(raw_shot.get("zoom") or 1.0),
+                "hold_in_ratio": float(raw_shot.get("hold_in_ratio") or 0.0),
+                "hold_out_ratio": float(raw_shot.get("hold_out_ratio") or 0.0),
+                "center_x": float(raw_shot.get("center_x") or 0.5),
+                "center_y": float(raw_shot.get("center_y") or 0.5),
+                "speaker": str(raw_shot.get("speaker") or scene.get("speaker") or "").strip(),
+                "dialogue": str(raw_shot.get("dialogue") or scene.get("dialogue") or "").strip(),
+                "emotion": str(raw_shot.get("emotion") or scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "scene_intent": str(raw_shot.get("scene_intent") or scene.get("scene_intent") or "").strip(),
+                "subject_focus": str(raw_shot.get("subject_focus") or scene.get("subject_focus") or "").strip(),
+            }
+        )
+        cursor += shot_duration
+
+    if shot_timeline:
+        total_shot_duration = sum(float(shot.get("duration_seconds") or 0.0) for shot in shot_timeline)
+        if total_shot_duration > 0.0 and abs(total_shot_duration - duration) > 0.001:
+            scale = duration / total_shot_duration
+            cursor = 0.0
+            for shot_index, shot in enumerate(shot_timeline):
+                shot_start = round(cursor, 3)
+                if shot_index == len(shot_timeline) - 1:
+                    shot_duration = max(0.001, round(duration - cursor, 3))
+                else:
+                    shot_duration = max(0.001, round(float(shot.get("duration_seconds") or 0.0) * scale, 3))
+                shot["start_seconds"] = shot_start
+                shot["duration_seconds"] = shot_duration
+                shot["end_seconds"] = round(shot_start + shot_duration, 3)
+                cursor += shot_duration
+
+    if not shot_timeline:
+        shot_timeline.append(
+            {
+                "shot_id": f"{scene_id}_shot_01",
+                "shot_order": 1,
+                "label": "SHOT 1",
+                "beat_type": "",
+                "start_seconds": 0.0,
+                "duration_seconds": duration,
+                "end_seconds": duration,
+                "camera_movement": str(scene.get("camera_movement") or scene.get("camera") or "").strip(),
+                "camera_speed": float(scene.get("camera_speed") or 1.0),
+                "zoom": 1.0,
+                "hold_in_ratio": 0.0,
+                "hold_out_ratio": 0.0,
+                "center_x": 0.5,
+                "center_y": 0.5,
+                "speaker": str(scene.get("speaker") or "").strip(),
+                "dialogue": str(scene.get("dialogue") or "").strip(),
+                "emotion": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "scene_intent": str(scene.get("scene_intent") or "").strip(),
+                "subject_focus": str(scene.get("subject_focus") or "").strip(),
+            }
+        )
+        source = "synthesized"
+
+    return {
+        "version": 1,
+        "scene_id": scene_id,
+        "scene_order": order,
+        "duration_seconds": duration,
+        "shot_count": len(shot_timeline),
+        "source": source,
+        "shots": shot_timeline,
+    }
+
+
 def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
     scenes_raw = project.get("scenes", []) if isinstance(project, dict) else []
     scenes: list[dict[str, Any]] = [scene for scene in scenes_raw if isinstance(scene, dict)]
@@ -1909,55 +2021,28 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
     audio_items: list[dict[str, Any]] = []
     transitions: list[dict[str, Any]] = []
     scene_index: list[dict[str, Any]] = []
+    real_video_scene_count = 0
+    fallback_scene_count = 0
 
     for index, scene in enumerate(scenes, start=1):
         order = int(scene.get("order") or index)
         scene_id = str(scene.get("scene_id") or f"scene_{order:03d}").strip()
         scene_title = str(scene.get("title") or f"Scene {order}").strip()
-        duration = float(scene.get("duration_seconds") or scene.get("clip_duration") or scene.get("voice_duration") or 0.0)
-        duration = round(max(0.25, duration), 3)
+        duration = _scene_duration_seconds(scene)
         start_seconds = round(total_duration, 3)
         end_seconds = round(start_seconds + duration, 3)
         total_duration = end_seconds
         temporal_spec = scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
-        shots_source = temporal_spec.get("shots") if isinstance(temporal_spec, dict) else None
-        if not isinstance(shots_source, list) or not shots_source:
-            shots_source = scene.get("shots") if isinstance(scene.get("shots"), list) else []
-        shot_timeline: list[dict[str, Any]] = []
-        cursor = 0.0
-        for shot_index, raw_shot in enumerate(shots_source or [], start=1):
-            if not isinstance(raw_shot, dict):
-                continue
-            shot_duration = max(0.25, float(raw_shot.get("duration_seconds") or 0.0))
-            shot_start = round(cursor, 3)
-            shot_end = round(shot_start + shot_duration, 3)
-            shot_timeline.append(
-                {
-                    "shot_id": str(raw_shot.get("shot_id") or f"{scene_id}_shot_{shot_index:02d}"),
-                    "shot_order": int(raw_shot.get("shot_order") or shot_index),
-                    "label": str(raw_shot.get("label") or raw_shot.get("beat_type") or f"SHOT {shot_index}").strip(),
-                    "beat_type": str(raw_shot.get("beat_type") or "").strip(),
-                    "start_seconds": shot_start,
-                    "duration_seconds": round(shot_duration, 3),
-                    "end_seconds": shot_end,
-                    "camera_movement": str(raw_shot.get("camera_movement") or scene.get("camera_movement") or scene.get("camera") or "").strip(),
-                    "camera_speed": float(raw_shot.get("camera_speed") or scene.get("camera_speed") or 1.0),
-                    "zoom": float(raw_shot.get("zoom") or 1.0),
-                    "hold_in_ratio": float(raw_shot.get("hold_in_ratio") or 0.0),
-                    "hold_out_ratio": float(raw_shot.get("hold_out_ratio") or 0.0),
-                    "center_x": float(raw_shot.get("center_x") or 0.5),
-                    "center_y": float(raw_shot.get("center_y") or 0.5),
-                    "speaker": str(raw_shot.get("speaker") or scene.get("speaker") or "").strip(),
-                    "dialogue": str(raw_shot.get("dialogue") or scene.get("dialogue") or "").strip(),
-                    "emotion": str(raw_shot.get("emotion") or scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
-                    "scene_intent": str(raw_shot.get("scene_intent") or scene.get("scene_intent") or "").strip(),
-                    "subject_focus": str(raw_shot.get("subject_focus") or scene.get("subject_focus") or "").strip(),
-                }
-            )
-            cursor += shot_duration
+        shot_plan = build_shot_plan(scene)
+        shot_timeline = deepcopy(shot_plan.get("shots") or [])
         video_ref = _scene_media_reference(scene, "video")
         image_ref = _scene_media_reference(scene, "image")
         picture_ref = video_ref if video_ref.get("path") or video_ref.get("url") else image_ref
+        generation_meta = deepcopy(scene.get("generation_meta") or {}) if isinstance(scene.get("generation_meta"), dict) else {}
+        if generation_meta.get("is_real_video") is True:
+            real_video_scene_count += 1
+        if generation_meta.get("fallback_used") is True:
+            fallback_scene_count += 1
         picture_item = {
             "item_type": "clip",
             "clip_id": f"{scene_id}_picture",
@@ -1977,6 +2062,8 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
                 "subject_focus": str(scene.get("subject_focus") or "").strip(),
                 "production_bible": deepcopy(scene.get("production_bible") or {}) if isinstance(scene.get("production_bible"), dict) else {},
                 "temporal_spec": deepcopy(temporal_spec) if isinstance(temporal_spec, dict) else {},
+                "shot_plan_source": str(shot_plan.get("source") or "").strip(),
+                "generation": generation_meta,
             },
             "shot_timeline": shot_timeline,
         }
@@ -2046,6 +2133,8 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
             "scene_count": len(scene_index),
             "shot_count": sum(len(item.get("shot_timeline") or []) for item in picture_items),
             "transition_count": len(transitions),
+            "real_video_scene_count": real_video_scene_count,
+            "fallback_scene_count": fallback_scene_count,
         },
         "metadata": {
             "project_id": project_id,
@@ -4999,7 +5088,7 @@ def apply_scene_grade(ffmpeg: str, input_path: Path, out_path: Path, scene: Stor
     return out_path
 
 
-def render_clip(
+def render_clip_with_meta(
     ffmpeg: str,
     scene: StoryScene,
     run_dir: Path,
@@ -5012,7 +5101,7 @@ def render_clip(
     project_root: Path | None = None,
     keyframe_path: Path | None = None,
     video_provider: str = "auto",
-) -> Path:
+) -> tuple[Path, VideoGenerationResult]:
     style = normalize_subtitle_style(subtitle_style)
     audio_settings = normalize_audio_style(audio_style)
     scene_id = f"{scene.scene:02}"
@@ -5036,20 +5125,34 @@ def render_clip(
     visual_generated = False
     provider_spec = get_video_provider_spec(video_provider)
     provider = provider_spec.id
+    fallback_mode = video_fallback_mode()
+    if env_bool(f"{provider.upper().replace('-', '_')}_VIDEO_STRICT", default=False):
+        fallback_mode = "strict"
+    attempts = 1
+    last_error = ""
+    warnings: list[str] = []
+    used_backend = provider_spec.backend
+    fallback_used = False
     if provider_spec.backend == "comfyui":
         try:
             print(f"[video] Rendering scene {scene_id} with {provider_spec.label} video provider")
             render_scene_video_comfyui(scene, keyframe, clip_duration, visual_path, run_dir)
             visual_generated = True
         except Exception as exc:
-            if env_bool("VIDEO_STRICT", "COMFYUI_VIDEO_STRICT", default=False):
+            last_error = str(exc)
+            if env_bool("VIDEO_STRICT", "COMFYUI_VIDEO_STRICT", default=False) or fallback_mode == "strict":
                 raise
+            fallback_used = True
+            used_backend = "local"
+            if fallback_mode == "report":
+                warnings.append(f"{provider_spec.label} video provider failed; using local 2.5D fallback.")
             print(f"[video] {provider_spec.label} video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
     elif provider_spec.backend == "remote":
         max_retries = int(env_float("VIDEO_MAX_RETRIES", default=2))
         retry_delay = env_float("VIDEO_RETRY_DELAY_SECONDS", default=5.0)
         last_exc = None
         for attempt in range(1, max_retries + 2):
+            attempts = attempt
             try:
                 print(f"[video] Rendering scene {scene_id} with {provider_spec.label} remote video provider (attempt {attempt}/{max_retries + 1})")
                 prompt_text, negative_text = build_scene_video_prompts(scene, clip_duration, run_dir)
@@ -5090,6 +5193,7 @@ def render_clip(
                 break
             except Exception as exc:
                 last_exc = exc
+                last_error = str(exc)
                 if attempt <= max_retries:
                     # Use longer backoff for rate limiting / quota errors
                     error_str = str(exc).lower()
@@ -5103,11 +5207,14 @@ def render_clip(
                     retry_delay = min(retry_delay * 2.0, 120.0)
                 else:
                     strict_name = f"{provider.upper().replace('-', '_')}_VIDEO_STRICT"
-                    if env_bool("VIDEO_STRICT", strict_name, default=False):
+                    if env_bool("VIDEO_STRICT", strict_name, default=False) or fallback_mode == "strict":
                         raise
-                    fallback_mode = env_value("VIDEO_FALLBACK_MODE", default="report").strip().lower()
-                    if fallback_mode == "strict":
-                        raise
+                    fallback_used = True
+                    used_backend = "local"
+                    if fallback_mode == "report":
+                        warnings.append(
+                            f"{provider_spec.label} remote video provider failed after {attempt} attempts; using local 2.5D fallback."
+                        )
                     print(f"[video] {provider_spec.label} remote video provider failed for scene {scene_id} after {attempt} attempts; falling back to 2.5D clip: {exc}")
     elif provider_spec.backend != "local":
         raise ValueError(f"Unsupported video provider backend: {provider_spec.backend}")
@@ -5172,7 +5279,52 @@ def render_clip(
     else:
         if graded != out:
             graded.replace(out)
-    return out
+    result = VideoGenerationResult(
+        scene_order=scene.scene,
+        provider_id=provider_spec.id,
+        provider_label=provider_spec.label,
+        success=True,
+        is_real_video=bool(visual_generated and provider_spec.backend in {"comfyui", "remote"} and not fallback_used),
+        attempts=attempts,
+        duration_seconds=clip_duration,
+        output_path=str(out),
+        error=last_error if fallback_used else "",
+        warnings=warnings,
+        backend=used_backend,
+        fallback_used=fallback_used,
+    )
+    return out, result
+
+
+def render_clip(
+    ffmpeg: str,
+    scene: StoryScene,
+    run_dir: Path,
+    keyframe_provider: str,
+    voice_provider: str,
+    clip_duration: float,
+    voice_path: Path,
+    subtitle_style: dict | None = None,
+    audio_style: dict | None = None,
+    project_root: Path | None = None,
+    keyframe_path: Path | None = None,
+    video_provider: str = "auto",
+) -> Path:
+    clip_path, _ = render_clip_with_meta(
+        ffmpeg,
+        scene,
+        run_dir,
+        keyframe_provider,
+        voice_provider,
+        clip_duration,
+        voice_path,
+        subtitle_style,
+        audio_style,
+        project_root,
+        keyframe_path=keyframe_path,
+        video_provider=video_provider,
+    )
+    return clip_path
 
 
 def _normalize_scene_emotion(value: object) -> str:
@@ -5590,22 +5742,62 @@ def main() -> None:
 
     print(f"[2/5] Storyboard written: {storyboard_path}")
     clips = []
-    for item in assets:
+    render_results: list[VideoGenerationResult] = []
+    for index, item in enumerate(assets):
         scene = item["scene"]
         print(f"[3/5] Rendering scene {scene.scene}: {scene.title}")
-        clips.append(
-            render_clip(
-                ffmpeg,
-                scene,
-                run_dir,
-                keyframe_provider,
-                voice_provider,
-                item["clip_duration"],
-                item["voice"],
-                keyframe_path=item["keyframe"],
-                video_provider=video_provider,
-            )
+        clip_path, render_result = render_clip_with_meta(
+            ffmpeg,
+            scene,
+            run_dir,
+            keyframe_provider,
+            voice_provider,
+            item["clip_duration"],
+            item["voice"],
+            keyframe_path=item["keyframe"],
+            video_provider=video_provider,
         )
+        clips.append(clip_path)
+        render_results.append(render_result)
+        storyboard_scene = storyboard_scenes[index]
+        storyboard_scene["video"] = str(clip_path)
+        storyboard_scene["generation_meta"] = generation_meta_from_result(
+            render_result,
+            requested_provider=video_provider,
+            fallback_mode=video_fallback_mode(),
+        )
+        storyboard_scene["shot_plan"] = build_shot_plan(storyboard_scene)
+
+    canonical_timeline = build_canonical_timeline(
+        {
+            "project_id": run_dir.name,
+            "title": str(storyboard_scenes[0].get("title") or "Storyboard Timeline") if storyboard_scenes else "Storyboard Timeline",
+            "scenes": storyboard_scenes,
+        }
+    )
+    canonical_timeline_path.write_text(json.dumps(canonical_timeline, ensure_ascii=False, indent=2), encoding="utf-8")
+    storyboard_path.write_text(
+        json.dumps(
+            {
+                "story": story,
+                "planner": planner_used,
+                "keyframe_provider": keyframe_provider,
+                "video_provider": video_provider,
+                "voice_provider": voice_provider,
+                "canonical_timeline_path": str(canonical_timeline_path),
+                "canonical_timeline": canonical_timeline,
+                "scenes": storyboard_scenes,
+                "scene_graph": {
+                    "version": 1,
+                    "scene_count": len(storyboard_scenes),
+                    "shot_count": storyboard_shot_count,
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     print("[4/5] Concatenating clips")
     final_video = concat_clips(ffmpeg, clips, [item["scene"] for item in assets], [item["clip_duration"] for item in assets], run_dir)

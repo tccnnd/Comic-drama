@@ -29,6 +29,7 @@ import {
   refreshCurrentProject,
   loadVoiceCatalog,
   loadTtsProviders,
+  loadVideoProviderStatus,
   loadComfyUIStatus,
   loadAssets,
   loadStyles,
@@ -493,7 +494,7 @@ async function handleClick(event) {
     if (action === "create-project") return createProject();
     if (action === "delete-project") return deleteProject(button.dataset.projectId);
     if (action === "refresh-all") {
-      await Promise.all([loadVoiceCatalog(), loadTtsProviders(), loadComfyUIStatus(), loadProjects(false)]);
+      await Promise.all([loadVoiceCatalog(), loadTtsProviders(), loadVideoProviderStatus(), loadComfyUIStatus(), loadProjects(false)]);
       return showToast("已刷新");
     }
     if (action === "refresh-project") return refreshCurrentProject();
@@ -668,7 +669,7 @@ export async function boot() {
   });
   render();
   try {
-    await Promise.all([loadVoiceCatalog(), loadTtsProviders(), loadComfyUIStatus()]);
+    await Promise.all([loadVoiceCatalog(), loadTtsProviders(), loadVideoProviderStatus(), loadComfyUIStatus()]);
     await loadProjects(true);
   } catch (error) {
     render();

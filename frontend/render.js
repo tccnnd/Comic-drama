@@ -185,6 +185,7 @@ export function renderTopbar(project) {
           <span class="summary-chip">分镜 ${summary.completed_scenes || 0}/${summary.total_scenes || 0}</span>
           <span class="summary-chip">素材 ${summary.asset_totals?.image || 0}/${summary.asset_totals?.audio || 0}/${summary.asset_totals?.video || 0}</span>
           <span class="summary-chip">角色 ${summary.total_characters || 0}</span>
+          ${renderVideoProviderStatus(project)}
           <span class="status-pill ${statusClass(runtime.status)}">${h(runtime.stage || runtime.status || "draft")} ${runtime.progress ?? 0}%</span>
         </div>
       </div>
@@ -199,6 +200,25 @@ export function renderTopbar(project) {
       </div>
     </header>
   `;
+}
+
+function renderVideoProviderStatus(project) {
+  if (!project) return "";
+  if (state.videoProviderStatusLoading) {
+    return `<span class="summary-chip provider-status is-loading">Video provider: checking</span>`;
+  }
+  if (state.videoProviderStatusError) {
+    return `<span class="summary-chip provider-status is-error" title="${h(state.videoProviderStatusError)}">Video provider: error</span>`;
+  }
+  const status = state.videoProviderStatus || {};
+  const provider = status.provider || {};
+  const configuredCount = Number(status.configured_count || 0);
+  const missing = Array.isArray(status.missing_env) ? status.missing_env.length : 0;
+  const label = provider.label || provider.id || project.settings?.video_provider || "auto";
+  const backend = provider.backend || "unknown";
+  const ready = backend === "local" || missing === 0;
+  const readiness = ready ? "ready" : `${missing} missing`;
+  return `<span class="summary-chip provider-status ${ready ? "is-ready" : "is-missing"}" title="${h(`${configuredCount} configured, ${missing} missing`)}">Video: ${h(label)} / ${h(backend)} / ${h(readiness)}</span>`;
 }
 
 export function renderTabs() {
@@ -367,6 +387,7 @@ function renderProduceCard(scene) {
       <div class="produce-card-thumb">${thumb}</div>
       <div class="produce-card-body">
         <div class="produce-card-title">#${h(scene.order)} ${h((scene.title || "").slice(0, 10))}</div>
+        ${renderGenerationBadge(scene)}
         <div class="produce-card-status">
           <span class="dot ${hasImage ? "dot-ok" : "dot-empty"}"></span>图
           <span class="dot ${hasAudio ? "dot-ok" : "dot-empty"}"></span>音
@@ -1009,6 +1030,47 @@ function selectedTimelineScene(project = state.project) {
   return scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || scenes[0] || null;
 }
 
+function sceneGenerationMeta(scene) {
+  return scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
+}
+
+function generationBadgeClass(meta) {
+  if (!meta || !Object.keys(meta).length) return "is-unknown";
+  if (meta.fallback_used) return "is-fallback";
+  if (meta.is_real_video) return "is-real";
+  return "is-local";
+}
+
+function generationLabel(meta) {
+  if (!meta || !Object.keys(meta).length) return "Unknown";
+  if (meta.fallback_used) return "2.5D fallback";
+  if (meta.is_real_video) return "Real video";
+  return "Local 2.5D";
+}
+
+function renderGenerationBadge(scene) {
+  const meta = sceneGenerationMeta(scene);
+  const provider = meta.provider_label || meta.provider_id || "";
+  const attempts = Number(meta.attempts || 0);
+  const suffix = [provider, attempts > 1 ? `${attempts} tries` : ""].filter(Boolean).join(" · ");
+  return `<div class="generation-badge ${generationBadgeClass(meta)}">${h(generationLabel(meta))}${suffix ? ` · ${h(suffix)}` : ""}</div>`;
+}
+
+function renderGenerationDetail(scene) {
+  const meta = sceneGenerationMeta(scene);
+  if (!Object.keys(meta).length) {
+    return `<div class="generation-detail is-unknown"><strong>Generation</strong><span>Unknown provenance</span></div>`;
+  }
+  return `
+    <div class="generation-detail ${generationBadgeClass(meta)}">
+      <strong>${h(generationLabel(meta))}</strong>
+      <span>${h(meta.provider_label || meta.provider_id || "provider unknown")} · ${h(meta.backend || "backend unknown")} · ${h(meta.attempts || 0)} attempt(s)</span>
+      ${meta.error ? `<span class="danger-text">${h(meta.error)}</span>` : ""}
+      ${Array.isArray(meta.warnings) && meta.warnings.length ? `<span>${h(meta.warnings[0])}</span>` : ""}
+    </div>
+  `;
+}
+
 function renderStoryboardReviewCard(scene) {
   const assets = scene.assets || {};
   const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
@@ -1023,6 +1085,7 @@ function renderStoryboardReviewCard(scene) {
     <button class="storyboard-review-card ${active}" type="button" data-action="select-scene" data-scene-order="${h(scene.order)}">
       <div class="storyboard-thumb">${media}</div>
       <div class="storyboard-review-card-body">
+        ${renderGenerationBadge(scene)}
         <div class="storyboard-review-card-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
         <div class="storyboard-review-card-meta">${formatSeconds(scene.duration_seconds)} · ${h(scene.emotion_tone || scene.emotion || "")}</div>
         <div class="review-badge ${sClass}">${h(reviewStatusLabel(meta.status))}${meta.rating ? ` · ${h(meta.rating)}/5` : ""}</div>
@@ -1044,6 +1107,7 @@ function renderStoryboardReviewDetail(scene) {
     <div class="review-detail-preview">
       <div class="thumb-frame">${media}</div>
       <div class="section-stack">
+        ${renderGenerationDetail(scene)}
         <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
         <div class="muted">${formatSeconds(scene.duration_seconds)} · ${h(scene.camera_movement || "镜头")} · ${h(scene.emotion_tone || scene.emotion || "")}</div>
         <div>${nl(scene.dialogue || "暂无台词")}</div>
