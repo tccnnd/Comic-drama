@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 # Similarity thresholds (0.0 = completely different, 1.0 = identical)
 CHARACTER_SIMILARITY_THRESHOLD = float(os.environ.get("CONSISTENCY_CHAR_THRESHOLD", "0.6"))
 STYLE_SIMILARITY_THRESHOLD = float(os.environ.get("CONSISTENCY_STYLE_THRESHOLD", "0.7"))
+PROP_SIMILARITY_THRESHOLD = float(os.environ.get("CONSISTENCY_PROP_THRESHOLD", "0.6"))
+CAMERA_CONTINUITY_THRESHOLD = float(os.environ.get("CONSISTENCY_CAMERA_THRESHOLD", "0.6"))
 MAX_VALIDATION_RETRIES = int(os.environ.get("CONSISTENCY_MAX_RETRIES", "1"))
 
 # Feature: enable/disable consistency validation
@@ -287,6 +289,173 @@ def validate_lighting_continuity(
             score=0.5,
             details=f"Validation skipped: {exc}",
         )
+
+
+# ---------------------------------------------------------------------------
+# Prop and camera continuity validation
+# ---------------------------------------------------------------------------
+
+def _prop_reference_path(prop_ref: dict[str, Any] | None) -> Path | None:
+    if not isinstance(prop_ref, dict):
+        return None
+    value = (
+        prop_ref.get("reference_image_path")
+        or prop_ref.get("reference_image_abs_path")
+        or prop_ref.get("image_path")
+        or ""
+    )
+    text = str(value or "").strip()
+    return Path(text) if text else None
+
+
+def validate_prop_continuity(
+    image: Path,
+    prop_ref: dict[str, Any] | None,
+) -> ValidationCheck:
+    """Validate visual continuity for a recurring prop against its reference."""
+    prop_id = ""
+    if isinstance(prop_ref, dict):
+        prop_id = str(prop_ref.get("prop_id") or prop_ref.get("name") or "").strip()
+    name = f"prop_continuity:{prop_id}" if prop_id else "prop_continuity"
+    reference = _prop_reference_path(prop_ref)
+    if reference is None:
+        return ValidationCheck(
+            name=name,
+            passed=True,
+            score=0.0,
+            details="No prop reference image available, skipping validation",
+            severity="info",
+        )
+    if not reference.exists():
+        return ValidationCheck(
+            name=name,
+            passed=True,
+            score=0.0,
+            details=f"Prop reference image not found: {reference}",
+            severity="info",
+        )
+    if not image.exists():
+        return ValidationCheck(
+            name=name,
+            passed=False,
+            score=0.0,
+            details="Current image not found",
+            severity="error",
+        )
+
+    hist_image = _compute_color_histogram(image)
+    hist_ref = _compute_color_histogram(reference)
+    color_score = _histogram_similarity(hist_image, hist_ref) if hist_image and hist_ref else 0.5
+    hash_image = _compute_structural_hash(image)
+    hash_ref = _compute_structural_hash(reference)
+    structural_score = _hamming_similarity(hash_image, hash_ref) if hash_image and hash_ref else 0.5
+    combined_score = color_score * 0.55 + structural_score * 0.45
+    passed = combined_score >= PROP_SIMILARITY_THRESHOLD
+    return ValidationCheck(
+        name=name,
+        passed=passed,
+        score=round(combined_score, 3),
+        details=(
+            f"Prop color similarity: {color_score:.3f}, "
+            f"structure similarity: {structural_score:.3f}, "
+            f"combined: {combined_score:.3f} "
+            f"(threshold: {PROP_SIMILARITY_THRESHOLD})"
+        ),
+        severity="warning",
+    )
+
+
+def _scene_text_field(scene: dict[str, Any] | None, key: str) -> str:
+    if not isinstance(scene, dict):
+        return ""
+    return str(scene.get(key) or "").strip().lower()
+
+
+def _scene_float_field(scene: dict[str, Any] | None, key: str, default: float = 1.0) -> float:
+    if not isinstance(scene, dict):
+        return default
+    try:
+        return float(scene.get(key) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _camera_family(value: str) -> str:
+    text = str(value or "").strip().lower().replace("-", "_")
+    if not text:
+        return "unknown"
+    if "push" in text or "zoom" in text or "dolly" in text:
+        return "push"
+    if "pan" in text or "tilt" in text or "truck" in text:
+        return "pan"
+    if "shake" in text or "handheld" in text:
+        return "shake"
+    if "static" in text or "locked" in text or "hold" in text:
+        return "static"
+    return text.split("_", 1)[0]
+
+
+def evaluate_camera_continuity(
+    scene: dict[str, Any],
+    prev_scene: dict[str, Any] | None,
+) -> ValidationCheck:
+    """Rules-based camera continuity heuristic between adjacent scenes."""
+    if not isinstance(prev_scene, dict) or not prev_scene:
+        return ValidationCheck(
+            name="camera_continuity",
+            passed=True,
+            score=1.0,
+            details="No previous scene for camera comparison",
+            severity="info",
+        )
+
+    current_camera = _scene_text_field(scene, "camera_movement") or _scene_text_field(scene, "camera")
+    previous_camera = _scene_text_field(prev_scene, "camera_movement") or _scene_text_field(prev_scene, "camera")
+    current_family = _camera_family(current_camera)
+    previous_family = _camera_family(previous_camera)
+    current_speed = _scene_float_field(scene, "camera_speed", 1.0)
+    previous_speed = _scene_float_field(prev_scene, "camera_speed", 1.0)
+    speed_delta = abs(current_speed - previous_speed)
+
+    emotional_change = (
+        _scene_text_field(scene, "emotion_tone") or _scene_text_field(scene, "emotion")
+    ) != (
+        _scene_text_field(prev_scene, "emotion_tone") or _scene_text_field(prev_scene, "emotion")
+    )
+    intent_change = _scene_text_field(scene, "scene_intent") != _scene_text_field(prev_scene, "scene_intent")
+    focus_change = _scene_text_field(scene, "subject_focus") != _scene_text_field(prev_scene, "subject_focus")
+    motivated_change = emotional_change or intent_change or focus_change
+    family_changed = current_family != previous_family and current_family != "unknown" and previous_family != "unknown"
+    abrupt_speed = speed_delta >= 0.65
+
+    penalty = 0.0
+    reasons: list[str] = []
+    if family_changed:
+        penalty += 0.28
+        reasons.append(f"camera family changed {previous_family}->{current_family}")
+    if abrupt_speed:
+        penalty += min(0.35, speed_delta / 3.0)
+        reasons.append(f"camera speed delta {speed_delta:.2f}")
+    if (family_changed or abrupt_speed) and not motivated_change:
+        penalty += 0.25
+        reasons.append("no emotion/intent/focus change to motivate jump")
+    if motivated_change and penalty:
+        penalty = max(0.0, penalty - 0.25)
+        reasons.append("change is motivated by scene context")
+
+    score = max(0.0, min(1.0, 1.0 - penalty))
+    passed = score >= CAMERA_CONTINUITY_THRESHOLD
+    return ValidationCheck(
+        name="camera_continuity",
+        passed=passed,
+        score=round(score, 3),
+        details=(
+            "; ".join(reasons)
+            if reasons
+            else "Camera movement and speed are continuous"
+        ),
+        severity="warning",
+    )
 
 
 # ---------------------------------------------------------------------------

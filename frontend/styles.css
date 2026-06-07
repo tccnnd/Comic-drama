@@ -1856,13 +1856,16 @@ select:focus {
 }
 
 .generation-badge,
-.generation-detail {
+.generation-detail,
+.governance-badge,
+.governance-detail {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.045);
 }
 
-.generation-badge {
+.generation-badge,
+.governance-badge {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -1875,14 +1878,16 @@ select:focus {
   line-height: 1.2;
 }
 
-.generation-detail {
+.generation-detail,
+.governance-detail {
   display: grid;
   gap: 4px;
   padding: 8px 10px;
   font-size: 12px;
 }
 
-.generation-detail span {
+.generation-detail span,
+.governance-detail span {
   color: var(--muted);
 }
 
@@ -1899,6 +1904,62 @@ select:focus {
 .generation-badge.is-unknown,
 .generation-detail.is-unknown {
   color: var(--muted);
+}
+
+.continuity-chip.is-pass,
+.governance-badge.is-pass,
+.governance-detail.is-pass {
+  border-color: rgba(84, 209, 156, 0.3);
+}
+
+.continuity-chip.is-warn,
+.governance-badge.is-warn,
+.governance-detail.is-warn {
+  border-color: rgba(255, 203, 107, 0.36);
+  color: var(--warn);
+}
+
+.continuity-chip.is-fail,
+.governance-badge.is-fail,
+.governance-detail.is-fail,
+.governance-badge.is-blocked {
+  border-color: rgba(255, 122, 122, 0.4);
+  color: var(--danger);
+}
+
+.continuity-chip.is-not-evaluated,
+.governance-badge.is-not-evaluated,
+.governance-detail.is-not-evaluated {
+  color: var(--muted);
+}
+
+.governance-dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.governance-dimension {
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 4px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.governance-dimension.is-pass {
+  color: var(--ok);
+}
+
+.governance-dimension.is-warn {
+  color: var(--warn);
+}
+
+.governance-dimension.is-fail {
+  color: var(--danger);
 }
 
 .danger-text {

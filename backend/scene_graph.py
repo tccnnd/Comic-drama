@@ -248,6 +248,21 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
                 "reference_meta": deepcopy(character.get("reference_meta")) if isinstance(character.get("reference_meta"), dict) else {},
             }
         )
+    props: list[dict[str, Any]] = []
+    for prop in project.get("props", []) or []:
+        if not isinstance(prop, dict):
+            continue
+        props.append(
+            {
+                "prop_id": str(prop.get("prop_id") or prop.get("id") or "").strip(),
+                "name": str(prop.get("name") or "").strip(),
+                "description": str(prop.get("description") or prop.get("summary") or "").strip(),
+                "owner_characters": [str(name).strip() for name in prop.get("owner_characters") or [] if str(name).strip()],
+                "scenes": [str(scene_id).strip() for scene_id in prop.get("scenes") or [] if str(scene_id).strip()],
+                "reference_image_path": str(prop.get("reference_image_path") or "").strip(),
+                "reference_meta": deepcopy(prop.get("reference_meta")) if isinstance(prop.get("reference_meta"), dict) else {},
+            }
+        )
     scenes: list[dict[str, Any]] = []
     for scene in project.get("scenes", []) or []:
         if not isinstance(scene, dict):
@@ -262,6 +277,7 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
                 "scene_intent": str(scene.get("scene_intent") or "").strip(),
                 "subject_focus": str(scene.get("subject_focus") or "").strip(),
                 "characters": [str(name).strip() for name in scene.get("characters") or [] if str(name).strip()],
+                "props": [str(name).strip() for name in scene.get("props") or [] if str(name).strip()],
             }
         )
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
@@ -273,6 +289,7 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
         "style_guide": str(project.get("style_guide") or "").strip(),
         "global_style": str(settings.get("global_style") or "").strip(),
         "characters": characters,
+        "props": props,
         "scene_continuity": scenes,
         "rules": {
             "preserve_character_identity": True,
