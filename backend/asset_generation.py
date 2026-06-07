@@ -42,16 +42,12 @@ ASSET_WORKFLOW_PATH = ROOT / "workflows" / "comfyui_asset_template.json"
 ASSET_PROMPT_SUFFIXES: dict[AssetType, str] = {
     AssetType.CHARACTER: "solo, 1boy or 1girl, upper body portrait, looking at viewer, detailed face, detailed eyes, sharp facial features, clean lines, simple gradient background",
     AssetType.SCENE_BG: "no people, no characters, environment concept art, wide angle, cinematic composition, detailed background, atmospheric perspective",
-    AssetType.PROP: "single object, centered, simple background, concept art, clean render",
-}
     AssetType.PROP: "single object, isolated, centered composition, product photography, simple background, studio lighting, no people",
 }
 
 ASSET_DIMENSIONS: dict[AssetType, tuple[int, int]] = {
     AssetType.CHARACTER: (832, 1216),
     AssetType.SCENE_BG: (1216, 832),
-    AssetType.PROP: (832, 832),
-}
     AssetType.PROP: (768, 768),
 }
 

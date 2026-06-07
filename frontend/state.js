@@ -154,12 +154,6 @@ export const voiceEngines = [
 
 export const voiceSamples = [
   ["", "无（使用预设）"],
-  ["voice_samples/lol_yasuo.wav", "亚索 · 冷酷沧桑"],
-  ["voice_samples/lol_yone.wav", "永恩 · 冷静克制"],
-  ["voice_samples/lol_jhin.wav", "烬 · 优雅阴险"],
-  ["voice_samples/lol_pantheon.wav", "潘森 · 热血激昂"],
-  ["voice_samples/lol_sett.wav", "塞特 · 嚣张痞气"],
-  ["voice_samples/lol_ahri.wav", "阿狸 · 温柔魅惑"],
 ];
 
 export const voiceProfiles = [

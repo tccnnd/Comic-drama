@@ -658,14 +658,7 @@ function handleChange(event) {
   // Auto-fill reference text when selecting a voice sample
   if (event.target?.id === "characterReferenceAudioInput" || event.target?.id === "sceneReferenceAudioInput") {
     const samplePath = event.target.value;
-    const refTextMap = {
-      "voice_samples/lol_yasuo.wav": "死亡如风，常伴吾身。",
-      "voice_samples/lol_yone.wav": "吾虽已死，使命犹在。",
-      "voice_samples/lol_jhin.wav": "在杀戮中绽放的艺术，每一颗子弹都是我的杰作。",
-      "voice_samples/lol_pantheon.wav": "我曾坠入深渊，但我选择攀登而上。",
-      "voice_samples/lol_sett.wav": "来吧，让我看看你有多能打。",
-      "voice_samples/lol_ahri.wav": "别紧张，我不咬人的。",
-    };
+    const refTextMap = {};
     const refText = refTextMap[samplePath] || "";
     const textFieldId = event.target.id === "characterReferenceAudioInput" ? "characterReferenceTextInput" : "sceneReferenceTextInput";
     const textField = document.getElementById(textFieldId);

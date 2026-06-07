@@ -1,5 +1,7 @@
 # Comic Drama Workflow
 
+[![CI](https://github.com/tccnnd/Comic-drama/actions/workflows/ci.yml/badge.svg)](https://github.com/tccnnd/Comic-drama/actions/workflows/ci.yml)
+
 An open-source AI comic-drama production workflow for turning a script into
 structured scenes, character assets, dialogue audio, storyboard review data,
 and an editorial timeline.

@@ -553,12 +553,23 @@ def compile_character_prompt(scene: dict[str, Any], refs: list[dict[str, Any]]) 
     seen: set[str] = set()
     char_count = 0
 
+    scene_title = str(scene.get("title") or "").strip()
+    character_descriptions = str(scene.get("character_descriptions") or "").strip()
+    if scene_title:
+        positive_lines.append(scene_title)
+    if character_descriptions:
+        positive_lines.append(character_descriptions)
+
     for ref in refs[:4]:
         key = str(ref.get("char_id") or ref.get("name") or "").strip()
         if not key or key in seen:
             continue
         seen.add(key)
         char_count += 1
+        name = str(ref.get("name") or "").strip()
+        if name:
+            positive_lines.append(name)
+            negative_lines.append(f"保持{name}辨识度")
         positive, negative = _character_prompt_feature_lines(ref)
         positive_lines.extend(positive)
         negative_lines.extend(negative)

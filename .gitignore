@@ -25,3 +25,6 @@ build/
 .DS_Store
 Thumbs.db
 workflows/Unsaved Workflow.json
+voice_samples/*
+!voice_samples/README.md
+voice_sources/
