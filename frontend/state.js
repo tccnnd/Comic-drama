@@ -32,6 +32,21 @@ export const state = {
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
+  reviewTriageState: {
+    review_status: "all",
+    governance_status: "all",
+    provenance: "all",
+    deliverable: "all",
+    min_rating: 0,
+    sort: "scene_order",
+  },
+  reviewBatchRerender: {
+    running: false,
+    action: "",
+    total: 0,
+    completed: 0,
+    results: [],
+  },
   modal: null,
   assets: {
     characters: [],
@@ -87,6 +102,36 @@ export const assetTabs = [
   ["character", "characters", "角色"],
   ["scene_bg", "scene_bgs", "场景"],
   ["prop", "props", "道具"],
+];
+
+export const reviewGovernanceFilterOptions = [
+  ["all", "All continuity"],
+  ["pass", "Pass"],
+  ["warn", "Warn"],
+  ["fail", "Fail"],
+  ["not_evaluated", "Not evaluated"],
+];
+
+export const reviewProvenanceFilterOptions = [
+  ["all", "All provenance"],
+  ["real", "Real video"],
+  ["fallback", "Fallback"],
+  ["local", "Local 2.5D"],
+  ["unknown", "Unknown"],
+];
+
+export const reviewDeliverableFilterOptions = [
+  ["all", "All readiness"],
+  ["deliverable", "Deliverable"],
+  ["blocked", "Blocked"],
+  ["asset_gaps", "Missing assets"],
+];
+
+export const reviewSortOptions = [
+  ["scene_order", "Scene order"],
+  ["rating_desc", "Rating high first"],
+  ["governance_severity", "Continuity risk"],
+  ["fallback_first", "Fallback first"],
 ];
 
 export const tabs = [

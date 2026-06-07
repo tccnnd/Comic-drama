@@ -1135,6 +1135,21 @@ export async function sceneAction(action) {
   }
 }
 
+export async function runSceneAction(action, sceneOrder) {
+  if (!state.currentProjectId || !sceneOrder) return null;
+  const endpointMap = {
+    "rerender-image": "rerender-image",
+    "rerender-audio": "rerender-audio",
+    "rerender-video": "rerender-video",
+    "rebuild-scene": "rebuild",
+  };
+  const endpoint = endpointMap[action];
+  if (!endpoint) return null;
+  const project = await apiJson(`${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/${endpoint}`, { method: "POST", body: "{}" });
+  setCurrentProject(project);
+  return project;
+}
+
 export async function buildProject() {
   if (!state.currentProjectId) return;
   setBusy(true, "整集生成");

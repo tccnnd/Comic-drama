@@ -21,6 +21,8 @@ import {
   sceneCharacterNames,
   titleFromFilename,
   readTextFile,
+  timelineSceneItems,
+  applyReviewTriage,
 } from "./utils.js";
 import {
   setRenderFn,
@@ -50,6 +52,7 @@ import {
   openComfyUI,
   fillMissingAssets,
   sceneAction,
+  runSceneAction,
   buildProject,
   exportProject,
   handleAssetExtract,
@@ -434,8 +437,25 @@ async function handleClick(event) {
     }
     if (action === "review-filter") {
       state.reviewFilter = button.dataset.reviewFilter || "all";
+      state.reviewTriageState = {
+        ...(state.reviewTriageState || {}),
+        review_status: state.reviewFilter,
+      };
       render();
       return;
+    }
+    if (action === "review-overview-filter" || action === "review-triage-set") {
+      setReviewTriageField(button.dataset.triageField, button.dataset.triageValue || "all");
+      render();
+      return;
+    }
+    if (action === "review-triage-reset") {
+      resetReviewTriage();
+      render();
+      return;
+    }
+    if (action === "review-batch-rerender") {
+      return runReviewBatchRerender(button.dataset.batchAction || "rerender-video");
     }
     if (action === "asset-tab") {
       state.assets.activeTab = button.dataset.assetTab || "character";
@@ -533,14 +553,94 @@ async function handleClick(event) {
     if (action === "fill-missing-audio") return fillMissingAssets(["audio"], "补音频");
     if (action === "fill-missing-video") return fillMissingAssets(["video"], "补视频");
     if (action === "timeline-resize") return;
-    if (["split-scene", "merge-scene", "rerender-image", "rerender-audio", "rerender-video", "rebuild-scene", "restore-scene"].includes(action)) return sceneAction(action);
+    if (["split-scene", "merge-scene", "rerender-image", "rerender-audio", "rerender-video", "rebuild-scene", "restore-scene"].includes(action)) {
+      if (button.dataset.sceneOrder) state.selectedSceneOrder = Number(button.dataset.sceneOrder || state.selectedSceneOrder);
+      return sceneAction(action);
+    }
   } catch (error) {
     showToast(error.message || String(error), "danger");
   }
 }
 
+function defaultReviewTriageState() {
+  return {
+    review_status: "all",
+    governance_status: "all",
+    provenance: "all",
+    deliverable: "all",
+    min_rating: 0,
+    sort: "scene_order",
+  };
+}
+
+function setReviewTriageField(field, value) {
+  if (!field) return;
+  const next = { ...defaultReviewTriageState(), ...(state.reviewTriageState || {}) };
+  next[field] = field === "min_rating" ? Math.max(0, Math.min(5, asNumber(value, 0))) : String(value || "all");
+  state.reviewTriageState = next;
+  if (field === "review_status") state.reviewFilter = next.review_status;
+}
+
+function resetReviewTriage() {
+  state.reviewTriageState = defaultReviewTriageState();
+  state.reviewFilter = "all";
+}
+
+function reviewBatchActionLabel(action) {
+  if (action === "rerender-image") return "image";
+  if (action === "rerender-audio") return "audio";
+  if (action === "rerender-video") return "video";
+  if (action === "rebuild-scene") return "full rebuild";
+  return action;
+}
+
+async function runReviewBatchRerender(action) {
+  if (!state.currentProjectId || !state.project) return;
+  const scenes = applyReviewTriage(timelineSceneItems(state.project), state.reviewTriageState || defaultReviewTriageState());
+  const supported = new Set(["rerender-image", "rerender-audio", "rerender-video", "rebuild-scene"]);
+  if (!supported.has(action) || !scenes.length) return;
+  const label = reviewBatchActionLabel(action);
+  const confirmed = window.confirm(`Run ${label} rerender for ${scenes.length} filtered scene(s)? This may take time and provider quota.`);
+  if (!confirmed) return;
+
+  state.reviewBatchRerender = {
+    running: true,
+    action,
+    total: scenes.length,
+    completed: 0,
+    results: [],
+  };
+  setBusy(true, `Batch ${label}`);
+  try {
+    for (const scene of scenes) {
+      const order = Number(scene.order || 0);
+      state.selectedSceneOrder = order;
+      render();
+      try {
+        await runSceneAction(action, order);
+        state.reviewBatchRerender.results.push({ order, status: "ok", message: "completed" });
+      } catch (error) {
+        state.reviewBatchRerender.results.push({ order, status: "failed", message: error.message || String(error) });
+      } finally {
+        state.reviewBatchRerender.completed += 1;
+        render();
+      }
+    }
+    const failures = state.reviewBatchRerender.results.filter((item) => item.status === "failed").length;
+    showToast(failures ? `Batch finished with ${failures} failure(s)` : "Batch rerender completed", failures ? "danger" : "ok");
+  } finally {
+    state.reviewBatchRerender.running = false;
+    setBusy(false);
+  }
+}
+
 function handleChange(event) {
   if (handleCropInput(event.target)) return;
+  if (event.target?.dataset?.action === "review-triage-input") {
+    setReviewTriageField(event.target.dataset.triageField, event.target.value);
+    render();
+    return;
+  }
   if (event.target?.id === "comfyuiBaseUrlInput") {
     const url = normalizeExternalUrl(event.target.value, "http://127.0.0.1:8188");
     if (url) {
@@ -585,6 +685,11 @@ function handleChange(event) {
 
 function handleInput(event) {
   if (handleCropInput(event.target)) return;
+  if (event.target?.dataset?.action === "review-triage-input") {
+    setReviewTriageField(event.target.dataset.triageField, event.target.value);
+    render();
+    return;
+  }
   if (state.modal && event.target?.dataset?.modalField) {
     const field = event.target.dataset.modalField;
     if (!state.modal.data.form) state.modal.data.form = {};
