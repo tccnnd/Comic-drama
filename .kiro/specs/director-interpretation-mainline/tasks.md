@@ -115,12 +115,15 @@ Rationale unchanged: v0.5.0 modifies the `shot_plan` / `canonical_timeline` /
 
 ### Slice D — Docs / checks
 
-- [ ] 10. Docs update
+- [x] 10. Docs update
   - Document the interpretation stage, `director_plan`, and `visual_content`
     contracts and the pipeline placement in `docs/`.
+  - Done: production-pipeline/project-status docs updated for the
+    visual_prototype layer; CHANGELOG `[0.5.0]` entry and
+    `docs/releases/v0.5.0.md` added.
   - _Requirements: NFR-4, project doc-update rule_
 
-- [ ] 11. Checkpoint — run required checks
+- [x] 11. Checkpoint — run required checks
   - `python -m py_compile` on edited modules
     (`scripts/run_workflow.py`, `scripts/director_classifier.py` /
     `director_interpreter.py`, `backend/project_models.py`,
@@ -128,6 +131,11 @@ Rationale unchanged: v0.5.0 modifies the `shot_plan` / `canonical_timeline` /
     workflow when the environment allows
     (`python -m scripts.run_workflow --input inputs\sample_story.txt
     --keyframe-provider local`), else record as environment-pending.
+  - Done: py_compile pass; `pytest test_director_interpretation.py
+    test_video_provider_mainline.py` → 18 passed; sample workflow ran
+    end-to-end with `--keyframe-provider local` (final MP4 produced), and the
+    run's `storyboard.json` carries `director_plan` + per-shot `visual_content`
+    / `visual_prototype`.
   - _Requirements: AC-8, NFR-6_
 
 ## Task Dependency Graph

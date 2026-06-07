@@ -5,6 +5,51 @@ All notable changes to this project will be documented here.
 The project currently uses pre-release versioning while the workflow structure
 is still evolving.
 
+## [0.5.0] - 2026-06-07
+
+Feature line: **director-interpretation-mainline** — make the AI director's
+interpretation a first-class, structured stage between scene classification and
+video-provider prompt construction. Deterministic-first; no LLM dependency.
+
+### Added
+
+- Per-scene `director_plan` (`dramatic_intent`, `emotional_target`,
+  `narrative_focus`, `rationale`, `source`) synthesized deterministically from
+  the existing `director_meta` and scene text (`build_director_plan`).
+- Per-shot `visual_content` (shot_description, foreground, midground,
+  background, composition, motion, lighting, focus) plus `shot_size`,
+  `camera_language`, and `dramatic_intent` (`build_shot_visual_content`).
+- Deterministic `visual_prototype` shot-language constraint layer: each shot
+  gets a `mode` (`prototype_lock` | `freeform`), an `id` from a fixed prototype
+  set, and hard/soft/guideline `constraints`; `freeform` records a
+  `gap.reason`.
+- `build_shot_plan` enriches every shot with the above via the shared,
+  additive `normalize_shot_plan_visual_content`; the workflow persists
+  `director_plan` and the enriched `shot_plan`.
+- Legacy projects are normalized on load/snapshot
+  (`_normalize_director_interpretation`) so older projects gain synthesized
+  interpretation without failing.
+- Tests in `tests/test_director_interpretation.py` (planner, shot enrichment,
+  legacy load, AC-3 prompt consumption, AC-4 legacy fallback).
+
+### Changed
+
+- `build_scene_video_prompts` now builds the positive prompt primarily from
+  shot `visual_content` (+ `shot_size` / `camera_language` / prototype
+  constraints), demoting dialogue to context. The `PromptCompiler` path uses the
+  same visual source. The legacy `clean_comfyui_visual_prompt(scene.visual)`
+  path is retained as a fallback when `visual_content` is absent.
+
+### Known Limitations
+
+- LLM-based interpretation is deferred; v0.5.0 ships the deterministic floor
+  that reuses the classifier's `llm/rules/default` tiering pattern.
+- The implementation extends Slice C beyond the original "consume
+  visual_content" wording with the `visual_prototype` constraint layer; the spec
+  tasks.md records this scope note.
+- Sample-workflow live verification remains environment-gated (ComfyUI tunnel);
+  use `--keyframe-provider local`.
+
 ## [0.4.0] - 2026-06-06
 
 Feature line: **director-review-console** — evolve the storyboard review canvas,
