@@ -11,6 +11,7 @@ The implemented workflow is now organized around this production spine:
 ```text
 script
 -> roles/assets
+-> director interpretation
 -> shot_plan
 -> production_bible
 -> video provider / local fallback
@@ -20,12 +21,13 @@ script
 -> rerender / export
 ```
 
-The next planned spine extension is the director interpretation layer:
+The active spine extension is the director interpretation layer:
 
 ```text
 script
 -> director interpretation
--> shot_plan + visual_content
+-> director_plan.shot_archetypes
+-> shot_plan.visual_prototype + visual_content
 -> video provider prompt
 ```
 
@@ -36,7 +38,7 @@ script
 | v0.2.0 | `video-provider-mainline` | Delivered on `main`; AC-7 qualified pass | merged from `codex/video-provider-mainline` |
 | v0.3.0 | `global-consistency-governance` | Delivered on `main`; browser visual smoke pending | merged from `codex/global-consistency-governance` |
 | v0.4.0 | `director-review-console` | Delivered on `main`; browser visual smoke pending | merged from `codex/director-review-console-impl` |
-| v0.5.0 | `director-interpretation-mainline` | Spec complete, local commit; implementation not started | `codex/director-interpretation-mainline` |
+| v0.5.0 | `director-interpretation-mainline` | Deterministic-first implementation in progress; visual prototype library seeded | `codex/director-interpretation-mainline` |
 
 ## Delivered Stack
 
@@ -49,9 +51,12 @@ main
         +-- v0.4.0 director-review-console
 ```
 
-The v0.5.0 spec branch is intentionally separate and off an earlier `main`.
-Its implementation should now be created on a new branch based on current
-`main`, which already contains v0.2.0 through v0.4.0.
+The v0.5.0 work now extends current `main`, which already contains v0.2.0
+through v0.4.0. The first implementation pass keeps the LLM tier deferred and
+adds a deterministic contract between director intent and shot execution:
+`director_plan.shot_archetypes` selects prototype families, each shot stores a
+parameterized `visual_prototype`, and `visual_content` is rendered from that
+prototype or falls back to freeform with a prototype gap record.
 
 ## Known Pending Verification
 
@@ -75,7 +80,7 @@ Expected result: an output run directory under `outputs/`, per-scene media, a
 
 ## Immediate Consolidation Tasks
 
-- Rebase and merge this docs consolidation branch after v0.4.0.
-- Keep v0.5.0 implementation on a new branch based on current `main`.
+- Continue v0.5.0 implementation on current `main` with focused prototype
+  coverage and prompt-contract tests.
 - Keep `_external/Toonflow-app` untouched unless explicitly investigating that
   nested reference project.
