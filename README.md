@@ -35,6 +35,11 @@ without rewriting the whole project structure.
 
 ## Current Status
 
+The project has progressed from an early runnable workflow into an iterable
+AI comic-drama production workbench. See
+[docs/production_pipeline.md](docs/production_pipeline.md) for the full pipeline
+spine, per-stage maturity, and branch/merge state.
+
 Implemented:
 
 - Project scaffold and workspace artifact layout
@@ -46,18 +51,30 @@ Implemented:
 - ComfyUI image workflow injection and validation
 - Self-hosted and remote video provider abstraction
 - Canonical timeline generation
-- Storyboard review canvas with status, rating, notes, and version comparison
+- **v0.2.0** real video as the primary renderer with local 2.5D fallback and
+  per-scene generation provenance
+- **v0.3.0** consistency governance (character/lighting/environment/prop/camera)
+  with per-scene verdicts and a project continuity ledger
+- **v0.4.0** director review console: overview, triage, and per-scene + serial
+  batch rerender
 
-In progress:
+Specced, implementation pending:
 
-- Real continuous video generation as the primary scene renderer
-- Stronger global consistency governance across characters, light, camera, and
-  environment
-- Provider adapters for commercial and self-hosted video models
-- More complete screenplay import and director review workflows
+- **v0.5.0** director interpretation: structured `director_plan` + per-shot
+  `visual_content` consumed by the video-provider prompt
+
+Future / deferred:
+
+- Provider cost controls, governance-driven regeneration, long-form/multi-episode
+  management, and finer shot-language/prompt governance
+
+Environment-gated verification (tracked, not blocking): ComfyUI keyframe tunnel,
+live real-video success run, and browser visual smoke. See the production
+pipeline doc for details.
 
 ## Demo And Review Materials
 
+- [Production pipeline overview](docs/production_pipeline.md)
 - [Demo guide](docs/demo.md)
 - [Roadmap](docs/roadmap.md)
 - [Initial release notes](docs/releases/v0.1.0.md)
@@ -97,6 +114,22 @@ Copy-Item .env.example .env
 ```
 
 Outputs are written to `outputs/<run_id>/`.
+
+### Minimal Demo Path
+
+The canonical "show me it works" entrypoint uses the local keyframe provider to
+bypass the environment-dependent ComfyUI tunnel, running the full pipeline
+end-to-end:
+
+```powershell
+python -m scripts.run_workflow --input inputs\sample_story.txt --keyframe-provider local
+```
+
+This writes a final video plus `canonical_timeline.json` to `outputs/<run_id>/`.
+With a video provider configured, scenes attempt real video generation and fall
+back to local 2.5D under the `report` policy, recording provenance either way.
+See [docs/production_pipeline.md](docs/production_pipeline.md) for the demo path
+and environment caveats.
 
 ## Run The Web Workbench
 
