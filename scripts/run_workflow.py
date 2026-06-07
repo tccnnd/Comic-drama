@@ -33,6 +33,7 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 from scripts import tts_engines
 from scripts.director_classifier import (
     DirectorClassificationError,
+    VISUAL_CONTENT_FIELDS,
     apply_default_classification,
     apply_llm_classification,
     apply_rules_classification,
@@ -1939,6 +1940,8 @@ def normalize_shot_plan_visual_content(scene: dict[str, Any], shot_plan: dict[st
         visual_content = shot.get("visual_content")
         if not isinstance(visual_content, dict):
             visual_content = {}
+        elif "_source" not in visual_content and any(str(visual_content.get(key) or "").strip() for key in VISUAL_CONTENT_FIELDS):
+            visual_content = {**visual_content, "_source": "legacy"}
         shot["visual_content"] = _merge_default_dict(generated["visual_content"], visual_content)
 
     return shot_plan
@@ -2759,6 +2762,7 @@ def _shot_visual_content_prompt_lines(shot_plan: dict[str, Any]) -> list[str]:
         camera_language = shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
         parts = [
             f"shot {int(shot.get('shot_order') or index)} visual content",
+            f"visual_content_source: {visual_content.get('_source')}",
             f"prototype_id: {visual_prototype.get('id')}",
             f"prototype_mode: {visual_prototype.get('mode')}",
             f"hard_constraints: {', '.join(str(item) for item in constraints.get('hard', []) if item)}",

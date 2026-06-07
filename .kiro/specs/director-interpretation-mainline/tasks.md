@@ -111,6 +111,9 @@ Rationale unchanged: v0.5.0 modifies the `shot_plan` / `canonical_timeline` /
   - Prompt includes visual_content tokens (foreground/background/composition/
     motion/focus) and does not use raw dialogue as the primary visual driver
     when visual_content is present; legacy scene falls back and still builds.
+  - Follow-up provenance fix: `visual_content["_source"]` records whether the
+    rendered visual content came from `prototype`, deterministic `rules`, or
+    pre-existing `legacy` content.
   - _Requirements: 3.1, 3.2, 3.3, AC-3, AC-4_
 
 ### Slice D — Docs / checks

@@ -763,6 +763,7 @@ def _prototype_visual_content(
 
     if prototype_id == "danger_intro_extreme_closeup":
         return {
+            "_source": "prototype",
             "shot_description": f"{focus_object} dominates the center of frame in {environment}; {basis}",
             "foreground": f"{focus_object} fills the foreground with readable surface, wiring, trigger, or fuse detail",
             "midground": "only the nearest hand or contact point may enter frame to clarify immediate threat",
@@ -774,6 +775,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "dialogue_pressure_two_shot":
         return {
+            "_source": "prototype",
             "shot_description": f"{subject} and the opposing speaker share a pressured two-shot; {basis}",
             "foreground": "both speakers keep readable eyelines and frame weight",
             "midground": "blocking makes the relationship pressure visible without losing either face",
@@ -785,6 +787,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "reaction_hold_closeup":
         return {
+            "_source": "prototype",
             "shot_description": f"hold on {subject}'s reaction after the dramatic beat; {basis}",
             "foreground": "face, eyes, or decisive hand detail carries the frame",
             "midground": "performance detail stays still enough for the reaction to register",
@@ -796,6 +799,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "power_dynamic_low_angle":
         return {
+            "_source": "prototype",
             "shot_description": f"stage the power imbalance around {subject}; {basis}",
             "foreground": "dominant subject takes stronger frame weight",
             "midground": "subordinate subject or response position remains readable",
@@ -807,6 +811,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "isolation_single_wide":
         return {
+            "_source": "prototype",
             "shot_description": f"{subject} is isolated inside {environment}; {basis}",
             "foreground": "foreground objects frame emptiness without blocking the subject",
             "midground": "single subject remains small but legible inside the space",
@@ -818,6 +823,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "emotional_push_in":
         return {
+            "_source": "prototype",
             "shot_description": f"slowly push toward {subject} or {focus_object} at the emotional turn; {basis}",
             "foreground": "the face, hand, or decisive object becomes progressively dominant",
             "midground": "surrounding blocking simplifies as pressure rises",
@@ -829,6 +835,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "impact_action_wide":
         return {
+            "_source": "prototype",
             "shot_description": f"show the action impact with readable cause and effect; {basis}",
             "foreground": "nearest action edge leads the eye into the impact",
             "midground": "impact, collision, or decisive movement remains visible",
@@ -840,6 +847,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "pursuit_forward_push":
         return {
+            "_source": "prototype",
             "shot_description": f"drive forward through {environment} with pursuit pressure; {basis}",
             "foreground": "moving subject or obstacle leads the frame",
             "midground": "forward vector stays clear and readable",
@@ -851,6 +859,7 @@ def _prototype_visual_content(
         }
     if prototype_id == "transition_environment_insert":
         return {
+            "_source": "prototype",
             "shot_description": f"insert {environment} as a clean cue into the next story beat; {basis}",
             "foreground": "simple location marker or prop anchors the transition",
             "midground": "no new character business competes with the location cue",
@@ -867,6 +876,7 @@ def _prototype_visual_content(
         scene_intent=scene_intent,
         emotion_tone=emotion_tone,
         camera_language=camera_language,
+        source="rules",
     )
 
 
@@ -1023,10 +1033,12 @@ def _visual_content(
     scene_intent: str,
     emotion_tone: str,
     camera_language: dict[str, str],
+    source: str = "rules",
 ) -> dict[str, str]:
     basis = _shorten(visual_basis, 180)
     focus_label = subject_focus.replace("_", " ")
     return {
+        "_source": source,
         "shot_description": f"{basis}; directed as a {scene_intent} beat with {emotion_tone} tone",
         "foreground": _foreground_for(subject_focus),
         "midground": _midground_for(subject_focus, basis),

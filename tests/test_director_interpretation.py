@@ -10,6 +10,10 @@ from scripts.run_workflow import build_shot_plan
 from scripts.run_workflow import build_scene_video_prompts, StoryScene
 
 
+def _assert_visual_content_core_fields(visual_content):
+    assert set(VISUAL_CONTENT_FIELDS).issubset(set(visual_content))
+
+
 def test_build_director_plan_uses_classified_scene_fields():
     scene = {
         "scene": 1,
@@ -68,7 +72,8 @@ def test_build_shot_visual_content_maps_environment_and_camera_language():
     assert result["visual_prototype"]["id"] == "isolation_single_wide"
     assert result["visual_prototype"]["mode"] == "prototype_lock"
     assert set(result["visual_prototype"]["constraints"]) == {"hard", "soft", "guidelines"}
-    assert set(VISUAL_CONTENT_FIELDS) == set(visual_content)
+    _assert_visual_content_core_fields(visual_content)
+    assert visual_content["_source"] == "prototype"
     assert "Rain fills the empty alley" in visual_content["shot_description"]
     assert "background geography" in visual_content["background"]
     assert "negative space" in visual_content["lighting"]
@@ -89,7 +94,8 @@ def test_build_shot_visual_content_handles_empty_shot():
     assert result["dramatic_intent"]
     assert result["camera_language"]["movement"]
     assert result["visual_prototype"]["id"] == "dialogue_pressure_two_shot"
-    assert set(VISUAL_CONTENT_FIELDS) == set(result["visual_content"])
+    _assert_visual_content_core_fields(result["visual_content"])
+    assert result["visual_content"]["_source"] == "prototype"
     assert "We only have one chance" in result["visual_content"]["shot_description"]
 
 
@@ -109,6 +115,7 @@ def test_build_shot_visual_content_records_freeform_gap_when_no_prototype_matche
     assert result["visual_prototype"]["id"] == ""
     assert result["visual_prototype"]["gap"]["reason"]
     assert result["visual_prototype"]["constraints"] == {"hard": [], "soft": [], "guidelines": []}
+    assert result["visual_content"]["_source"] == "rules"
 
 
 def test_build_shot_plan_attaches_visual_content_to_each_shot():
@@ -139,7 +146,8 @@ def test_build_shot_plan_attaches_visual_content_to_each_shot():
         assert shot["dramatic_intent"]
         assert shot["visual_prototype"]["id"] in VISUAL_PROTOTYPE_IDS
         assert shot["visual_prototype"]["constraints"]["hard"]
-        assert set(VISUAL_CONTENT_FIELDS) == set(shot["visual_content"])
+        _assert_visual_content_core_fields(shot["visual_content"])
+        assert shot["visual_content"]["_source"] == "prototype"
         assert set(shot["camera_language"]) == {"movement", "lens", "depth_of_field", "framing"}
 
 
@@ -181,6 +189,7 @@ def test_load_project_and_snapshot_normalize_legacy_director_interpretation(tmp_
                             "start_seconds": 0.0,
                             "duration_seconds": 4.0,
                             "end_seconds": 4.0,
+                            "visual_content": {"shot_description": "legacy wide gate description"},
                         }
                     ],
                 },
@@ -198,7 +207,9 @@ def test_load_project_and_snapshot_normalize_legacy_director_interpretation(tmp_
     assert scene["shot_plan"]["source"] == "legacy"
     assert scene["director_plan"]["shot_archetypes"][0]["prototype_id"] == "isolation_single_wide"
     assert scene["shot_plan"]["shots"][0]["visual_prototype"]["id"] == "isolation_single_wide"
-    assert set(VISUAL_CONTENT_FIELDS) == set(scene["shot_plan"]["shots"][0]["visual_content"])
+    _assert_visual_content_core_fields(scene["shot_plan"]["shots"][0]["visual_content"])
+    assert scene["shot_plan"]["shots"][0]["visual_content"]["_source"] == "legacy"
+    assert scene["shot_plan"]["shots"][0]["visual_content"]["shot_description"] == "legacy wide gate description"
 
     snapshot = project_runtime.project_snapshot(loaded)
     snapshot_scene = snapshot["scenes"][0]
@@ -250,7 +261,8 @@ def test_build_scene_video_prompts_uses_visual_content_as_primary_source(tmp_pat
                     },
                     "source": "test",
                 },
-                "visual_content": {
+                    "visual_content": {
+                    "_source": "prototype",
                     "shot_description": "extreme close-up of a red detonator light",
                     "foreground": "thumb hovering over the trigger",
                     "midground": "scratched ticket-counter glass",
@@ -267,6 +279,7 @@ def test_build_scene_video_prompts_uses_visual_content_as_primary_source(tmp_pat
     positive, negative = build_scene_video_prompts(scene, 4.0, tmp_path)
 
     assert "visual_content is the primary visual source" in positive
+    assert "visual_content_source: prototype" in positive
     assert "prototype_id:" in positive
     assert "hard_constraints:" in positive
     assert "foreground: thumb hovering over the trigger" in positive
