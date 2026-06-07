@@ -8,15 +8,15 @@ live in their own docs and specs.
 
 ```text
 script
-  → roles / assets
-  → director interpretation        (v0.5.0 spec)
-  → shot_plan + visual_content      (v0.2.0 shot_plan; visual_content is v0.5.0 spec)
-  → production_bible
-  → video provider / local 2.5D fallback   (v0.2.0)
-  → canonical_timeline               (v0.2.0 provenance enrichment)
-  → consistency governance           (v0.3.0)
-  → director review console          (v0.4.0)
-  → rerender / export
+  -> roles / assets
+  -> director interpretation        (v0.5.0 spec)
+  -> shot_plan + visual_content      (v0.2.0 shot_plan; visual_content is v0.5.0 spec)
+  -> production_bible
+  -> video provider / local 2.5D fallback   (v0.2.0)
+  -> canonical_timeline               (v0.2.0 provenance enrichment)
+  -> consistency governance           (v0.3.0)
+  -> director review console          (v0.4.0)
+  -> rerender / export
 ```
 
 The system has progressed from "a workflow that runs" to an iterable
@@ -28,27 +28,28 @@ review, provider routing, governance, and export).
 
 | Stage | Capability | Version | Status |
 | --- | --- | --- | --- |
-| Video generation mainline | Real video as primary renderer; local 2.5D as explicit, observable fallback; per-scene generation provenance; canonical-timeline metadata + real/fallback summary | v0.2.0 | Implemented (pushed) |
-| Consistency governance | Five-dimension continuity (character/lighting/environment/prop/camera); per-scene verdict; project ledger; `report`/`block` policy | v0.3.0 | Implemented (local, pending merge) |
-| Director review console | In-place review console: overview, triage filter/sort, unified review unit, per-scene + serial batch rerender | v0.4.0 | Implemented (local, pending merge) |
+| Video generation mainline | Real video as primary renderer; local 2.5D as explicit, observable fallback; per-scene generation provenance; canonical-timeline metadata + real/fallback summary | v0.2.0 | Delivered on `main` |
+| Consistency governance | Five-dimension continuity (character/lighting/environment/prop/camera); per-scene verdict; project ledger; `report`/`block` policy | v0.3.0 | Delivered on `main` |
+| Director review console | In-place review console: overview, triage filter/sort, unified review unit, per-scene + serial batch rerender | v0.4.0 | Delivered on `main` |
 | Director interpretation | Structured `director_plan` (why) + per-shot `visual_content` (what); provider prompt consumes `visual_content` | v0.5.0 | Spec complete (local) |
 
-## Branch / Merge State
+## Merge State
 
-Feature branches are pending merge in dependency order:
+The v0.2.0 through v0.4.0 implementation stack has been merged into `main` in
+dependency order:
 
 ```text
 main
- ├─ codex/video-provider-mainline        v0.2.0  (pushed)
- │   └─ codex/global-consistency-governance   v0.3.0  (local)
- │       └─ codex/director-review-console-impl   v0.4.0  (local)
- └─ codex/director-interpretation-mainline   v0.5.0 spec  (local, off main)
+  -> v0.2.0 video-provider-mainline
+  -> v0.3.0 global-consistency-governance
+  -> v0.4.0 director-review-console
 ```
 
-Planned merge order: `v0.2.0 → v0.3.0 → v0.4.0`. The v0.5.0 implementation,
-when it starts, MUST be based on the v0.2.0 line (the
-`shot_plan`/`canonical_timeline`/`build_scene_video_prompts` chain it modifies
-was refactored by v0.2.0) — never on plain pre-v0.2.0 `main`.
+The v0.5.0 spec branch (`codex/director-interpretation-mainline`) is separate.
+Its implementation should now be created on a new branch based on current
+`main`, because current `main` contains the v0.2.0
+`shot_plan`/`canonical_timeline`/`build_scene_video_prompts` refactor that
+v0.5.0 extends.
 
 ## Minimal Demo Path
 
@@ -86,8 +87,8 @@ runs depend on the environment and remain pending:
 
 - `director-interpretation-mainline` (v0.5.0): spec complete; deterministic-first
   implementation pending, LLM tier deferred.
-- `provider-cost-controls`: cost/timing/quota accounting — future spec.
-- consistency-regeneration: the deferred `regenerate` policy mode from v0.3.0 —
+- `provider-cost-controls`: cost/timing/quota accounting; future spec.
+- consistency-regeneration: the deferred `regenerate` policy mode from v0.3.0;
   future spec, to add a render feedback loop only after verdicts prove stable.
 - Long-form / multi-episode management and finer shot-language/prompt governance
-  — not yet specced.
+  not yet specced.

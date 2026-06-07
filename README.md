@@ -54,10 +54,9 @@ Implemented:
 - **v0.2.0** real video as the primary renderer with local 2.5D fallback and
   per-scene generation provenance
 - **v0.3.0** consistency governance (character/lighting/environment/prop/camera)
-  with per-scene verdicts and a project continuity ledger *(local, pending
-  merge)*
+  with per-scene verdicts and a project continuity ledger
 - **v0.4.0** director review console: overview, triage, and per-scene + serial
-  batch rerender *(local, pending merge)*
+  batch rerender
 
 Specced, implementation pending:
 

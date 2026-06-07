@@ -19,11 +19,11 @@ Delivered / specced (see `docs/production_pipeline.md` for stage maturity and
 branch/merge state):
 
 - `video-provider-mainline` (v0.2.0): real video as the primary scene renderer
-  with local 2.5D fallback. **Implemented, pushed.**
+  with local 2.5D fallback. **Delivered on main.**
 - `global-consistency-governance` (v0.3.0): character, lighting, environment,
-  prop, and camera continuity governance. **Implemented (local, pending merge).**
+  prop, and camera continuity governance. **Delivered on main.**
 - `director-review-console` (v0.4.0): production review + rerender console.
-  **Implemented (local, pending merge).**
+  **Delivered on main.**
 - `director-interpretation-mainline` (v0.5.0): structured `director_plan` +
   per-shot `visual_content`, consumed by the video-provider prompt.
   **Spec complete (local); implementation pending.**
@@ -32,7 +32,7 @@ Future / deferred specs (not yet written):
 
 - `provider-cost-controls`: cost/timing/quota accounting across video providers.
 - consistency-regeneration: the deferred `regenerate` policy mode from v0.3.0
-  (governance-driven re-render) — only after verdicts prove stable.
+  (governance-driven re-render), only after verdicts prove stable.
 - Long-form / multi-episode management and finer shot-language/prompt governance.
 
 ## Handoff Rule
