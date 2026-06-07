@@ -45,6 +45,25 @@ VALID_SUBJECT_FOCUS = {
     "group",
     "environment",
 }
+VALID_SHOT_SIZE = {
+    "extreme_close_up",
+    "close_up",
+    "medium",
+    "wide",
+    "extreme_wide",
+}
+
+DIRECTOR_PLAN_VERSION = 1
+VISUAL_CONTENT_FIELDS = (
+    "shot_description",
+    "foreground",
+    "midground",
+    "background",
+    "composition",
+    "motion",
+    "lighting",
+    "focus",
+)
 
 FIELD_VALIDATORS: dict[str, set[str]] = {
     "camera_movement": VALID_CAMERA_MOVEMENT,
@@ -268,3 +287,298 @@ def _validate_batch(classifications: list[dict[str, Any]]) -> None:
                 raise DirectorClassificationError(
                     f"scene_index={idx} field {field}={value!r} is not in {sorted(valid_values)}"
                 )
+
+
+def build_director_plan(scene: Any) -> dict[str, Any]:
+    """Build a deterministic director interpretation for a scene."""
+    scene_intent = _validated_scene_value(scene, "scene_intent", VALID_SCENE_INTENT, "dialogue")
+    emotion_tone = _validated_scene_value(scene, "emotion_tone", VALID_EMOTION_TONE, "neutral")
+    pacing = _validated_scene_value(scene, "pacing", VALID_PACING, "medium")
+    subject_focus = _validated_scene_value(scene, "subject_focus", VALID_SUBJECT_FOCUS, "single_character")
+    title = _first_text(
+        _scene_get(scene, "title", ""),
+        _scene_get(scene, "scene_title", ""),
+        f"scene {_scene_get(scene, 'scene', '')}".strip(),
+    )
+    visual = _first_text(_scene_get(scene, "visual_prompt", ""), _scene_get(scene, "visual", ""))
+    has_classification = any(
+        _scene_get(scene, key, "") in FIELD_VALIDATORS[key]
+        for key in ("scene_intent", "emotion_tone", "pacing", "subject_focus", "camera_movement")
+    )
+    source = "rules" if has_classification else "default"
+
+    dramatic_intent = _dramatic_intent(scene_intent, pacing)
+    emotional_target = _emotional_target(emotion_tone)
+    narrative_focus = _narrative_focus(subject_focus, scene_intent)
+    rationale_bits = [
+        f"{scene_intent} scene",
+        f"{emotion_tone} tone",
+        f"{pacing} pacing",
+        f"{subject_focus} focus",
+    ]
+    if title:
+        rationale_bits.insert(0, title)
+    if visual:
+        rationale_bits.append(f"visual basis: {_shorten(visual)}")
+
+    return {
+        "version": DIRECTOR_PLAN_VERSION,
+        "dramatic_intent": dramatic_intent,
+        "emotional_target": emotional_target,
+        "narrative_focus": narrative_focus,
+        "rationale": "; ".join(rationale_bits),
+        "source": source,
+    }
+
+
+def build_shot_visual_content(scene: Any, shot: Any | None = None) -> dict[str, Any]:
+    """Build deterministic visual-content fields for one shot."""
+    shot = shot or {}
+    plan = build_director_plan(scene)
+    subject_focus = _validated_scene_value(scene, "subject_focus", VALID_SUBJECT_FOCUS, "single_character")
+    scene_intent = _validated_scene_value(scene, "scene_intent", VALID_SCENE_INTENT, "dialogue")
+    emotion_tone = _validated_scene_value(scene, "emotion_tone", VALID_EMOTION_TONE, "neutral")
+    camera_movement = _validated_shot_or_scene_value(
+        scene,
+        shot,
+        ("camera_movement", "movement", "camera"),
+        VALID_CAMERA_MOVEMENT,
+        "static",
+    )
+    shot_size = _validated_shot_or_scene_value(
+        scene,
+        shot,
+        ("shot_size", "size", "framing"),
+        VALID_SHOT_SIZE,
+        _shot_size_for(subject_focus, scene_intent),
+    )
+    visual_basis = _first_text(
+        _shot_get(shot, "visual_content", ""),
+        _shot_get(shot, "description", ""),
+        _shot_get(shot, "prompt", ""),
+        _scene_get(scene, "visual_prompt", ""),
+        _scene_get(scene, "visual", ""),
+        _scene_get(scene, "dialogue", ""),
+        "the scene's central dramatic beat",
+    )
+    camera_language = _camera_language(camera_movement, shot_size, emotion_tone)
+    visual_content = _visual_content(
+        visual_basis=visual_basis,
+        subject_focus=subject_focus,
+        scene_intent=scene_intent,
+        emotion_tone=emotion_tone,
+        camera_language=camera_language,
+    )
+
+    return {
+        "shot_size": shot_size,
+        "camera_language": camera_language,
+        "dramatic_intent": plan["dramatic_intent"],
+        "visual_content": visual_content,
+    }
+
+
+def _scene_meta(scene: Any) -> dict[str, Any]:
+    meta = _scene_get(scene, "director_meta", {})
+    return meta if isinstance(meta, dict) else {}
+
+
+def _shot_get(shot: Any, key: str, default: Any = "") -> Any:
+    if isinstance(shot, dict):
+        return shot.get(key, default)
+    return getattr(shot, key, default)
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, dict):
+            continue
+        if isinstance(value, list):
+            value = ", ".join(str(item) for item in value if item)
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _shorten(text: str, limit: int = 120) -> str:
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _validated_scene_value(scene: Any, key: str, valid_values: set[str], default: str) -> str:
+    value = _scene_get(scene, key, "")
+    if not value:
+        value = _scene_meta(scene).get(key, "")
+    value = str(value or "").strip()
+    return value if value in valid_values else default
+
+
+def _validated_shot_or_scene_value(
+    scene: Any,
+    shot: Any,
+    keys: tuple[str, ...],
+    valid_values: set[str],
+    default: str,
+) -> str:
+    for key in keys:
+        value = str(_shot_get(shot, key, "") or "").strip()
+        if value in valid_values:
+            return value
+    for key in keys:
+        value = str(_scene_get(scene, key, "") or "").strip()
+        if value in valid_values:
+            return value
+    return default
+
+
+def _dramatic_intent(scene_intent: str, pacing: str) -> str:
+    base = {
+        "establishing": "orient the audience in the scene's space and stakes",
+        "dialogue": "make the spoken conflict and relationship tension readable",
+        "action": "prioritize kinetic cause and effect with clear screen direction",
+        "reaction": "hold on emotional consequence before the next beat",
+        "transition": "carry the audience cleanly into the next story beat",
+    }[scene_intent]
+    pacing_clause = {
+        "slow": "using held beats and controlled tempo",
+        "medium": "with balanced scene rhythm",
+        "fast": "with urgent rhythm and compressed decision time",
+    }[pacing]
+    return f"{base}, {pacing_clause}"
+
+
+def _emotional_target(emotion_tone: str) -> str:
+    return {
+        "anger": "keep the performance sharp, confrontational, and unstable",
+        "sadness": "let loss and hesitation sit visibly in the frame",
+        "joy": "make warmth and release feel immediate",
+        "tension": "sustain pressure and unresolved danger",
+        "calm": "keep the moment composed, legible, and unhurried",
+        "fear": "make the threat feel close and unavoidable",
+        "surprise": "create a clean reveal and visible reaction beat",
+        "neutral": "keep the emotional read clear without overstatement",
+    }[emotion_tone]
+
+
+def _narrative_focus(subject_focus: str, scene_intent: str) -> str:
+    focus = {
+        "single_character": "the lead character's immediate decision",
+        "two_shot": "the relationship pressure between two characters",
+        "group": "group dynamics and changing alignment",
+        "environment": "environmental context and spatial stakes",
+    }[subject_focus]
+    if scene_intent == "establishing":
+        return f"{focus}, with clear orientation for the audience"
+    if scene_intent == "reaction":
+        return f"{focus}, emphasizing consequence over action"
+    return focus
+
+
+def _shot_size_for(subject_focus: str, scene_intent: str) -> str:
+    if scene_intent == "establishing" and subject_focus == "environment":
+        return "extreme_wide"
+    return {
+        "single_character": "close_up",
+        "two_shot": "medium",
+        "group": "wide",
+        "environment": "wide",
+    }[subject_focus]
+
+
+def _camera_language(camera_movement: str, shot_size: str, emotion_tone: str) -> dict[str, str]:
+    movement = {
+        "dramatic_push": "push in to compress attention on the decisive beat",
+        "slow_push": "slow push in to increase emotional pressure",
+        "pull_back": "pull back to reveal context and consequence",
+        "melancholy_pan": "slow pan across the scene to carry reflective mood",
+        "establishing_tilt": "tilt to introduce scale and spatial hierarchy",
+        "static": "locked-off frame that lets performance and blocking carry the beat",
+    }[camera_movement]
+    lens = {
+        "extreme_close_up": "telephoto macro compression",
+        "close_up": "short telephoto portrait compression",
+        "medium": "normal lens with natural perspective",
+        "wide": "wide lens for spatial readability",
+        "extreme_wide": "wide lens emphasizing geography and scale",
+    }[shot_size]
+    depth = "shallow depth of field" if shot_size in {"extreme_close_up", "close_up"} else "deep readable focus"
+    if emotion_tone in {"tension", "fear", "sadness"} and shot_size in {"medium", "wide", "extreme_wide"}:
+        depth = "selective focus with controlled background separation"
+    return {
+        "movement": movement,
+        "lens": lens,
+        "depth_of_field": depth,
+        "framing": _framing_for(shot_size),
+    }
+
+
+def _framing_for(shot_size: str) -> str:
+    return {
+        "extreme_close_up": "detail dominates the frame with minimal environment",
+        "close_up": "face or decisive prop carries the composition",
+        "medium": "upper body and immediate relationship space stay visible",
+        "wide": "characters and environment share the frame",
+        "extreme_wide": "environment establishes the scene before performance detail",
+    }[shot_size]
+
+
+def _visual_content(
+    visual_basis: str,
+    subject_focus: str,
+    scene_intent: str,
+    emotion_tone: str,
+    camera_language: dict[str, str],
+) -> dict[str, str]:
+    basis = _shorten(visual_basis, 180)
+    focus_label = subject_focus.replace("_", " ")
+    return {
+        "shot_description": f"{basis}; directed as a {scene_intent} beat with {emotion_tone} tone",
+        "foreground": _foreground_for(subject_focus),
+        "midground": _midground_for(subject_focus, basis),
+        "background": _background_for(scene_intent),
+        "composition": camera_language["framing"],
+        "motion": camera_language["movement"],
+        "lighting": _lighting_for(emotion_tone),
+        "focus": f"audience attention stays on {focus_label} and the scene's dramatic turn",
+    }
+
+
+def _foreground_for(subject_focus: str) -> str:
+    return {
+        "single_character": "the principal character or decisive prop anchors the foreground",
+        "two_shot": "both characters share foreground weight without losing eyeline clarity",
+        "group": "the nearest character cluster establishes the group's immediate pressure",
+        "environment": "foreground objects frame the location and lead into the space",
+    }[subject_focus]
+
+
+def _midground_for(subject_focus: str, basis: str) -> str:
+    if subject_focus == "environment":
+        return f"the main action sits inside the location: {basis}"
+    return f"performance and blocking express the beat: {basis}"
+
+
+def _background_for(scene_intent: str) -> str:
+    return {
+        "establishing": "background geography stays readable for orientation",
+        "dialogue": "background stays quiet so relationship tension remains dominant",
+        "action": "background preserves screen direction and impact context",
+        "reaction": "background is restrained to protect the emotional pause",
+        "transition": "background cues the next location or story movement",
+    }[scene_intent]
+
+
+def _lighting_for(emotion_tone: str) -> str:
+    return {
+        "anger": "hard contrast with controlled highlights",
+        "sadness": "soft, low-key light with muted contrast",
+        "joy": "open, warm light with clean facial readability",
+        "tension": "narrow contrast and motivated shadow",
+        "calm": "balanced natural light with low visual noise",
+        "fear": "low-key light with threatening negative space",
+        "surprise": "clear reveal light that isolates the reaction",
+        "neutral": "clean motivated light with readable faces and space",
+    }[emotion_tone]
