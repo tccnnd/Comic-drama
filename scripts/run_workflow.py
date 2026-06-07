@@ -33,9 +33,12 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 from scripts import tts_engines
 from scripts.director_classifier import (
     DirectorClassificationError,
+    VISUAL_CONTENT_FIELDS,
     apply_default_classification,
     apply_llm_classification,
     apply_rules_classification,
+    build_director_plan,
+    build_shot_visual_content,
     classify_scenes_batch,
 )
 from scripts.bgm_matcher import select_bgm_for_scene
@@ -1904,6 +1907,57 @@ def _scene_duration_seconds(scene: dict[str, Any]) -> float:
         return 4.0
 
 
+def normalize_shot_plan_visual_content(scene: dict[str, Any], shot_plan: dict[str, Any]) -> dict[str, Any]:
+    """Ensure each shot carries the additive director-interpretation fields."""
+    if not isinstance(scene, dict):
+        scene = {}
+    if not isinstance(shot_plan, dict):
+        return shot_plan
+    shots = shot_plan.get("shots")
+    if not isinstance(shots, list):
+        return shot_plan
+
+    for shot in shots:
+        if not isinstance(shot, dict):
+            continue
+        generated = build_shot_visual_content(scene, shot)
+
+        if not str(shot.get("shot_size") or "").strip():
+            shot["shot_size"] = generated["shot_size"]
+        if not str(shot.get("dramatic_intent") or "").strip():
+            shot["dramatic_intent"] = generated["dramatic_intent"]
+
+        visual_prototype = shot.get("visual_prototype")
+        if not isinstance(visual_prototype, dict):
+            visual_prototype = {}
+        shot["visual_prototype"] = _merge_default_dict(generated["visual_prototype"], visual_prototype)
+
+        camera_language = shot.get("camera_language")
+        if not isinstance(camera_language, dict):
+            camera_language = {}
+        shot["camera_language"] = _merge_default_dict(generated["camera_language"], camera_language)
+
+        visual_content = shot.get("visual_content")
+        if not isinstance(visual_content, dict):
+            visual_content = {}
+        elif "_source" not in visual_content and any(str(visual_content.get(key) or "").strip() for key in VISUAL_CONTENT_FIELDS):
+            visual_content = {**visual_content, "_source": "legacy"}
+        shot["visual_content"] = _merge_default_dict(generated["visual_content"], visual_content)
+
+    return shot_plan
+
+
+def _merge_default_dict(defaults: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    merged = deepcopy(defaults)
+    for key, value in current.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        merged[key] = deepcopy(value)
+    return merged
+
+
 def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
     """Build the persisted, scene-relative shot plan contract for a scene."""
     if not isinstance(scene, dict):
@@ -1996,7 +2050,7 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
         )
         source = "synthesized"
 
-    return {
+    shot_plan = {
         "version": 1,
         "scene_id": scene_id,
         "scene_order": order,
@@ -2005,6 +2059,7 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
         "source": source,
         "shots": shot_timeline,
     }
+    return normalize_shot_plan_visual_content(scene, shot_plan)
 
 
 def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
@@ -2672,23 +2727,98 @@ def download_comfyui_asset(asset_info: dict, out_path: Path) -> None:
         out_path.write_bytes(response.read())
 
 
+def _scene_prompt_mapping(scene: StoryScene | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(scene, dict):
+        return deepcopy(scene)
+    payload = asdict(scene)
+    for key in ("director_plan", "shot_plan"):
+        value = getattr(scene, key, None)
+        if value is not None:
+            payload[key] = deepcopy(value)
+    return payload
+
+
+def _existing_scene_shot_plan(scene: StoryScene | dict[str, Any]) -> dict[str, Any] | None:
+    if isinstance(scene, dict):
+        value = scene.get("shot_plan")
+    else:
+        value = getattr(scene, "shot_plan", None)
+    return value if isinstance(value, dict) else None
+
+
+def _shot_visual_content_prompt_lines(shot_plan: dict[str, Any]) -> list[str]:
+    shots = shot_plan.get("shots") if isinstance(shot_plan, dict) else []
+    if not isinstance(shots, list):
+        return []
+    lines: list[str] = []
+    for index, shot in enumerate(shots[:6], start=1):
+        if not isinstance(shot, dict):
+            continue
+        visual_content = shot.get("visual_content")
+        if not isinstance(visual_content, dict) or not visual_content:
+            continue
+        visual_prototype = shot.get("visual_prototype") if isinstance(shot.get("visual_prototype"), dict) else {}
+        constraints = visual_prototype.get("constraints") if isinstance(visual_prototype.get("constraints"), dict) else {}
+        camera_language = shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+        parts = [
+            f"shot {int(shot.get('shot_order') or index)} visual content",
+            f"visual_content_source: {visual_content.get('_source')}",
+            f"prototype_id: {visual_prototype.get('id')}",
+            f"prototype_mode: {visual_prototype.get('mode')}",
+            f"hard_constraints: {', '.join(str(item) for item in constraints.get('hard', []) if item)}",
+            f"soft_constraints: {', '.join(str(item) for item in constraints.get('soft', []) if item)}",
+            f"shot_description: {visual_content.get('shot_description')}",
+            f"foreground: {visual_content.get('foreground')}",
+            f"midground: {visual_content.get('midground')}",
+            f"background: {visual_content.get('background')}",
+            f"composition: {visual_content.get('composition')}",
+            f"motion: {visual_content.get('motion')}",
+            f"lighting: {visual_content.get('lighting')}",
+            f"focus: {visual_content.get('focus')}",
+            f"shot_size: {shot.get('shot_size')}",
+            f"camera_language: {camera_language.get('movement')}; {camera_language.get('lens')}; {camera_language.get('depth_of_field')}",
+            f"dramatic_intent: {shot.get('dramatic_intent')}",
+        ]
+        lines.append("; ".join(str(part).strip() for part in parts if str(part).strip() and not str(part).endswith(": None")))
+    return lines
+
+
+def _scene_visual_prompt_source(scene: StoryScene, duration: float) -> tuple[str, bool]:
+    existing_shot_plan = _existing_scene_shot_plan(scene)
+    if existing_shot_plan is not None:
+        visual_lines = _shot_visual_content_prompt_lines(existing_shot_plan)
+        if visual_lines:
+            return "\n".join(visual_lines), True
+        return clean_comfyui_visual_prompt(scene.visual), False
+
+    scene_payload = _scene_prompt_mapping(scene)
+    scene_payload.setdefault("duration_seconds", duration)
+    visual_lines = _shot_visual_content_prompt_lines(build_shot_plan(scene_payload))
+    if visual_lines:
+        return "\n".join(visual_lines), True
+    return clean_comfyui_visual_prompt(scene.visual), False
+
+
 def build_scene_video_prompts(scene: StoryScene, duration: float, run_dir: Path) -> tuple[str, str]:
     """Build optimized positive and negative prompts for scene video generation.
 
     Prompt structure:
     1. Quality tags (masterpiece, best quality)
-    2. Scene visual description (cleaned)
+    2. Structured shot visual_content when available, else cleaned scene visual
     3. Character appearance anchors
     4. Motion/composition tags
     """
     # Quality prefix for better generation
     quality_prefix = "masterpiece, best quality, full color, vibrant colors, digital painting, colored, highly detailed"
 
-    prompt_parts = [quality_prefix, clean_comfyui_visual_prompt(scene.visual), infer_character_appearance_hint(scene)]
+    visual_source, uses_visual_content = _scene_visual_prompt_source(scene, duration)
+    prompt_parts = [quality_prefix, visual_source, infer_character_appearance_hint(scene)]
     if scene.character_prompt_compilation:
         prompt_parts.append(str(scene.character_prompt_compilation).strip())
     if scene.character_descriptions:
         prompt_parts.append(f"character descriptions: {scene.character_descriptions}")
+    if uses_visual_content:
+        prompt_parts.append("visual_content is the primary visual source; dialogue is context only")
     prompt_parts.append(
         "continuous motion, expressive acting, consistent lighting, stable character-environment relationship, cinematic composition"
     )
@@ -2717,11 +2847,13 @@ def build_scene_video_prompts(scene: StoryScene, duration: float, run_dir: Path)
     project_root = find_project_root(run_dir)
     if project_root is not None:
         compiler = PromptCompiler(project_root)
-        prompt_source_parts = [clean_comfyui_visual_prompt(scene.visual)]
+        prompt_source_parts = [visual_source]
         if scene.character_prompt_compilation:
             prompt_source_parts.append(str(scene.character_prompt_compilation).strip())
         if scene.character_descriptions:
             prompt_source_parts.append(f"character descriptions: {scene.character_descriptions}")
+        if uses_visual_content:
+            prompt_source_parts.append("visual_content is the primary visual source; dialogue is context only")
         compiled = compiler.compile(
             ", ".join(part for part in prompt_source_parts if str(part).strip()),
             list(scene.characters or []),
@@ -5699,6 +5831,8 @@ def main() -> None:
             "voice": str(item["voice"]),
             **scene_graph,
         }
+        storyboard_scene["director_plan"] = build_director_plan(storyboard_scene)
+        storyboard_scene["shot_plan"] = build_shot_plan(storyboard_scene)
         storyboard_scenes.append(storyboard_scene)
         storyboard_shot_count += len(scene_graph.get("shots") or [])
     canonical_timeline = build_canonical_timeline(

@@ -9,8 +9,8 @@ live in their own docs and specs.
 ```text
 script
   -> roles / assets
-  -> director interpretation        (v0.5.0 spec)
-  -> shot_plan + visual_content      (v0.2.0 shot_plan; visual_content is v0.5.0 spec)
+  -> director interpretation        (v0.5.0 implementation in progress)
+  -> shot_plan + visual_prototype + visual_content
   -> production_bible
   -> video provider / local 2.5D fallback   (v0.2.0)
   -> canonical_timeline               (v0.2.0 provenance enrichment)
@@ -31,7 +31,7 @@ review, provider routing, governance, and export).
 | Video generation mainline | Real video as primary renderer; local 2.5D as explicit, observable fallback; per-scene generation provenance; canonical-timeline metadata + real/fallback summary | v0.2.0 | Delivered on `main` |
 | Consistency governance | Five-dimension continuity (character/lighting/environment/prop/camera); per-scene verdict; project ledger; `report`/`block` policy | v0.3.0 | Delivered on `main` |
 | Director review console | In-place review console: overview, triage filter/sort, unified review unit, per-scene + serial batch rerender | v0.4.0 | Delivered on `main` |
-| Director interpretation | Structured `director_plan` (why) + per-shot `visual_content` (what); provider prompt consumes `visual_content` | v0.5.0 | Spec complete (local) |
+| Director interpretation | Structured `director_plan` (why) with scene-level `shot_archetypes`; per-shot `visual_prototype` (`id`, params, hard/soft/guideline constraints) renders deterministic `visual_content`; provider prompt consumes `visual_content` plus prototype constraints | v0.5.0 | Deterministic-first implementation in progress; LLM tier deferred |
 
 ## Merge State
 
@@ -45,11 +45,12 @@ main
   -> v0.4.0 director-review-console
 ```
 
-The v0.5.0 spec branch (`codex/director-interpretation-mainline`) is separate.
-Its implementation should now be created on a new branch based on current
-`main`, because current `main` contains the v0.2.0
-`shot_plan`/`canonical_timeline`/`build_scene_video_prompts` refactor that
-v0.5.0 extends.
+The v0.5.0 implementation now extends the current `main`
+`shot_plan`/`canonical_timeline`/`build_scene_video_prompts` path with a
+deterministic director interpretation layer. The first pass is intentionally
+small: high-frequency dialogue/reaction and high-weight danger/action beats can
+lock to visual prototypes, while low-weight or uncovered beats remain freeform
+and record a prototype gap for later library expansion.
 
 ## Minimal Demo Path
 
@@ -85,8 +86,9 @@ runs depend on the environment and remain pending:
 
 ## Future Lines (specced or deferred)
 
-- `director-interpretation-mainline` (v0.5.0): spec complete; deterministic-first
-  implementation pending, LLM tier deferred.
+- `director-interpretation-mainline` (v0.5.0): deterministic-first
+  implementation in progress; visual prototype library seeded; LLM tier
+  deferred.
 - `provider-cost-controls`: cost/timing/quota accounting; future spec.
 - consistency-regeneration: the deferred `regenerate` policy mode from v0.3.0;
   future spec, to add a render feedback loop only after verdicts prove stable.
