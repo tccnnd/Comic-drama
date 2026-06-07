@@ -87,14 +87,27 @@ Rationale unchanged: v0.5.0 modifies the `shot_plan` / `canonical_timeline` /
 
 ### Slice C — Prompt consumption (the key change)
 
-- [ ] 8. Make `build_scene_video_prompts` consume `visual_content`
+> Scope note (as implemented): Slice C consumes `visual_content` AND introduces a
+> deterministic `visual_prototype` shot-language constraint layer
+> (`scripts/director_classifier.py`): each shot gets a `visual_prototype` with a
+> `mode` (`prototype_lock` | `freeform`), an `id` from a fixed prototype set, and
+> hard/soft/guideline `constraints`; `freeform` records a `gap.reason`. The
+> prompt builder consumes these constraints alongside `visual_content`. This is
+> deterministic (no LLM) and consistent with the spec's deterministic-first
+> philosophy, but it adds a constraint layer beyond the original "consume
+> visual_content" wording.
+
+- [x] 8. Make `build_scene_video_prompts` consume `visual_content`
   - Build the positive prompt primarily from `visual_content`
     (shot_description + composition + lighting + focus) + `shot_size` +
     `camera_language`; demote dialogue to optional context. Retain the legacy
     fallback when `visual_content` is absent.
+  - Implemented additionally: per-shot `visual_prototype` (mode/id/constraints)
+    is emitted by `build_shot_visual_content`, merged additively in
+    `normalize_shot_plan_visual_content`, and surfaced in the prompt lines.
   - _Requirements: 3.1, 3.2, 3.3, Property 4, Property 5_
 
-- [ ] 9. Slice C prompt tests
+- [x] 9. Slice C prompt tests
   - Prompt includes visual_content tokens (foreground/background/composition/
     motion/focus) and does not use raw dialogue as the primary visual driver
     when visual_content is present; legacy scene falls back and still builds.
