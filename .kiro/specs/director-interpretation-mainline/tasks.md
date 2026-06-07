@@ -19,16 +19,21 @@ script → director_meta → director_plan → shot_plan + visual_content
 ## Implementation Base / Branching Constraint (hard prerequisite)
 
 ```text
-Implementation branch MUST be based on:
-- codex/video-provider-mainline, or
-- main after v0.2.0 has merged.
-Do NOT implement on plain current main.
+Implementation branch MUST be based on current `main`.
 ```
 
-Rationale: v0.5.0 modifies the `shot_plan` → `canonical_timeline` →
-`build_scene_video_prompts` chain, which was refactored by v0.2.0. Basing on
-old `main` would produce an incompatible implementation. (The spec branch may be
-based on `main`; only the implementation branch carries this constraint.)
+As of PRs #9–#12, v0.2.0 (video-provider-mainline), v0.3.0
+(global-consistency-governance), and v0.4.0 (director-review-console) are all
+merged into `main` (`origin/main` at the PR #12 merge). The earlier constraint
+("based on `codex/video-provider-mainline`, or `main` after v0.2.0 merges") has
+therefore converged to simply: **base the implementation branch on current
+`main`**, which now contains the full `shot_plan` → `canonical_timeline` →
+`build_scene_video_prompts` chain this spec modifies. (The spec branch was based
+on the pre-merge `main`; the implementation branch must use the post-merge
+`main`.)
+
+Rationale unchanged: v0.5.0 modifies the `shot_plan` / `canonical_timeline` /
+`build_scene_video_prompts` chain refactored by v0.2.0, which is now in `main`.
 
 ## Tasks
 
@@ -151,17 +156,31 @@ based on `main`; only the implementation branch carries this constraint.)
 
 ## Handoff to Codex
 
-- Base the implementation branch per the Branching Constraint above (NOT plain
-  `main`).
-- Files to edit: `scripts/run_workflow.py`, `scripts/director_classifier.py`
-  (or new `scripts/director_interpreter.py`), `backend/project_models.py`,
-  `backend/project_runtime.py`, `docs/`, tests.
-- Files NOT to edit: `scripts/video_provider_adapters.py`, `video_providers.py`,
-  `backend/consistency_validator.py`, `backend/consistency_governance.py`,
-  review-console frontend.
-- Validation: `python -m py_compile` + targeted pytest; sample workflow when
-  available.
-- Acceptance checklist: AC-1 through AC-8 in `requirements.md`.
+Status: **ready for implementation handoff** (v0.2.0–v0.4.0 are merged into
+`main`).
+
+- Base the implementation branch on **current `main`** (per the Branching
+  Constraint above). Suggested name: `codex/director-interpretation-mainline-impl`.
+- **Start with Slice A only** (tasks 1–4): deterministic-first director
+  interpretation — `director_plan`, per-shot `visual_content`, deterministic
+  planner, and unit tests. Do NOT wire the pipeline (Slice B), change the prompt
+  (Slice C), connect an LLM, or expand into cost/review-UI/provider-strategy.
+- Files Slice A may edit: `scripts/director_classifier.py` (or new
+  `scripts/director_interpreter.py`) for the planner/structures, and the Slice A
+  unit tests under `tests/`.
+- Files Slice A must NOT edit yet: `scripts/run_workflow.py` (pipeline wiring is
+  Slice B; `build_scene_video_prompts` change is Slice C), `backend/*`
+  (persistence is Slice B), and anything in provider adapters, governance
+  scoring, or the review console.
+- Files NOT to edit at all in this spec: `scripts/video_provider_adapters.py`,
+  `video_providers.py`, `backend/consistency_validator.py`,
+  `backend/consistency_governance.py`, review-console frontend.
+- Validation: `python -m py_compile` + targeted pytest for Slice A
+  (no-LLM/legacy/empty-shot_plan).
+- Acceptance focus (whole spec): the video-provider prompt MUST be driven by
+  `visual_content`, not raw dialogue (AC-3). Slice A only builds the structures
+  + deterministic planner that make this possible; the prompt change lands in
+  Slice C.
 - Known risks: `build_scene_video_prompts` and `build_shot_plan` in
   `run_workflow.py` are high-traffic and were touched by v0.2.0 — preserve the
-  legacy fallback and additive shapes.
+  legacy fallback and additive shapes (relevant to Slices B/C).
