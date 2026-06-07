@@ -35,9 +35,11 @@ from scripts.run_workflow import (
     normalize_crop_box,
     normalize_episode_pacing,
     normalize_episode_phase,
+    normalize_shot_plan_visual_content,
     normalize_subtitle_style,
     validate_script_text,
 )
+from scripts.director_classifier import build_director_plan
 
 from backend.asset_retention import cleanup_project_versions
 from backend.event_bus import project_event_bus
@@ -368,6 +370,15 @@ def replace_project_storyboard_from_preview(
     return _save_project_with_project_event(project)
 
 
+def _normalize_director_interpretation(scene: dict[str, Any]) -> None:
+    if not isinstance(scene.get("director_plan"), dict):
+        scene["director_plan"] = build_director_plan(scene)
+    if not isinstance(scene.get("shot_plan"), dict):
+        scene["shot_plan"] = build_shot_plan(scene)
+    else:
+        scene["shot_plan"] = normalize_shot_plan_visual_content(scene, scene["shot_plan"])
+
+
 def load_project(project_id: str) -> dict[str, Any]:
     path = project_file(project_id)
     if not path.exists():
@@ -390,8 +401,7 @@ def load_project(project_id: str) -> dict[str, Any]:
                 scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
             if not isinstance(scene.get("generation_meta"), dict):
                 scene["generation_meta"] = {}
-            if not isinstance(scene.get("shot_plan"), dict):
-                scene["shot_plan"] = build_shot_plan(scene)
+            _normalize_director_interpretation(scene)
             scene["governance"] = _normalized_governance(scene)
         # Sync visual data from AssetStore into project.characters
         from backend.character_sync import sync_characters_from_assets
@@ -529,8 +539,7 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
             scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
         if not isinstance(scene.get("generation_meta"), dict):
             scene["generation_meta"] = {}
-        if not isinstance(scene.get("shot_plan"), dict):
-            scene["shot_plan"] = build_shot_plan(scene)
+        _normalize_director_interpretation(scene)
         scene["governance"] = _normalized_governance(scene)
         for key, value in default_drama_config().items():
             scene.setdefault(key, value)

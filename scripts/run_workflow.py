@@ -36,6 +36,8 @@ from scripts.director_classifier import (
     apply_default_classification,
     apply_llm_classification,
     apply_rules_classification,
+    build_director_plan,
+    build_shot_visual_content,
     classify_scenes_batch,
 )
 from scripts.bgm_matcher import select_bgm_for_scene
@@ -1904,6 +1906,50 @@ def _scene_duration_seconds(scene: dict[str, Any]) -> float:
         return 4.0
 
 
+def normalize_shot_plan_visual_content(scene: dict[str, Any], shot_plan: dict[str, Any]) -> dict[str, Any]:
+    """Ensure each shot carries the additive director-interpretation fields."""
+    if not isinstance(scene, dict):
+        scene = {}
+    if not isinstance(shot_plan, dict):
+        return shot_plan
+    shots = shot_plan.get("shots")
+    if not isinstance(shots, list):
+        return shot_plan
+
+    for shot in shots:
+        if not isinstance(shot, dict):
+            continue
+        generated = build_shot_visual_content(scene, shot)
+
+        if not str(shot.get("shot_size") or "").strip():
+            shot["shot_size"] = generated["shot_size"]
+        if not str(shot.get("dramatic_intent") or "").strip():
+            shot["dramatic_intent"] = generated["dramatic_intent"]
+
+        camera_language = shot.get("camera_language")
+        if not isinstance(camera_language, dict):
+            camera_language = {}
+        shot["camera_language"] = _merge_default_dict(generated["camera_language"], camera_language)
+
+        visual_content = shot.get("visual_content")
+        if not isinstance(visual_content, dict):
+            visual_content = {}
+        shot["visual_content"] = _merge_default_dict(generated["visual_content"], visual_content)
+
+    return shot_plan
+
+
+def _merge_default_dict(defaults: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    merged = deepcopy(defaults)
+    for key, value in current.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        merged[key] = deepcopy(value)
+    return merged
+
+
 def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
     """Build the persisted, scene-relative shot plan contract for a scene."""
     if not isinstance(scene, dict):
@@ -1996,7 +2042,7 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
         )
         source = "synthesized"
 
-    return {
+    shot_plan = {
         "version": 1,
         "scene_id": scene_id,
         "scene_order": order,
@@ -2005,6 +2051,7 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
         "source": source,
         "shots": shot_timeline,
     }
+    return normalize_shot_plan_visual_content(scene, shot_plan)
 
 
 def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
@@ -5699,6 +5746,8 @@ def main() -> None:
             "voice": str(item["voice"]),
             **scene_graph,
         }
+        storyboard_scene["director_plan"] = build_director_plan(storyboard_scene)
+        storyboard_scene["shot_plan"] = build_shot_plan(storyboard_scene)
         storyboard_scenes.append(storyboard_scene)
         storyboard_shot_count += len(scene_graph.get("shots") or [])
     canonical_timeline = build_canonical_timeline(
