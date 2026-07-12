@@ -132,6 +132,7 @@ def provider_project(tmp_path, monkeypatch):
 def patched_render_runtime(monkeypatch):
     import backend.scene_renderer as scene_renderer
     import scripts.run_workflow as run_workflow
+    import scripts.rw_render as rw_render
 
     monkeypatch.setattr(scene_renderer, "load_env_file", lambda: None)
     monkeypatch.setattr(scene_renderer, "get_ffmpeg_exe", lambda: "ffmpeg")
@@ -144,11 +145,17 @@ def patched_render_runtime(monkeypatch):
 
     monkeypatch.setattr(scene_renderer, "render_voice_track", fake_voice_track)
     monkeypatch.setattr(run_workflow.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(rw_render.time, "sleep", lambda seconds: None)
     monkeypatch.setattr(run_workflow, "mix_voice_with_bgm", lambda ffmpeg, voice_path, out_path, duration, style, project_root=None: voice_path)
+    monkeypatch.setattr(rw_render, "mix_voice_with_bgm", lambda ffmpeg, voice_path, out_path, duration, style, project_root=None: voice_path)
     monkeypatch.setattr(run_workflow, "mix_scene_sfx", lambda ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=None: scene_audio)
+    monkeypatch.setattr(rw_render, "mix_scene_sfx", lambda ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=None: scene_audio)
     monkeypatch.setattr(run_workflow, "build_scene_video_prompts", lambda scene, duration, run_dir: ("positive prompt", "negative prompt"))
+    monkeypatch.setattr(rw_render, "build_scene_video_prompts", lambda scene, duration, run_dir: ("positive prompt", "negative prompt"))
     monkeypatch.setattr(run_workflow, "mux_audio_to_visual", lambda ffmpeg, visual_path, voice_path, out_path: out_path.write_bytes(b"muxed") or out_path)
+    monkeypatch.setattr(rw_render, "mux_audio_to_visual", lambda ffmpeg, visual_path, voice_path, out_path: out_path.write_bytes(b"muxed") or out_path)
     monkeypatch.setattr(run_workflow, "apply_scene_grade", lambda ffmpeg, input_path, out_path, scene: out_path.write_bytes(b"graded") or out_path)
+    monkeypatch.setattr(rw_render, "apply_scene_grade", lambda ffmpeg, input_path, out_path, scene: out_path.write_bytes(b"graded") or out_path)
     monkeypatch.setattr(
         run_workflow,
         "build_scene_beats",
@@ -163,7 +170,22 @@ def patched_render_runtime(monkeypatch):
             }
         ],
     )
+    monkeypatch.setattr(
+        rw_render,
+        "build_scene_beats",
+        lambda scene, total_duration, spoken_text: [
+            {
+                "duration": float(total_duration),
+                "zoom": 1.0,
+                "center_x": 0.5,
+                "center_y": 0.5,
+                "hold_in_ratio": 0.0,
+                "hold_out_ratio": 0.0,
+            }
+        ],
+    )
     monkeypatch.setattr(run_workflow, "scene_should_screen_shake", lambda scene: False)
+    monkeypatch.setattr(rw_render, "scene_should_screen_shake", lambda scene: False)
 
     def fake_compose(base_image, scene, beat, run_dir, scene_id, idx, total):
         frame = Path(run_dir) / f"frame_{idx}.png"
@@ -179,8 +201,11 @@ def patched_render_runtime(monkeypatch):
         return visual_path
 
     monkeypatch.setattr(run_workflow, "compose_comic_frame", fake_compose)
+    monkeypatch.setattr(rw_render, "compose_comic_frame", fake_compose)
     monkeypatch.setattr(run_workflow, "render_silent_visual_segment", fake_segment)
+    monkeypatch.setattr(rw_render, "render_silent_visual_segment", fake_segment)
     monkeypatch.setattr(run_workflow, "concat_video_segments", fake_concat)
+    monkeypatch.setattr(rw_render, "concat_video_segments", fake_concat)
     try:
         import backend.consistency_validator as consistency_validator
 
@@ -1345,6 +1370,8 @@ def test_mock_remote_success_persists_real_video_metadata(provider_project, patc
     monkeypatch.setenv("VIDEO_RETRY_DELAY_SECONDS", "0")
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_success)
+    import scripts.rw_render as rw_render
+    monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_success)
 
     result = project_runtime.rerender_scene_video(created["project_id"], 1)
     scene = result["scenes"][0]
@@ -1608,6 +1635,8 @@ def test_mock_remote_report_failure_persists_fallback_metadata(provider_project,
     monkeypatch.setenv("VIDEO_RETRY_DELAY_SECONDS", "0")
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
+    import scripts.rw_render as rw_render
+    monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     result = project_runtime.rerender_scene_video(created["project_id"], 1)
     scene = result["scenes"][0]
@@ -1641,6 +1670,8 @@ def test_mock_remote_silent_failure_records_fallback_without_warnings(provider_p
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.delenv("DOUBAO_VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
+    import scripts.rw_render as rw_render
+    monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     result = project_runtime.rerender_scene_video(created["project_id"], 1)
     scene = result["scenes"][0]
@@ -1674,6 +1705,8 @@ def test_video_strict_env_overrides_report_mode_in_renderer(provider_project, pa
     monkeypatch.setenv("VIDEO_RETRY_DELAY_SECONDS", "0")
     monkeypatch.delenv("DOUBAO_VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
+    import scripts.rw_render as rw_render
+    monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     assert video_fallback_mode("doubao") == "strict"
     with pytest.raises(RuntimeError) as exc_info:
@@ -1714,6 +1747,8 @@ def test_mock_remote_strict_failure_records_failed_history_without_video_asset(p
     monkeypatch.setenv("VIDEO_RETRY_DELAY_SECONDS", "0")
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
+    import scripts.rw_render as rw_render
+    monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     with pytest.raises(RuntimeError, match="strict provider failure"):
         project_runtime.rerender_scene_video(created["project_id"], 1)
@@ -1744,6 +1779,8 @@ def test_legacy_project_builds_timeline_and_rerenders_without_real_provider(prov
     monkeypatch.setenv("VIDEO_RETRY_DELAY_SECONDS", "0")
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_success)
+    import scripts.rw_render as rw_render
+    monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_success)
 
     loaded = project_runtime.load_project(created["project_id"])
     timeline = build_canonical_timeline(loaded)
