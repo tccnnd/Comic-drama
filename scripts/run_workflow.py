@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -50,6 +50,15 @@ from scripts.video_provider_adapters import VideoRenderRequest, render_remote_vi
 from video_providers import get_video_provider_spec, normalize_video_provider as resolve_video_provider_name
 from backend.video_generation import VideoGenerationResult, generation_meta_from_result, normalize_generation_meta, video_fallback_mode, video_render_granularity
 from backend.llm_hub import llm_client
+from backend.config_utils import (
+    env_value,
+    env_optional_value,
+    env_float,
+    env_bool,
+    coerce_int as _coerce_int,
+    coerce_float as _coerce_float,
+    coerce_bool as _coerce_bool,
+)
 
 edge_tts = tts_engines.edge_tts
 
@@ -373,37 +382,6 @@ def load_env_file(path: Path = ROOT / ".env") -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def env_value(*names: str, default: str = "") -> str:
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return default
-
-
-def env_optional_value(name: str, default: str = "") -> str:
-    if name in os.environ:
-        return os.environ.get(name, "").strip()
-    return default
-
-
-def env_float(*names: str, default: float) -> float:
-    raw = env_value(*names, default="")
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
-
-
-def env_bool(*names: str, default: bool = False) -> bool:
-    raw = env_value(*names, default="")
-    if not raw:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -699,34 +677,6 @@ def resolve_dialogue_voice(scene: StoryScene, speaker: str, spoken_text: str) ->
 
 def default_subtitle_style() -> dict:
     return dict(DEFAULT_SUBTITLE_STYLE)
-
-
-def _coerce_int(value: object, default: int, minimum: int, maximum: int) -> int:
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        number = default
-    return max(minimum, min(maximum, number))
-
-
-def _coerce_float(value: object, default: float, minimum: float, maximum: float) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        number = default
-    return max(minimum, min(maximum, number))
-
-
-def _coerce_bool(value: object, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    return default
 
 
 def default_episode_pacing() -> dict:

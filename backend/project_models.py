@@ -10,6 +10,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from backend.config_utils import coerce_int as _coerce_int_field
+
 try:
     import imageio_ffmpeg
 except ImportError:  # pragma: no cover - optional runtime dependency
@@ -258,14 +260,6 @@ def _normalize_audio_manifest(manifest: object) -> dict[str, Any]:
     if not isinstance(merged.get("sfx_triggers"), list):
         merged["sfx_triggers"] = []
     return merged
-
-
-def _coerce_int_field(value: object, default: int, minimum: int, maximum: int) -> int:
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        number = default
-    return max(minimum, min(maximum, number))
 
 
 def _scene_from_payload(scene: dict[str, Any]) -> StoryScene:

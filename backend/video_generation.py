@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from backend.config_utils import env_bool as _env_bool, coerce_bool as _coerce_bool
+
 try:
     from scripts.video_provider_adapters import render_remote_video_provider as _default_render_remote_video_provider
 except Exception:  # pragma: no cover - adapter import is optional for pure helper tests
@@ -84,13 +86,6 @@ class VideoShotDryRun(RuntimeError):
 # Cross-scene continuity
 # ---------------------------------------------------------------------------
 
-def _env_bool(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
-
-
 def video_provider_strict_env_name(provider_id: str) -> str:
     """Return the provider-specific strict-mode environment variable name."""
     normalized = str(provider_id or "").strip().upper().replace("-", "_")
@@ -138,21 +133,6 @@ def video_render_granularity(
         if normalized:
             return normalize_video_render_granularity(normalized)
     return "scene"
-
-
-def _coerce_bool(value: object, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    raw = str(value).strip().lower()
-    if not raw:
-        return default
-    if raw in {"1", "true", "yes", "on"}:
-        return True
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return default
 
 
 def _first_config_value(
