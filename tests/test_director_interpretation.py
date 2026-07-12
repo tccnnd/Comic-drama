@@ -281,7 +281,10 @@ def test_build_scene_video_prompts_uses_visual_content_as_primary_source(tmp_pat
     assert "visual_content is the primary visual source" in positive
     assert "visual_content_source: prototype" in positive
     assert "prototype_id:" in positive
-    assert "hard_constraints:" in positive
+    assert "prototype_constraints_hard MUST PRESERVE: object_dominates_frame" in positive
+    assert "prototype_constraints_soft SHOULD PRESERVE: no_environment_pan" in positive
+    assert "prototype_constraints_guidelines GUIDE: color_contrast_between_object_and_background" in positive
+    assert "hard_constraints:" not in positive
     assert "foreground: thumb hovering over the trigger" in positive
     assert "background: panicked crowd blurred into color streaks" in positive
     assert "composition: detonator centered with shallow negative space" in positive

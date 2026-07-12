@@ -6,12 +6,13 @@ Use this file as the default instruction layer for AI coding agents.
 ## Project Objective
 
 Comic Drama Workflow is an AI comic-drama production pipeline. The current
-strategic priority is to move from keyframe-driven 2.5D clips toward real
-video-provider scene generation while preserving a stable production spine:
+strategic priority is to complete the director-interpretation layer and move
+toward shot-level video rendering while preserving a stable production spine:
 
 ```text
-script -> roles/assets -> shot_plan -> production_bible
--> video provider -> canonical_timeline -> review/export
+script -> roles/assets -> director_plan + shot_plan + visual_prototype
+-> production_bible -> video provider -> canonical_timeline
+-> consistency governance -> director review console -> review/export
 ```
 
 ## Tool Roles
@@ -54,6 +55,7 @@ Run the checks that match the edited area:
 
 ```powershell
 python -m py_compile scripts\run_workflow.py backend\project_runtime.py backend\app.py video_providers.py scripts\video_provider_adapters.py
+python -m py_compile backend\video_generation.py backend\scene_renderer.py
 node --check frontend\app.js
 ```
 
@@ -74,11 +76,23 @@ python scripts\run_workflow.py --input inputs\sample_story.txt
 
 ## Current Version Direction
 
-The next planned feature line is:
+The project is currently moving through **v0.5.0**
+(`director-interpretation-mainline`). Delivered feature lines:
 
 ```text
 v0.2.0: video-provider-mainline
+v0.3.0: global-consistency-governance
+v0.4.0: director-review-console
+v0.5.0: director-interpretation
 ```
 
-It should make real video generation the primary scene rendering path and keep
-local 2.5D rendering as fallback.
+The next planned feature line is:
+
+```text
+next: shot-level-video-rendering
+```
+
+It should render each `shot_plan.shots[]` item through the video provider,
+assemble shot clips into scene clips, and persist per-shot provenance while
+keeping scene-level rendering as the default until live quota validation is
+stable.

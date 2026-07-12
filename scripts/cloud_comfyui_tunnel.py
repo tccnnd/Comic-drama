@@ -110,7 +110,7 @@ def main() -> int:
     )
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.set_missing_host_key_policy(paramiko.WarningPolicy())
     client.connect(
         hostname=config.ssh_host,
         port=config.ssh_port,

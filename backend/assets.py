@@ -13,7 +13,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.logger import get_logger
-from scripts.run_workflow import extract_json_object, load_env_file, post_llm_chat_completion
+from backend.project_models import validate_project_id
+from backend.llm_hub import llm_client
+from scripts.run_workflow import extract_json_object
 
 logger = get_logger(__name__)
 
@@ -133,7 +135,7 @@ def utc_iso() -> str:
 
 
 def project_dir(project_id: str) -> Path:
-    return WORKSPACE / project_id
+    return WORKSPACE / validate_project_id(project_id)
 
 
 def project_file(project_id: str) -> Path:
@@ -145,6 +147,7 @@ def assets_file(project_id: str) -> Path:
 
 
 def project_lock(project_id: str) -> threading.Lock:
+    project_id = validate_project_id(project_id)
     with _ASSET_LOCKS_GUARD:
         if project_id not in _ASSET_LOCKS:
             _ASSET_LOCKS[project_id] = threading.Lock()
@@ -343,23 +346,12 @@ def load_project_story_text(project_id: str) -> str:
 
 
 def _call_asset_extract_llm(script_text: str) -> dict[str, Any]:
-    load_env_file()
-    api_key = os.environ.get("LLM_API_KEY", "").strip()
-    base_url = os.environ.get("LLM_BASE_URL", "").strip().rstrip("/")
-    model = os.environ.get("LLM_MODEL", "").strip()
-    if not api_key or not base_url or not model:
-        raise RuntimeError("Missing LLM_API_KEY, LLM_BASE_URL, or LLM_MODEL. Configure .env before extracting assets.")
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "你是动漫短剧资产拆解助手。只输出 JSON，不要 Markdown，不要解释。"},
-            {"role": "user", "content": EXTRACT_PROMPT.format(script_text=script_text)},
-        ],
-        "temperature": 0.2,
-    }
-    body = post_llm_chat_completion(base_url, api_key, payload)
-    response_json = json.loads(body)
-    content = response_json["choices"][0]["message"]["content"]
+    content = llm_client.chat(
+        "你是动漫短剧资产拆解助手。只输出 JSON，不要 Markdown，不要解释。",
+        EXTRACT_PROMPT.format(script_text=script_text),
+        task="character_image",
+        temperature=0.2,
+    )
     parsed = extract_json_object(content)
     return parsed if isinstance(parsed, dict) else {}
 

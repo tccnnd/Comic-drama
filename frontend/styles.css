@@ -17,6 +17,22 @@
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
+.mini-table {
+  border-collapse: collapse;
+}
+.mini-table th,
+.mini-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.mini-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -463,6 +479,28 @@ select:focus {
 
 .field.full {
   grid-column: 1 / -1;
+}
+
+.api-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.api-profile-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.api-profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .section-stack {
@@ -938,8 +976,43 @@ select:focus {
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto auto minmax(180px, 1fr) minmax(150px, 0.9fr);
+  grid-template-rows: auto auto auto auto minmax(180px, 1fr) minmax(150px, 0.9fr);
   gap: 10px;
+}
+
+.review-provider-banner {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.review-provider-banner strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.review-provider-banner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-provider-banner.is-warning,
+.review-provider-banner.is-loading {
+  border-color: rgba(255, 203, 107, 0.34);
+  background: rgba(255, 203, 107, 0.08);
+}
+
+.review-provider-banner.is-error {
+  border-color: rgba(255, 122, 122, 0.38);
+  background: rgba(255, 122, 122, 0.08);
 }
 
 .review-overview {
@@ -1198,7 +1271,7 @@ select:focus {
 
 .review-unit-details {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
 }
 
@@ -1218,13 +1291,158 @@ select:focus {
 }
 
 .asset-readiness.is-warn {
-  color: var(--warning);
+  color: var(--warn);
   border-color: rgba(255, 196, 87, 0.35);
 }
 
 .asset-readiness.is-blocked {
   color: var(--danger);
   border-color: rgba(255, 101, 101, 0.35);
+}
+
+.shot-render-summary {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(143, 215, 255, 0.3);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(143, 215, 255, 0.08);
+  color: #8fd7ff;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shot-render-detail {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.shot-render-detail strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.shot-render-list {
+  display: grid;
+  gap: 5px;
+}
+
+.shot-render-row {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  border-left: 2px solid rgba(143, 215, 255, 0.55);
+  padding-left: 7px;
+}
+
+.shot-render-row.is-fallback,
+.shot-render-row.is-planned {
+  border-left-color: rgba(255, 196, 87, 0.65);
+}
+
+.shot-render-row.is-failed {
+  border-left-color: rgba(255, 101, 101, 0.7);
+}
+
+.shot-render-row.is-skipped,
+.shot-render-row.is-unknown {
+  border-left-color: rgba(148, 163, 184, 0.55);
+}
+
+.shot-render-row span,
+.shot-render-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shot-render-row span {
+  color: var(--text);
+}
+
+.shot-rerender-button {
+  width: fit-content;
+  margin-top: 2px;
+}
+
+.prototype-badge {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prototype-badge.is-locked {
+  color: #8fd7ff;
+  border-color: rgba(143, 215, 255, 0.35);
+}
+
+.prototype-badge.is-freeform {
+  color: var(--warn);
+  border-color: rgba(255, 196, 87, 0.35);
+}
+
+.prototype-detail {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.prototype-detail strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.prototype-shot-list {
+  display: grid;
+  gap: 5px;
+}
+
+.prototype-shot {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  border-left: 2px solid rgba(143, 215, 255, 0.55);
+  padding-left: 7px;
+}
+
+.prototype-shot.is-freeform {
+  border-left-color: rgba(255, 196, 87, 0.65);
+}
+
+.prototype-shot span,
+.prototype-shot small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prototype-shot span {
+  color: var(--text);
 }
 
 .review-unit-actions {
@@ -1288,7 +1506,7 @@ select:focus {
 }
 
 .review-badge.is-needs-work {
-  color: var(--warning);
+  color: var(--warn);
   border-color: rgba(255, 196, 87, 0.35);
 }
 
@@ -1741,12 +1959,12 @@ select:focus {
   gap: 8px;
   align-items: end;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
 }
 
-.shot-editor-label {
+.shot-editor-row .shot-name {
   min-width: 0;
   display: grid;
   gap: 3px;
@@ -1766,7 +1984,7 @@ select:focus {
 
 .temporal-preview {
   margin-top: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
   padding: 10px;
@@ -2186,10 +2404,6 @@ select:focus {
 
 .governance-dimension.is-fail {
   color: var(--danger);
-}
-
-.danger-text {
-  color: var(--danger) !important;
 }
 
 .production-meta-grid {
@@ -2700,6 +2914,7 @@ select:focus {
 
   .form-grid,
   .form-grid.three,
+  .api-profile-grid,
   .split-grid,
   .scene-editor,
   .overview-cards,

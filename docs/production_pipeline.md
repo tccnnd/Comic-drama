@@ -9,11 +9,12 @@ live in their own docs and specs.
 ```text
 script
   -> roles / assets
-  -> director interpretation        (v0.5.0 implementation in progress)
+  -> director interpretation        (v0.5.0 delivered)
   -> shot_plan + visual_prototype + visual_content
   -> production_bible
-  -> video provider / local 2.5D fallback   (v0.2.0)
-  -> canonical_timeline               (v0.2.0 provenance enrichment)
+  -> scene-level video provider / local 2.5D fallback   (v0.2.0)
+  -> shot-level provider assembly           (implementation complete, pending live validation)
+  -> canonical_timeline               (v0.2.0 provenance enrichment, shot-level in v0.6.0-pre)
   -> consistency governance           (v0.3.0)
   -> director review console          (v0.4.0)
   -> rerender / export
@@ -28,10 +29,11 @@ review, provider routing, governance, and export).
 
 | Stage | Capability | Version | Status |
 | --- | --- | --- | --- |
-| Video generation mainline | Real video as primary renderer; local 2.5D as explicit, observable fallback; per-scene generation provenance; canonical-timeline metadata + real/fallback summary | v0.2.0 | Delivered on `main` |
+| Video generation mainline | Scene-level real video as primary renderer; local 2.5D as explicit, observable fallback; per-scene generation provenance; canonical-timeline metadata + real/fallback summary | v0.2.0 | Delivered on `main`; live XL success validated |
 | Consistency governance | Five-dimension continuity (character/lighting/environment/prop/camera); per-scene verdict; project ledger; `report`/`block` policy | v0.3.0 | Delivered on `main` |
 | Director review console | In-place review console: overview, triage filter/sort, unified review unit, per-scene + serial batch rerender | v0.4.0 | Delivered on `main` |
-| Director interpretation | Structured `director_plan` (why) with scene-level `shot_archetypes`; per-shot `visual_prototype` (`id`, params, hard/soft/guideline constraints) renders deterministic `visual_content`; provider prompt consumes `visual_content` plus prototype constraints | v0.5.0 | Deterministic-first implementation in progress; LLM tier deferred |
+| Director interpretation | Structured `director_plan` (why) with scene-level `shot_archetypes`; per-shot `visual_prototype` (`id`, params, hard/soft/guideline constraints) renders deterministic `visual_content`; provider prompt consumes `visual_content` plus prototype constraints | v0.5.0 | Delivered on `main` (2026-06-07); deterministic-first, LLM tier deferred |
+| Shot-level video rendering | Render each `shot_plan.shots[]` item through the video provider, assemble shot clips into a scene clip, and persist per-shot provenance | next | Implementation 15/17 tasks complete (mock-provider tests passing); pending docs finalization (task 16) and optional live validation (task 17) |
 
 ## Merge State
 
@@ -51,6 +53,15 @@ deterministic director interpretation layer. The first pass is intentionally
 small: high-frequency dialogue/reaction and high-weight danger/action beats can
 lock to visual prototypes, while low-weight or uncovered beats remain freeform
 and record a prototype gap for later library expansion.
+Provider prompts preserve this layering without adapter-specific changes:
+prototype hard constraints are emitted as `MUST PRESERVE`, soft constraints as
+`SHOULD PRESERVE`, and guidelines as `GUIDE` quality hints.
+The first quality loop is manual and offline: `scripts/prototype_quality_scorecard.py`
+extracts prototype/freeform shots, output media paths, generation provenance,
+constraints, and empty 0-5 scoring fields so real provider output can be
+visually inspected and reviewed before expanding the prototype library further.
+The scorecard requires reviewer/evidence/rationale metadata because prompt-only
+scoring is not a valid quality signal.
 
 ## Minimal Demo Path
 
@@ -72,14 +83,16 @@ issue tracked separately.
 
 ## Environment-Gated Verification
 
-These are validated by tests and `node --check` / `py_compile`, but their live
-runs depend on the environment and remain pending:
+These are validated by tests and `node --check` / `py_compile`, but some live
+runs still depend on the environment:
 
 - **ComfyUI keyframe tunnel**: blocked here with
   `Error reading SSH protocol banner`; bypass with `--keyframe-provider local`.
-- **Real-video success branch** (v0.2.0): the report-mode fallback path is
-  validated live; a live real-video success run is quota/provider-dependent and
-  covered by mock-provider tests.
+- **Scene-level real-video success branch** (v0.2.0): validated live with the
+  XL provider in `outputs/live_xl_ac7_20260624_161004`
+  (`is_real_video=true`, `fallback_used=false`, `attempts=1`).
+- **Shot-level real-video branch**: not implemented yet; tracked by the
+  `shot-level-video-rendering` draft spec.
 - **Browser visual smoke** (v0.3.0, v0.4.0): the in-app browser blocks
   localhost (`ERR_BLOCKED_BY_CLIENT`); JS validated via `node --check` and
   helper tests.
@@ -89,8 +102,13 @@ runs depend on the environment and remain pending:
 - `director-interpretation-mainline` (v0.5.0): deterministic-first
   implementation in progress; visual prototype library seeded; LLM tier
   deferred.
+- `shot-level-video-rendering`: draft spec for per-shot provider calls,
+  shot-output provenance, scene assembly, resume/targeted rerender, and quota
+  guards.
 - `provider-cost-controls`: cost/timing/quota accounting; future spec.
 - consistency-regeneration: the deferred `regenerate` policy mode from v0.3.0;
   future spec, to add a render feedback loop only after verdicts prove stable.
 - Long-form / multi-episode management and finer shot-language/prompt governance
   not yet specced.
+- Prototype-to-output A/B automation: the manual scorecard exists, but automatic
+  paired reruns, CLIP scoring, and cost-aware provider sampling remain deferred.

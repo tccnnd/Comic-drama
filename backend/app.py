@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 
@@ -53,19 +54,23 @@ from backend.project_runtime import (
     replace_project_storyboard_from_preview,
     rerender_scene_audio,
     rerender_scene_image,
+    rerender_scene_shot_video,
     rerender_scene_video,
     restore_scene_snapshot,
     scene_asset_file_exists,
     scene_latest_path,
     split_scene,
     update_character_fields,
+    update_runtime,
     update_character_reference_image,
     update_project_fields,
     update_scene_fields,
+    validate_task_id,
     write_data_url_image,
 )
 from backend.asset_retention import cleanup_project_versions
 from backend.task_store import TaskRecord, TaskStore
+from backend.video_generation import normalize_video_render_granularity
 from scripts.run_workflow import (
     analyze_script_workflow,
     load_env_file,
@@ -77,7 +82,6 @@ from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
 from scripts.tts_engines import edge_tts, synthesize_preview, tts_diagnostics
 from scripts.tts_engines import load_tts_provider_settings, save_tts_provider_settings, tts_provider_settings_path
 from video_providers import get_video_provider_status, list_video_providers
-
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUTS = ROOT / "outputs"
@@ -176,10 +180,46 @@ OUTPUTS.mkdir(parents=True, exist_ok=True)
 WORKSPACE.mkdir(parents=True, exist_ok=True)
 
 
+def configured_cors_origins() -> list[str]:
+    raw = os.environ.get("APP_CORS_ORIGINS", "").strip()
+    if raw:
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    return [
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
+
+
+# ─── LLM Settings Storage (delegated to llm_hub) ─────────────────────────────
+from backend.llm_hub import (
+    LLM_SETTINGS_FILE,
+    TASK_DEFINITIONS,
+    get_usage_summary as _get_llm_usage_summary,
+    llm_client as _llm_client,
+    load_llm_settings,
+    save_llm_settings,
+)
+
+
+def llm_settings_config_path() -> str:
+    return str(LLM_SETTINGS_FILE)
+
+
+# ─── Common LLM endpoint presets ─────────────────────────────────────────────
+LLM_PRESETS: list[dict[str, str]] = [
+    {"label": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
+    {"label": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    {"label": "通义千问 (DashScope)", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
+    {"label": "Moonshot (Kimi)", "base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k"},
+    {"label": "智谱 GLM", "base_url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-4-flash"},
+    {"label": "自定义", "base_url": "", "model": ""},
+]
+
+
 app = FastAPI(title="Comic Drama Backend", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=configured_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -192,12 +232,10 @@ app.include_router(asset_router)
 
 store = TaskStore()
 
-
 @app.on_event("startup")
 async def _startup() -> None:
     project_event_bus.set_event_loop(asyncio.get_running_loop())
     app.state.event_bus = project_event_bus
-
 
 def _format_sse(event: str, data: object, event_id: str | None = None) -> str:
     payload = json.dumps(data, ensure_ascii=False)
@@ -209,15 +247,14 @@ def _format_sse(event: str, data: object, event_id: str | None = None) -> str:
         lines.append(f"data: {line}")
     return "\n".join(lines) + "\n\n"
 
-
 class CreateTaskRequest(BaseModel):
     story_text: str | None = None
     planner: Literal["auto", "rule", "llm"] = "auto"
     scene_count: int = Field(default=5, ge=1, le=12)
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
     video_provider: str = "auto"
+    video_render_granularity: Literal["scene", "shot"] = "scene"
     voice_provider: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
-
 
 class CreateTaskResponse(BaseModel):
     task_id: str
@@ -226,7 +263,6 @@ class CreateTaskResponse(BaseModel):
     output_dir: str
     detail_url: str
 
-
 class CreateProjectRequest(BaseModel):
     title: str = ""
     story_text: str | None = None
@@ -234,8 +270,8 @@ class CreateProjectRequest(BaseModel):
     scene_count: int = Field(default=5, ge=1, le=12)
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
     video_provider: str = "auto"
+    video_render_granularity: Literal["scene", "shot"] = "scene"
     voice_provider: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
-
 
 class UpdateProjectRequest(BaseModel):
     title: str | None = None
@@ -243,10 +279,8 @@ class UpdateProjectRequest(BaseModel):
     settings: dict | None = None
     characters: list | None = None
 
-
 class UpdateProjectStyleRequest(BaseModel):
     style_id: str = Field(min_length=1)
-
 
 class UpdateSceneRequest(BaseModel):
     title: str | None = None
@@ -282,10 +316,8 @@ class UpdateSceneRequest(BaseModel):
     enhancement_prompt: str | None = None
     enhancement_workflow_path: str | None = None
 
-
 class FillMissingAssetsRequest(BaseModel):
     kinds: list[Literal["image", "audio", "video"]] | None = None
-
 
 class CharacterPatchRequest(BaseModel):
     name: str | None = None
@@ -304,11 +336,9 @@ class CharacterPatchRequest(BaseModel):
     voice_pitch: float | None = None
     voice_volume: float | None = None
 
-
 class CharacterImageUploadRequest(BaseModel):
     filename: str = "reference.png"
     data_url: str
-
 
 class ScriptRecognitionRequest(BaseModel):
     script_text: str = Field(default="", min_length=1)
@@ -316,7 +346,6 @@ class ScriptRecognitionRequest(BaseModel):
     script_hint: str | None = None
     planner: Literal["auto", "rule", "llm"] = "auto"
     max_scenes: int = Field(default=12, ge=1, le=24)
-
 
 class ScriptPreviewApplyRequest(BaseModel):
     story_text: str = Field(default="", min_length=1)
@@ -327,23 +356,19 @@ class ScriptPreviewApplyRequest(BaseModel):
     analysis: dict | None = None
     scenes: list[dict] = Field(default_factory=list)
 
-
 class ScriptPreviewResponse(BaseModel):
     title: str
     planner_used: str
     analysis: dict
     scenes: list[dict]
 
-
 class VoicePresetItem(BaseModel):
     profile: str = ""
     voice: str = ""
 
-
 class VoicePresetSaveRequest(BaseModel):
     default: str | None = None
     items: list[VoicePresetItem] = Field(default_factory=list)
-
 
 class VoicePreviewRequest(BaseModel):
     voice: str
@@ -357,28 +382,76 @@ class VoicePreviewRequest(BaseModel):
     reference_text: str = ""
     emotion: str = ""
 
-
 class TTSProviderSettingsRequest(BaseModel):
     cosyvoice: str = ""
     gpt_sovits: str = ""
     fish: str = ""
     indextts: str = ""
 
+class LlmSettingsRequest(BaseModel):
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+    json_mode: bool = True
+    task_overrides: dict[str, dict[str, str]] | None = None
+
+def is_masked_api_key(value: str) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and text.startswith(("•", "*"))
+
+def merge_llm_settings_payload(payload: LlmSettingsRequest) -> dict[str, Any]:
+    stored = load_llm_settings()
+    api_key = payload.api_key.strip()
+    if is_masked_api_key(api_key):
+        api_key = str(stored.get("api_key") or "")
+
+    stored_overrides = stored.get("task_overrides") if isinstance(stored.get("task_overrides"), dict) else {}
+    merged_overrides: dict[str, dict[str, str]] = {}
+    for task_key, override in (payload.task_overrides or {}).items():
+        if not isinstance(override, dict):
+            continue
+        clean: dict[str, str] = {}
+        for field in ("base_url", "model"):
+            value = override.get(field)
+            if isinstance(value, str) and value.strip():
+                clean[field] = value.strip()
+        override_key = str(override.get("api_key") or "").strip()
+        if is_masked_api_key(override_key):
+            stored_key = stored_overrides.get(task_key, {}).get("api_key") if isinstance(stored_overrides.get(task_key), dict) else ""
+            if stored_key:
+                clean["api_key"] = str(stored_key)
+        elif "api_key" in override:
+            if override_key:
+                clean["api_key"] = override_key
+        else:
+            stored_key = stored_overrides.get(task_key, {}).get("api_key") if isinstance(stored_overrides.get(task_key), dict) else ""
+            if stored_key:
+                clean["api_key"] = str(stored_key)
+        if clean:
+            merged_overrides[str(task_key)] = clean
+
+    return {
+        "api_key": api_key,
+        "base_url": payload.base_url.strip().rstrip("/"),
+        "model": payload.model.strip(),
+        "json_mode": payload.json_mode,
+        "task_overrides": merged_overrides,
+    }
+
 def default_story_text() -> str:
     return DEFAULT_STORY.read_text(encoding="utf-8")
-
 
 def spawn_background_job(target, *args) -> None:
     thread = threading.Thread(target=target, args=args, daemon=True)
     thread.start()
-
 
 def project_or_404(project_id: str) -> dict:
     try:
         return project_snapshot(load_project(project_id))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 def scene_missing_asset_kinds(project_id: str, scene: dict) -> list[str]:
     missing: list[str] = []
@@ -393,7 +466,6 @@ def scene_missing_asset_kinds(project_id: str, scene: dict) -> list[str]:
     if not (video_path and video_path.is_file()) and not fallback_scene_clip_path(project_id, scene).is_file():
         missing.append("video")
     return missing
-
 
 def fill_missing_assets(project_id: str, requested_kinds: set[str] | None = None) -> dict:
     requested = requested_kinds or {"image", "audio", "video"}
@@ -412,10 +484,8 @@ def fill_missing_assets(project_id: str, requested_kinds: set[str] | None = None
             rerender_scene_audio(project_id, order)
     return project_or_404(project_id)
 
-
 def task_output_dir(task_id: str) -> Path:
-    return OUTPUTS / task_id
-
+    return OUTPUTS / validate_task_id(task_id)
 
 def parse_progress(line: str) -> tuple[int, int, str] | None:
     match = re.match(r"^\[(\d+)/(\d+)\]\s*(.*)$", line.strip())
@@ -426,19 +496,16 @@ def parse_progress(line: str) -> tuple[int, int, str] | None:
     message = match.group(3).strip()
     return step, total, message
 
-
 def derive_progress(step: int, total: int) -> int:
     if total <= 0:
         return 0
     return max(0, min(100, int(step * 100 / total)))
-
 
 def read_manifest(task_id: str) -> dict:
     manifest_path = task_output_dir(task_id) / "manifest.json"
     if not manifest_path.exists():
         return {}
     return json.loads(manifest_path.read_text(encoding="utf-8"))
-
 
 def format_voice_presets(presets: dict) -> dict:
     voice_map = presets.get("voice_map", {})
@@ -453,7 +520,6 @@ def format_voice_presets(presets: dict) -> dict:
         "default": str(presets.get("default", "")),
         "items": items,
     }
-
 
 def normalize_voice_catalog_entry(item: dict) -> dict:
     short_name = str(item.get("ShortName") or item.get("short_name") or "").strip()
@@ -472,7 +538,6 @@ def normalize_voice_catalog_entry(item: dict) -> dict:
         "label": f"{short_name} · {gender or 'Unknown'} · {locale or 'n/a'}",
     }
 
-
 def filter_voice_catalog(items: list[dict], locale_prefix: str = "zh") -> list[dict]:
     normalized: list[dict] = []
     seen: set[str] = set()
@@ -490,7 +555,6 @@ def filter_voice_catalog(items: list[dict], locale_prefix: str = "zh") -> list[d
         normalized.append(entry)
     normalized.sort(key=lambda entry: (entry["locale"], entry["gender"], entry["short_name"]))
     return normalized
-
 
 async def load_voice_catalog_data() -> list[dict]:
     if VOICE_CATALOG_CACHE.exists():
@@ -512,7 +576,6 @@ async def load_voice_catalog_data() -> list[dict]:
             logger.error("Failed to load live voice catalog: %s", exc)
 
     return DEFAULT_VOICE_CATALOG
-
 
 def run_workflow_task(task: TaskRecord, story_text: str) -> None:
     task_dir = task_output_dir(task.id)
@@ -540,6 +603,8 @@ def run_workflow_task(task: TaskRecord, story_text: str) -> None:
         task.keyframe_provider,
         "--video-provider",
         task.video_provider,
+        "--video-render-granularity",
+        task.video_render_granularity,
         "--voice-provider",
         task.voice_provider,
     ]
@@ -597,21 +662,17 @@ def run_workflow_task(task: TaskRecord, story_text: str) -> None:
     except Exception as exc:
         store.update(task.id, status="failed", stage="failed", message="Failed", error=str(exc))
 
-
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
-
 
 @app.get("/api/video-providers")
 def video_providers() -> dict[str, list[dict[str, object]]]:
     return {"providers": list_video_providers()}
 
-
 @app.get("/api/video-providers/status")
 def video_providers_status(provider: str = "auto") -> dict[str, object]:
     return get_video_provider_status(provider)
-
 
 def comfyui_base_url() -> str:
     load_env_file()
@@ -624,11 +685,9 @@ def comfyui_base_url() -> str:
         return tunnel_url.rstrip("/")
     return os.environ.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").strip().rstrip("/")
 
-
 def comfyui_is_local_url() -> bool:
     parsed = urlparse(comfyui_base_url())
     return parsed.hostname in {"127.0.0.1", "localhost", "::1", None}
-
 
 def read_comfyui_json(path: str, timeout: float = 3.0) -> dict:
     headers = comfyui_auth_headers()
@@ -639,7 +698,6 @@ def read_comfyui_json(path: str, timeout: float = 3.0) -> dict:
     with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
-
 def comfyui_auth_headers() -> dict[str, str]:
     raw = os.environ.get("COMFYUI_AUTH_HEADER", "").strip()
     if raw and ":" in raw:
@@ -647,7 +705,6 @@ def comfyui_auth_headers() -> dict[str, str]:
         return {key.strip(): value.strip()}
     api_key = os.environ.get("COMFYUI_API_KEY", "").strip()
     return {"Authorization": f"Bearer {api_key}"} if api_key else {}
-
 
 def comfyui_model_root() -> Path:
     raw = os.environ.get("COMFYUI_MODEL_ROOT", "").strip()
@@ -657,7 +714,6 @@ def comfyui_model_root() -> Path:
     if input_dir:
         return Path(input_dir).parent / "models"
     return ROOT / "tools" / "ComfyUI" / "ComfyUI_windows_portable" / "ComfyUI" / "models"
-
 
 def comfyui_model_status() -> dict:
     if tunnel_config() is not None:
@@ -694,7 +750,6 @@ def comfyui_model_status() -> dict:
                 result["missing"].append(f"{group}/{filename}")
         result["groups"][group] = items
     return result
-
 
 @app.get("/api/comfyui/status")
 def comfyui_status() -> dict:
@@ -755,13 +810,11 @@ def comfyui_status() -> dict:
         result["error"] = str(exc)
     return result
 
-
 @app.get("/api/projects/{project_id}/comfyui-health")
 async def project_comfyui_health(project_id: str, refresh: bool = False) -> dict:
     if refresh:
         invalidate_object_info_cache()
     return await asyncio.to_thread(check_comfyui_health)
-
 
 @app.get("/api/projects/{project_id}/characters/{char_name}/consistency-status")
 def character_consistency_status(project_id: str, char_name: str) -> dict:
@@ -770,7 +823,6 @@ def character_consistency_status(project_id: str, char_name: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
     return check_character_consistency(project, WORKSPACE / project_id, char_name)
-
 
 @app.get("/api/projects/{project_id}/consistency-report")
 def project_consistency_report(project_id: str) -> dict:
@@ -781,7 +833,6 @@ def project_consistency_report(project_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Project not found") from exc
     from backend.consistency_validator import generate_consistency_report
     return generate_consistency_report(project_id)
-
 
 @app.get("/api/projects/{project_id}/export-otio")
 def export_otio(project_id: str) -> dict:
@@ -802,7 +853,6 @@ def export_otio(project_id: str) -> dict:
         "url": f"/workspace/{project_id}/export/{project_id}.otio",
     }
 
-
 @app.get("/api/projects/{project_id}/cost-estimate")
 def project_cost_estimate(project_id: str, provider: str = "") -> dict:
     """Estimate rendering cost for a project."""
@@ -812,7 +862,6 @@ def project_cost_estimate(project_id: str, provider: str = "") -> dict:
         raise HTTPException(status_code=404, detail="Project not found") from exc
     from backend.provider_router import estimate_project_cost
     return estimate_project_cost(project, provider)
-
 
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/candidates/{kind}/select")
 def select_scene_candidate(project_id: str, scene_order: int, kind: str, candidate_id: str) -> dict:
@@ -835,21 +884,17 @@ def select_scene_candidate(project_id: str, scene_order: int, kind: str, candida
     save_project(project)
     return {"selected": selected, "candidates": candidates}
 
-
 @app.get("/api/voice-presets")
 def voice_presets() -> dict:
     return format_voice_presets(load_voice_presets())
-
 
 @app.get("/api/voice-catalog")
 async def voice_catalog() -> dict:
     return {"items": await load_voice_catalog_data()}
 
-
 @app.get("/api/tts-diagnostics")
 def tts_diagnostics_endpoint() -> dict:
     return tts_diagnostics()
-
 
 @app.get("/api/tts-providers")
 def tts_providers_endpoint() -> dict:
@@ -857,7 +902,6 @@ def tts_providers_endpoint() -> dict:
         "providers": load_tts_provider_settings(),
         "config_path": str(tts_provider_settings_path()),
     }
-
 
 @app.put("/api/voice-presets")
 def save_voice_presets(payload: VoicePresetSaveRequest) -> dict:
@@ -882,7 +926,6 @@ def save_voice_presets(payload: VoicePresetSaveRequest) -> dict:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return format_voice_presets(data)
 
-
 @app.put("/api/tts-providers")
 def save_tts_providers_endpoint(payload: TTSProviderSettingsRequest) -> dict:
     data = {
@@ -897,6 +940,134 @@ def save_tts_providers_endpoint(payload: TTSProviderSettingsRequest) -> dict:
         "config_path": str(tts_provider_settings_path()),
     }
 
+# ─── LLM Settings Endpoints ──────────────────────────────────────────────────
+@app.get("/api/llm-settings")
+def llm_settings_endpoint() -> dict:
+    """Return current LLM configuration and available presets."""
+    settings = load_llm_settings()
+    # Mask the API key for security: show only last 4 characters
+    api_key = str(settings.get("api_key") or "")
+    masked_key = f"••••••••{api_key[-4:]}" if len(api_key) > 4 else ("••••" if api_key else "")
+
+    # Mask API keys in task_overrides
+    raw_overrides = settings.get("task_overrides") or {}
+    masked_overrides: dict[str, dict[str, Any]] = {}
+    for task_key, override in raw_overrides.items():
+        if not isinstance(override, dict):
+            continue
+        masked_entry: dict[str, Any] = {}
+        for field in ("api_key", "base_url", "model"):
+            if field in override:
+                if field == "api_key":
+                    ov_key = str(override.get("api_key") or "")
+                    masked_entry["api_key_masked"] = f"••••••••{ov_key[-4:]}" if len(ov_key) > 4 else ("••••" if ov_key else "")
+                    masked_entry["api_key_set"] = bool(ov_key)
+                else:
+                    masked_entry[field] = override[field]
+        masked_overrides[task_key] = masked_entry
+
+    return {
+        "settings": {
+            "api_key_masked": masked_key,
+            "api_key_set": bool(api_key),
+            "base_url": settings.get("base_url", ""),
+            "model": settings.get("model", ""),
+            "json_mode": settings.get("json_mode", True),
+            "task_overrides": masked_overrides,
+        },
+        "presets": LLM_PRESETS,
+        "task_definitions": TASK_DEFINITIONS,
+        "config_path": llm_settings_config_path(),
+    }
+
+@app.put("/api/llm-settings")
+def save_llm_settings_endpoint(payload: LlmSettingsRequest) -> dict:
+    """Save LLM configuration to the JSON config file."""
+    data = merge_llm_settings_payload(payload)
+    saved = save_llm_settings(data)
+
+    # Force the LLM client to pick up the new config
+    _llm_client.reload()
+
+    # Return masked key
+    api_key = str(saved.get("api_key") or "")
+    masked_key = f"••••••••{api_key[-4:]}" if len(api_key) > 4 else ("••••" if api_key else "")
+
+    # Mask API keys in task_overrides
+    raw_overrides = saved.get("task_overrides") or {}
+    masked_overrides: dict[str, dict[str, Any]] = {}
+    for task_key, override in raw_overrides.items():
+        if not isinstance(override, dict):
+            continue
+        masked_entry: dict[str, Any] = {}
+        for field in ("api_key", "base_url", "model"):
+            if field in override:
+                if field == "api_key":
+                    ov_key = str(override.get("api_key") or "")
+                    masked_entry["api_key_masked"] = f"••••••••{ov_key[-4:]}" if len(ov_key) > 4 else ("••••" if ov_key else "")
+                    masked_entry["api_key_set"] = bool(ov_key)
+                else:
+                    masked_entry[field] = override[field]
+        masked_overrides[task_key] = masked_entry
+
+    return {
+        "settings": {
+            "api_key_masked": masked_key,
+            "api_key_set": bool(api_key),
+            "base_url": saved.get("base_url", ""),
+            "model": saved.get("model", ""),
+            "json_mode": saved.get("json_mode", True),
+            "task_overrides": masked_overrides,
+        },
+        "task_definitions": TASK_DEFINITIONS,
+        "config_path": llm_settings_config_path(),
+    }
+
+@app.post("/api/llm-test")
+def test_llm_connection(payload: LlmSettingsRequest) -> dict:
+    """Test LLM connection with the provided settings."""
+    api_key = payload.api_key.strip()
+    base_url = payload.base_url.strip().rstrip("/")
+    model = payload.model.strip()
+
+    # If api_key is blank or looks like a mask, load the stored key.
+    if not api_key or is_masked_api_key(api_key):
+        stored = load_llm_settings()
+        api_key = str(stored.get("api_key") or "")
+        if not api_key:
+            return {"ok": False, "error": "未找到已保存的 API Key，请输入完整的 Key"}
+
+    if not base_url or not model:
+        return {"ok": False, "error": "Base URL 和 Model 不能为空"}
+
+    try:
+        import urllib.request
+        url = f"{base_url}/chat/completions"
+        body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 5,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp_body = json.loads(resp.read().decode("utf-8"))
+            resp_model = resp_body.get("model", "")
+            return {"ok": True, "model": resp_model or model}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+@app.get("/api/llm-usage")
+def llm_usage_endpoint() -> dict:
+    """Return aggregated LLM usage statistics."""
+    return _get_llm_usage_summary()
 
 @app.get("/api/bgm-library")
 def bgm_library() -> dict:
@@ -918,12 +1089,10 @@ def bgm_library() -> dict:
                     library[style_dir.name] = files
     return {"library": library, "root": str(bgm_root)}
 
-
 class BgmUploadRequest(BaseModel):
     filename: str
     style: str = "neutral"
     data_url: str
-
 
 @app.post("/api/bgm-upload")
 def upload_bgm(payload: BgmUploadRequest) -> dict:
@@ -937,14 +1106,52 @@ def upload_bgm(payload: BgmUploadRequest) -> dict:
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Invalid base64") from exc
 
-    style = payload.style.strip() or "neutral"
+    # File size limit (10 MB)
+    MAX_BGM_SIZE = 10 * 1024 * 1024
+    if len(raw) > MAX_BGM_SIZE:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+
+    # Validate style parameter against allowed values (path traversal prevention)
+    ALLOWED_BGM_STYLES = {
+        "neutral", "happy", "sad", "tense", "epic", "romantic",
+        "mysterious", "comedic", "dramatic", "action",
+    }
+    style = (payload.style or "neutral").strip().lower()
+    if not style:
+        style = "neutral"
+    # Allow only known styles plus alphanumeric underscore names (for custom styles)
+    if not re.match(r"^[a-zA-Z0-9_-]+$", style) or style in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid style name")
+    # If style is not in allowed list, still accept but enforce directory depth of 1
     bgm_dir = ROOT / "assets" / "audio" / "bgm" / style
+    # Double-check the resolved path stays within bgm directory
+    bgm_root = (ROOT / "assets" / "audio" / "bgm").resolve()
+    resolved_dir = bgm_dir.resolve()
+    if resolved_dir != bgm_root and bgm_root not in resolved_dir.parents:
+        raise HTTPException(status_code=400, detail="Invalid style path")
     bgm_dir.mkdir(parents=True, exist_ok=True)
 
-    # Sanitize filename
+    # Validate file type by extension + magic bytes
+    ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"}
     safe_name = re.sub(r"[^a-zA-Z0-9_\-.]", "_", payload.filename.strip())
     if not safe_name:
         safe_name = f"bgm_{uuid.uuid4().hex[:8]}.mp3"
+    ext = Path(safe_name).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+
+    # Quick magic byte check for common audio formats
+    if ext == ".mp3" and len(raw) >= 3:
+        # ID3v2 header or MP3 sync word
+        if not (raw[:3] == b"ID3" or (raw[0] == 0xFF and (raw[1] & 0xE0) == 0xE0)):
+            raise HTTPException(status_code=400, detail="File does not appear to be a valid MP3")
+    elif ext == ".wav" and len(raw) >= 12:
+        if raw[:4] != b"RIFF" or raw[8:12] != b"WAVE":
+            raise HTTPException(status_code=400, detail="File does not appear to be a valid WAV")
+    elif ext == ".ogg" and len(raw) >= 4:
+        if raw[:4] != b"OggS":
+            raise HTTPException(status_code=400, detail="File does not appear to be a valid OGG")
+
     out_path = bgm_dir / safe_name
     out_path.write_bytes(raw)
 
@@ -953,7 +1160,6 @@ def upload_bgm(payload: BgmUploadRequest) -> dict:
         "style": style,
         "size_kb": round(out_path.stat().st_size / 1024, 1),
     }
-
 
 @app.post("/api/voice-preview")
 def create_voice_preview(payload: VoicePreviewRequest) -> dict:
@@ -995,18 +1201,15 @@ def create_voice_preview(payload: VoicePreviewRequest) -> dict:
         "warnings": result.warnings[-2:],
     }
 
-
 @app.get("/")
 def index():
     return FileResponse(FRONTEND / "index.html")
-
 
 @app.get("/api/projects")
 def list_projects() -> list[dict]:
     from backend.project_runtime import list_projects as load_projects
 
     return [project_snapshot(project) for project in load_projects()]
-
 
 @app.post("/api/projects")
 def create_project_endpoint(payload: CreateProjectRequest) -> dict:
@@ -1019,14 +1222,13 @@ def create_project_endpoint(payload: CreateProjectRequest) -> dict:
         keyframe_provider=payload.keyframe_provider,
         video_provider=payload.video_provider,
         voice_provider=payload.voice_provider,
+        video_render_granularity_value=payload.video_render_granularity,
     )
     return project_snapshot(project)
-
 
 @app.get("/api/projects/{project_id}")
 def get_project(project_id: str) -> dict:
     return project_or_404(project_id)
-
 
 @app.get("/api/projects/{project_id}/style")
 def get_project_style(project_id: str) -> dict:
@@ -1038,7 +1240,6 @@ def get_project_style(project_id: str) -> dict:
         style_id = get_default_style_id()
         style = get_style(style_id)
     return {"project_id": project_id, "style_id": style_id, "style": style.model_dump()}
-
 
 @app.post("/api/projects/{project_id}/style")
 def set_project_style(project_id: str, payload: UpdateProjectStyleRequest) -> dict:
@@ -1052,7 +1253,6 @@ def set_project_style(project_id: str, payload: UpdateProjectStyleRequest) -> di
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"project_id": project_id, "style_id": style.id, "style": style.model_dump(), "project": project_snapshot(project)}
-
 
 @app.get("/api/projects/{project_id}/events")
 async def project_events(project_id: str, request: Request):
@@ -1080,7 +1280,6 @@ async def project_events(project_id: str, request: Request):
     }
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
-
 @app.delete("/api/projects/{project_id}")
 def delete_project_endpoint(project_id: str) -> dict:
     try:
@@ -1089,7 +1288,6 @@ def delete_project_endpoint(project_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Project not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
 
 @app.patch("/api/projects/{project_id}")
 def patch_project(project_id: str, payload: UpdateProjectRequest) -> dict:
@@ -1100,13 +1298,11 @@ def patch_project(project_id: str, payload: UpdateProjectRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     return project_snapshot(project)
 
-
 @app.patch("/api/projects/{project_id}/scenes/{scene_order}")
 def patch_scene(project_id: str, scene_order: int, payload: UpdateSceneRequest) -> dict:
     updates = payload.model_dump(exclude_none=True)
     project = update_scene_fields(project_id, scene_order, updates)
     return project_snapshot(project)
-
 
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/split")
 def split_scene_endpoint(project_id: str, scene_order: int) -> dict:
@@ -1118,7 +1314,6 @@ def split_scene_endpoint(project_id: str, scene_order: int) -> dict:
         raise HTTPException(status_code=404, detail="Scene not found")
     return project_snapshot(project)
 
-
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/merge-next")
 def merge_scene_endpoint(project_id: str, scene_order: int) -> dict:
     try:
@@ -1128,7 +1323,6 @@ def merge_scene_endpoint(project_id: str, scene_order: int) -> dict:
     except KeyError:
         raise HTTPException(status_code=404, detail="Next scene not found")
     return project_snapshot(project)
-
 
 @app.post("/api/projects/{project_id}/recognize-script")
 def recognize_script(project_id: str, payload: ScriptRecognitionRequest) -> dict:
@@ -1146,7 +1340,6 @@ def recognize_script(project_id: str, payload: ScriptRecognitionRequest) -> dict
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return project_snapshot(project)
-
 
 @app.post("/api/projects/{project_id}/recognize-script/preview")
 def preview_recognize_script(project_id: str, payload: ScriptRecognitionRequest) -> dict:
@@ -1171,7 +1364,6 @@ def preview_recognize_script(project_id: str, payload: ScriptRecognitionRequest)
         "scenes": [scene_to_dict(scene, order) for order, scene in enumerate(scenes, start=1)],
     }
 
-
 @app.post("/api/projects/{project_id}/apply-script-preview")
 def apply_script_preview(project_id: str, payload: ScriptPreviewApplyRequest) -> dict:
     try:
@@ -1184,7 +1376,6 @@ def apply_script_preview(project_id: str, payload: ScriptPreviewApplyRequest) ->
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return project_snapshot(project)
-
 
 @app.post("/api/projects/{project_id}/repair-story-text")
 def repair_story_text(project_id: str) -> dict:
@@ -1200,13 +1391,11 @@ def repair_story_text(project_id: str) -> dict:
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
 
-
 @app.patch("/api/projects/{project_id}/characters/{char_index}")
 def patch_character(project_id: str, char_index: int, payload: CharacterPatchRequest) -> dict:
     updates = payload.model_dump(exclude_none=True)
     project = update_character_fields(project_id, char_index, updates)
     return project_snapshot(project)
-
 
 @app.post("/api/projects/{project_id}/characters/{char_index}/reference-image")
 def upload_character_reference_image(project_id: str, char_index: int, payload: CharacterImageUploadRequest) -> dict:
@@ -1219,11 +1408,9 @@ def upload_character_reference_image(project_id: str, char_index: int, payload: 
         raise HTTPException(status_code=400, detail=str(exc))
     return project_snapshot(project)
 
-
 @app.post("/api/projects/{project_id}/build")
 def build_project_endpoint(project_id: str) -> dict:
     project_or_404(project_id)
-    from backend.project_runtime import update_runtime
 
     update_runtime(project_id, status="running", stage="queued", message="Queued", progress=1)
 
@@ -1231,14 +1418,12 @@ def build_project_endpoint(project_id: str) -> dict:
         try:
             build_project(project_id)
         except Exception as exc:
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Failed")
             logger.error("build failed for %s: %s", project_id, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
-
 
 @app.post("/api/projects/{project_id}/export")
 def export_project_endpoint(project_id: str) -> dict:
@@ -1255,22 +1440,18 @@ def export_project_endpoint(project_id: str) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     return project_snapshot(project)
 
-
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/rerender-image")
 def rerender_scene_image_endpoint(project_id: str, scene_order: int) -> dict:
     project_or_404(project_id)
-    from backend.project_runtime import update_runtime
 
     update_runtime(project_id, status="running", stage=f"scene_{scene_order:03d}_image", message="Rerendering image", progress=1)
 
     def _run() -> None:
         try:
             rerender_scene_image(project_id, scene_order)
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
         except Exception as exc:
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Image rerender failed")
             logger.error("image rerender failed for %s scene %s: %s", project_id, scene_order, exc)
@@ -1278,22 +1459,18 @@ def rerender_scene_image_endpoint(project_id: str, scene_order: int) -> dict:
     spawn_background_job(_run)
     return project_or_404(project_id)
 
-
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/rerender-audio")
 def rerender_scene_audio_endpoint(project_id: str, scene_order: int) -> dict:
     project_or_404(project_id)
-    from backend.project_runtime import update_runtime
 
     update_runtime(project_id, status="running", stage=f"scene_{scene_order:03d}_audio", message="Rerendering audio", progress=1)
 
     def _run() -> None:
         try:
             rerender_scene_audio(project_id, scene_order)
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
         except Exception as exc:
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Audio rerender failed")
             logger.error("audio rerender failed for %s scene %s: %s", project_id, scene_order, exc)
@@ -1301,22 +1478,18 @@ def rerender_scene_audio_endpoint(project_id: str, scene_order: int) -> dict:
     spawn_background_job(_run)
     return project_or_404(project_id)
 
-
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/rerender-video")
 def rerender_scene_video_endpoint(project_id: str, scene_order: int) -> dict:
     project_or_404(project_id)
-    from backend.project_runtime import update_runtime
 
     update_runtime(project_id, status="running", stage=f"scene_{scene_order:03d}_video", message="Rerendering video", progress=1)
 
     def _run() -> None:
         try:
             rerender_scene_video(project_id, scene_order)
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
         except Exception as exc:
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Video rerender failed")
             logger.error("video rerender failed for %s scene %s: %s", project_id, scene_order, exc)
@@ -1324,11 +1497,28 @@ def rerender_scene_video_endpoint(project_id: str, scene_order: int) -> dict:
     spawn_background_job(_run)
     return project_or_404(project_id)
 
+@app.post("/api/projects/{project_id}/scenes/{scene_order}/shots/{shot_id}/rerender-video")
+def rerender_scene_shot_video_endpoint(project_id: str, scene_order: int, shot_id: str) -> dict:
+    project_or_404(project_id)
+
+    update_runtime(project_id, status="running", stage=f"scene_{scene_order:03d}_shot_video", message="Rerendering shot video", progress=1)
+
+    def _run() -> None:
+        try:
+            rerender_scene_shot_video(project_id, scene_order, shot_id)
+
+            update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
+        except Exception as exc:
+
+            update_runtime(project_id, status="failed", stage="failed", message="Shot video rerender failed")
+            logger.error("shot video rerender failed for %s scene %s shot %s: %s", project_id, scene_order, shot_id, exc)
+
+    spawn_background_job(_run)
+    return project_or_404(project_id)
 
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/rebuild")
 def rebuild_scene_endpoint(project_id: str, scene_order: int) -> dict:
     project_or_404(project_id)
-    from backend.project_runtime import update_runtime
 
     update_runtime(
         project_id,
@@ -1341,11 +1531,9 @@ def rebuild_scene_endpoint(project_id: str, scene_order: int) -> dict:
     def _run() -> None:
         try:
             generate_scene_assets(project_id, scene_order)
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
         except Exception as exc:
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Scene rebuild failed")
             logger.error("rebuild failed for %s scene %s: %s", project_id, scene_order, exc)
@@ -1353,30 +1541,25 @@ def rebuild_scene_endpoint(project_id: str, scene_order: int) -> dict:
     spawn_background_job(_run)
     return project_or_404(project_id)
 
-
 @app.post("/api/projects/{project_id}/fill-missing-assets")
 def fill_missing_assets_endpoint(project_id: str, payload: FillMissingAssetsRequest | None = None) -> dict:
     project_or_404(project_id)
     requested = set(payload.kinds) if payload and payload.kinds else {"image", "audio", "video"}
-    from backend.project_runtime import update_runtime
 
     update_runtime(project_id, status="running", stage="repairing", message="Filling missing assets", progress=1)
 
     def _run() -> None:
         try:
             fill_missing_assets(project_id, requested)
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
         except Exception as exc:
-            from backend.project_runtime import update_runtime
 
             update_runtime(project_id, status="failed", stage="failed", message="Asset repair failed")
             logger.error("asset repair failed for %s: %s", project_id, exc)
 
     spawn_background_job(_run)
     return project_or_404(project_id)
-
 
 @app.post("/api/projects/{project_id}/scenes/{scene_order}/restore")
 def restore_scene_endpoint(project_id: str, scene_order: int) -> dict:
@@ -1387,7 +1570,6 @@ def restore_scene_endpoint(project_id: str, scene_order: int) -> dict:
     except KeyError:
         raise HTTPException(status_code=404, detail="Scene not found")
     return project_snapshot(project)
-
 
 @app.post("/api/projects/{project_id}/cleanup")
 def cleanup_project_endpoint(project_id: str, keep: int = 1) -> dict:
@@ -1401,7 +1583,6 @@ def cleanup_project_endpoint(project_id: str, keep: int = 1) -> dict:
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"ok": True, **result, "project": snapshot}
-
 
 @app.post("/api/tasks", response_model=CreateTaskResponse)
 def create_task(payload: CreateTaskRequest) -> CreateTaskResponse:
@@ -1417,6 +1598,7 @@ def create_task(payload: CreateTaskRequest) -> CreateTaskResponse:
         planner=payload.planner,
         keyframe_provider=payload.keyframe_provider,
         video_provider=payload.video_provider,
+        video_render_granularity=normalize_video_render_granularity(payload.video_render_granularity),
         voice_provider=payload.voice_provider,
         scene_count=payload.scene_count,
         output_dir=str(task_output_dir(task_id)),
@@ -1433,11 +1615,9 @@ def create_task(payload: CreateTaskRequest) -> CreateTaskResponse:
         detail_url=f"/api/tasks/{task_id}",
     )
 
-
 @app.get("/api/tasks")
 def list_tasks() -> list[dict]:
     return [task.snapshot() for task in store.list()]
-
 
 @app.get("/api/tasks/{task_id}")
 def get_task(task_id: str) -> dict:
@@ -1448,7 +1628,6 @@ def get_task(task_id: str) -> dict:
     if snapshot.get("final_video") and not snapshot["final_video"].startswith("/"):
         snapshot["final_video_url"] = f"/outputs/{task_id}/comic_drama_demo.mp4"
     return snapshot
-
 
 @app.get("/api/tasks/{task_id}/files")
 def task_files(task_id: str) -> dict:
@@ -1468,7 +1647,6 @@ def task_files(task_id: str) -> dict:
             )
     return {"task_id": task_id, "files": files}
 
-
 @app.get("/api/tasks/{task_id}/video")
 def task_video(task_id: str):
     path = task_output_dir(task_id) / "comic_drama_demo.mp4"
@@ -1476,9 +1654,22 @@ def task_video(task_id: str):
         raise HTTPException(status_code=404, detail="Video not ready")
     return FileResponse(path)
 
-
 @app.websocket("/api/tasks/{task_id}/stream")
 async def task_stream(websocket: WebSocket, task_id: str) -> None:
+    # Validate task_id format before accepting the connection
+    try:
+        validate_task_id(task_id)
+    except ValueError:
+        await websocket.close(code=1008, reason="Invalid task_id")
+        return
+
+    # Origin validation to prevent cross-site WebSocket hijacking
+    origin = websocket.headers.get("origin", "")
+    allowed_origins = configured_cors_origins()
+    if "*" not in allowed_origins and origin and origin not in allowed_origins:
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
+
     await websocket.accept()
     try:
         while True:

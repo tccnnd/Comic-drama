@@ -28,3 +28,25 @@ workflows/Unsaved Workflow.json
 voice_samples/*
 !voice_samples/README.md
 voice_sources/
+
+# Runtime upload directory
+.uploads/
+
+# IDE / editor directories
+.idea/
+.vscode/settings.json
+
+# Coverage and lint caches
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ruff_cache/
+
+# Python packaging
+*.egg-info/
+*.egg
+.eggs/
+
+# Large generated review / LLM output files
+docs/project_review_report.md

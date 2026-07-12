@@ -45,6 +45,7 @@ from backend.asset_retention import cleanup_project_versions
 from backend.event_bus import project_event_bus
 from backend.styles import get_default_style_id
 from backend.consistency_governance import _normalized_governance, build_continuity_ledger
+from backend.video_generation import normalize_generation_meta, video_render_granularity
 
 # ─── Re-exports from project_models ───────────────────────────────────────────
 from backend.project_models import (  # noqa: F401
@@ -79,6 +80,7 @@ from backend.project_models import (  # noqa: F401
     scene_dir,
     scene_to_dict,
     utc_iso,
+    validate_task_id,
     workspace_url,
 )
 
@@ -134,6 +136,7 @@ from backend.scene_renderer import (  # noqa: F401
     generate_scene_assets,
     rerender_scene_audio,
     rerender_scene_image,
+    rerender_scene_shot_video,
     rerender_scene_video,
     scene_asset_file_exists,
     scene_latest_path,
@@ -165,6 +168,7 @@ def create_project(
     keyframe_provider: str,
     video_provider: str,
     voice_provider: str,
+    video_render_granularity_value: str = "scene",
 ) -> dict[str, Any]:
     load_env_file()
     project_id = f"proj_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
@@ -184,6 +188,9 @@ def create_project(
             "scene_count": scene_count,
             "keyframe_provider": keyframe_provider,
             "video_provider": video_provider,
+            "video_render_granularity": video_render_granularity(
+                cli_value=video_render_granularity_value,
+            ),
             "voice_provider": voice_provider,
             "subtitle_style": default_subtitle_style(),
             "audio_style": default_audio_style(),
@@ -399,8 +406,7 @@ def load_project(project_id: str) -> dict[str, Any]:
                 scene["props"] = []
             else:
                 scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
-            if not isinstance(scene.get("generation_meta"), dict):
-                scene["generation_meta"] = {}
+            scene["generation_meta"] = normalize_generation_meta(scene.get("generation_meta"))
             _normalize_director_interpretation(scene)
             scene["governance"] = _normalized_governance(scene)
         # Sync visual data from AssetStore into project.characters
@@ -537,8 +543,7 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
             scene["props"] = []
         else:
             scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
-        if not isinstance(scene.get("generation_meta"), dict):
-            scene["generation_meta"] = {}
+        scene["generation_meta"] = normalize_generation_meta(scene.get("generation_meta"))
         _normalize_director_interpretation(scene)
         scene["governance"] = _normalized_governance(scene)
         for key, value in default_drama_config().items():
@@ -600,6 +605,21 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         shots = scene.get("shots", []) if isinstance(scene, dict) else []
         shot_count = len(shots) if isinstance(shots, list) else 0
         total_shots += shot_count
+        generation_meta = normalize_generation_meta(scene.get("generation_meta"))
+        shot_outputs = generation_meta.get("shot_outputs") if isinstance(generation_meta.get("shot_outputs"), list) else []
+        shot_render_status = [
+            {
+                "shot_id": str(output.get("shot_id") or ""),
+                "index": int(output.get("index") or index + 1),
+                "status": str(output.get("status") or "unknown"),
+                "provider_id": str(output.get("provider_id") or ""),
+                "backend": str(output.get("backend") or ""),
+                "fallback_used": bool(output.get("fallback_used")),
+                "attempts": int(output.get("attempts") or 0),
+            }
+            for index, output in enumerate(shot_outputs)
+            if isinstance(output, dict)
+        ]
         scene_graph_entries.append(
             {
                 "scene_id": str(scene.get("scene_id") or ""),
@@ -607,6 +627,8 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
                 "title": str(scene.get("title") or ""),
                 "shot_count": shot_count,
                 "camera_track": deepcopy(scene.get("camera_track") or {}),
+                "render_granularity": str(generation_meta.get("render_granularity") or "scene") if generation_meta else "scene",
+                "shot_render_status": shot_render_status,
             }
         )
     snapshot["summary"] = {

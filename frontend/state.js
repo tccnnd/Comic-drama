@@ -9,6 +9,9 @@ export const API = {
   fillMissingAssets: "/api/projects",
   repairStoryText: "/api/projects",
   applyScriptPreview: "/api/projects",
+  llmSettings: "/api/llm-settings",
+  llmTest: "/api/llm-test",
+  llmUsage: "/api/llm-usage",
 };
 
 export const TIMELINE_PX_PER_SECOND = 72;
@@ -29,6 +32,12 @@ export const state = {
   videoProviderStatus: null,
   videoProviderStatusLoading: false,
   videoProviderStatusError: "",
+  llmSettings: null,
+  llmTestResult: null,
+  llmTesting: false,
+  llmUsage: null,
+  settingsScrollTop: 0,
+  settingsBodyScrollTop: 0,
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -37,6 +46,8 @@ export const state = {
     governance_status: "all",
     provenance: "all",
     deliverable: "all",
+    prototype_mode: "all",
+    prototype_gap: "all",
     min_rating: 0,
     sort: "scene_order",
   },
@@ -127,6 +138,19 @@ export const reviewDeliverableFilterOptions = [
   ["asset_gaps", "Missing assets"],
 ];
 
+export const reviewPrototypeModeFilterOptions = [
+  ["all", "All prototypes"],
+  ["prototype_lock", "Prototype lock"],
+  ["freeform", "Freeform"],
+  ["unknown", "Unknown"],
+];
+
+export const reviewPrototypeGapFilterOptions = [
+  ["all", "All gap states"],
+  ["gap_only", "Gap only"],
+  ["no_gap", "No gap"],
+];
+
 export const reviewSortOptions = [
   ["scene_order", "Scene order"],
   ["rating_desc", "Rating high first"],
@@ -139,6 +163,7 @@ export const tabs = [
   ["assets", "② 资产", "assetsSection"],
   ["storyboard", "③ 分镜", "storyboardSection"],
   ["produce", "④ 出片", "produceSection"],
+  ["settings", "⑤ 设置", "settingsSection"],
 ];
 
 export const voiceEngines = [

@@ -1070,6 +1070,155 @@ export async function saveTtsProviders() {
   }
 }
 
+// ─── LLM Settings ────────────────────────────────────────────────────────────
+export async function loadLlmSettings() {
+  try {
+    const data = await apiJson(API.llmSettings, { method: "GET" });
+    state.llmSettings = data;
+    state.llmTestResult = null;
+  } catch (err) {
+    console.warn("Failed to load LLM settings:", err);
+    state.llmSettings = { settings: {}, presets: [] };
+  }
+}
+
+function isMaskedApiKey(value) {
+  const text = String(value || "").trim();
+  return Boolean(text) && /^[•*]+(?:\([^)]*\))?[A-Za-z0-9_-]*$/.test(text);
+}
+
+export async function saveLlmSettings() {
+  const apiKey = getValue("llmApiKeyInput") || "";
+  const baseUrl = getValue("llmBaseUrlInput") || "";
+  const model = getValue("llmModelInput") || "";
+  const jsonMode = getValue("llmJsonModeInput");
+
+  // Keep masked placeholders in the payload so the backend can distinguish
+  // "unchanged saved key" from an intentionally cleared field.
+  const apiKeyPayload = apiKey;
+
+  // Collect task overrides from the UI
+  const taskOverrides = collectTaskOverrides();
+
+  setBusy(true, "保存 LLM 配置");
+  try {
+    const data = await apiJson(API.llmSettings, {
+      method: "PUT",
+      body: JSON.stringify({
+        api_key: apiKeyPayload,
+        base_url: baseUrl,
+        model,
+        json_mode: jsonMode,
+        task_overrides: taskOverrides,
+      }),
+    });
+    state.llmSettings = { ...state.llmSettings, ...data };
+    state.llmTestResult = null;
+    render();
+    showToast("LLM 配置已保存");
+  } catch (err) {
+    showToast(`保存失败: ${err.message || err}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function collectTaskOverrides() {
+  const taskDefs = state.llmSettings?.task_definitions || [];
+  const profileKeys = ["language_model", "character_image"];
+  const overrides = {};
+  const overrideKeys = [...new Set([...profileKeys, ...taskDefs.map((td) => td.key)])];
+  for (const key of overrideKeys) {
+    const checkbox = document.querySelector(`input[data-action="task-override-toggle"][data-task-key="${key}"]`);
+    const isProfile = profileKeys.includes(key);
+    if (!isProfile && (!checkbox || !checkbox.checked)) continue;
+
+    const ov = {};
+    const apiKeyInput = document.getElementById(`taskOvApiKey_${key}`);
+    const baseUrlInput = document.getElementById(`taskOvBaseUrl_${key}`);
+    const modelInput = document.getElementById(`taskOvModel_${key}`);
+
+    if (apiKeyInput) {
+      const val = apiKeyInput.value.trim();
+      // Only send if user typed a new key (not the masked placeholder)
+      if (val && !isMaskedApiKey(val)) ov.api_key = val;
+      else if (!val) ov.api_key = "";
+    }
+    if (baseUrlInput) {
+      const val = baseUrlInput.value.trim();
+      if (val) ov.base_url = val;
+    }
+    if (modelInput) {
+      const val = modelInput.value.trim();
+      if (val) ov.model = val;
+    }
+
+    if (isProfile) {
+      if (Object.keys(ov).length > 0 || apiKeyInput?.value.trim()) overrides[key] = ov;
+    } else {
+      // Even if all fields are empty, we still register the override
+      // so the task is marked as "enabled" (uses defaults for empty fields)
+      overrides[key] = ov;
+    }
+  }
+  return overrides;
+}
+
+export async function testLlmConnection() {
+  const apiKey = getValue("llmApiKeyInput") || "";
+  const baseUrl = getValue("llmBaseUrlInput") || "";
+  const model = getValue("llmModelInput") || "";
+  const jsonMode = getValue("llmJsonModeInput");
+  const apiKeyPayload = isMaskedApiKey(apiKey) ? "" : apiKey;
+
+  state.llmTesting = true;
+  state.llmTestResult = null;
+  render();
+  try {
+    const data = await apiJson(API.llmTest, {
+      method: "POST",
+      body: JSON.stringify({
+        api_key: apiKeyPayload,
+        base_url: baseUrl,
+        model,
+        json_mode: jsonMode,
+      }),
+    });
+    state.llmTestResult = data;
+    if (data.ok) {
+      showToast(`连接成功: ${data.model || model}`);
+    } else {
+      showToast(`连接失败: ${data.error || ""}`);
+    }
+  } catch (err) {
+    state.llmTestResult = { ok: false, error: err.message || String(err) };
+    showToast(`连接失败: ${err.message || err}`);
+  } finally {
+    state.llmTesting = false;
+    render();
+  }
+}
+
+export function applyLlmPreset(idx) {
+  const presets = state.llmSettings?.presets || [];
+  const preset = presets[idx];
+  if (!preset) return;
+  const baseUrlInput = document.getElementById("llmBaseUrlInput");
+  const modelInput = document.getElementById("llmModelInput");
+  if (baseUrlInput) baseUrlInput.value = preset.base_url || "";
+  if (modelInput) modelInput.value = preset.model || "";
+}
+
+export async function loadLlmUsage() {
+  try {
+    const data = await apiJson(API.llmUsage, { method: "GET" });
+    state.llmUsage = data;
+  } catch (err) {
+    console.warn("Failed to load LLM usage:", err);
+    state.llmUsage = null;
+  }
+}
+
 export function saveComfyUIUrl() {
   const url = comfyuiEditorUrl();
   if (!url) {
@@ -1146,6 +1295,16 @@ export async function runSceneAction(action, sceneOrder) {
   const endpoint = endpointMap[action];
   if (!endpoint) return null;
   const project = await apiJson(`${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/${endpoint}`, { method: "POST", body: "{}" });
+  setCurrentProject(project);
+  return project;
+}
+
+export async function runShotRerender(sceneOrder, shotId) {
+  if (!state.currentProjectId || !sceneOrder || !shotId) return null;
+  const project = await apiJson(
+    `${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/shots/${encodeURIComponent(shotId)}/rerender-video`,
+    { method: "POST", body: "{}" },
+  );
   setCurrentProject(project);
   return project;
 }

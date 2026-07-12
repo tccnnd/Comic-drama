@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import threading
 import time
@@ -41,6 +42,8 @@ WORKSPACE.mkdir(parents=True, exist_ok=True)
 
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
+_PROJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+_TASK_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 SCENE_HISTORY_LIMIT = 6
 SCENE_ACTION_LABELS = {
     "edit": "保存分镜",
@@ -60,6 +63,39 @@ class ExportAssetReadinessError(ValueError):
         super().__init__(str(detail.get("message") or "Export assets are not ready"))
 
 
+def validate_project_id(project_id: str) -> str:
+    """Return a safe project id or raise ValueError.
+
+    Project ids are used as single directory names under WORKSPACE. Keep legacy
+    safe ids readable while rejecting traversal, drive names, absolute paths,
+    and hidden/dot segments.
+    """
+    normalized = str(project_id or "").strip()
+    if not normalized:
+        raise ValueError("project_id is required")
+    if normalized in {".", ".."} or "/" in normalized or "\\" in normalized or ":" in normalized:
+        raise ValueError(f"Invalid project_id format: {project_id!r}")
+    if not _PROJECT_ID_PATTERN.fullmatch(normalized):
+        raise ValueError(f"Invalid project_id format: {project_id!r}")
+    return normalized
+
+
+def validate_task_id(task_id: str) -> str:
+    """Return a safe task id or raise ValueError.
+
+    Task ids are used as single directory names under OUTPUTS. Reject traversal,
+    drive names, absolute paths, and hidden/dot segments.
+    """
+    normalized = str(task_id or "").strip()
+    if not normalized:
+        raise ValueError("task_id is required")
+    if normalized in {".", ".."} or "/" in normalized or "\\" in normalized or ":" in normalized:
+        raise ValueError(f"Invalid task_id format: {task_id!r}")
+    if not _TASK_ID_PATTERN.fullmatch(normalized):
+        raise ValueError(f"Invalid task_id format: {task_id!r}")
+    return normalized
+
+
 def utc_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -76,7 +112,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def project_dir(project_id: str) -> Path:
-    return WORKSPACE / project_id
+    return WORKSPACE / validate_project_id(project_id)
 
 
 def project_file(project_id: str) -> Path:
@@ -101,6 +137,7 @@ def project_relative_file_exists(project_id: str, relative_path: str) -> bool:
 
 
 def project_lock(project_id: str) -> threading.Lock:
+    project_id = validate_project_id(project_id)
     with _LOCKS_GUARD:
         if project_id not in _LOCKS:
             _LOCKS[project_id] = threading.Lock()
@@ -108,6 +145,7 @@ def project_lock(project_id: str) -> threading.Lock:
 
 
 def workspace_url(project_id: str, relative_path: str | Path) -> str:
+    project_id = validate_project_id(project_id)
     relative = Path(relative_path).as_posix().lstrip("/")
     return f"/workspace/{project_id}/{relative}"
 

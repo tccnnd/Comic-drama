@@ -48,11 +48,17 @@ import {
   applyScript,
   repairStoryText,
   saveTtsProviders,
+  saveLlmSettings,
+  testLlmConnection,
+  applyLlmPreset,
+  loadLlmSettings,
+  loadLlmUsage,
   saveComfyUIUrl,
   openComfyUI,
   fillMissingAssets,
   sceneAction,
   runSceneAction,
+  runShotRerender,
   buildProject,
   exportProject,
   handleAssetExtract,
@@ -159,15 +165,50 @@ async function persistDirtyCropBox() {
 
 async function switchTab(tab, section) {
   await persistDirtyCropBox();
+  const previousTab = state.activeTab;
   state.activeTab = tab;
   render();
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
   }
+  if (tab === "settings") {
+    await loadLlmSettings();
+    await loadLlmUsage();
+    render();
+  }
   requestAnimationFrame(() => {
-    document.querySelector(".content")?.scrollTo({ top: 0, left: 0 });
+    const content = document.querySelector(".content");
+    if (tab === "settings" && previousTab === "settings" && !section) {
+      if (content) content.scrollTop = state.settingsScrollTop || content.scrollTop || 0;
+      return;
+    }
+    const target = section ? document.getElementById(section) : null;
+    if (content && target) {
+      const contentRect = content.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      content.scrollTo({ top: Math.max(0, content.scrollTop + targetRect.top - contentRect.top - 12), left: 0 });
+    } else {
+      content?.scrollTo({ top: 0, left: 0 });
+    }
     document.querySelectorAll(".window-body, .panel-body").forEach((element) => element.scrollTo({ top: 0, left: 0 }));
   });
+}
+
+// ─── LLM Task Override Toggle ────────────────────────────────────────────────
+
+function toggleTaskOverride(taskKey) {
+  if (!state.llmSettings?.settings) return;
+  const settings = state.llmSettings.settings;
+  if (!settings.task_overrides) settings.task_overrides = {};
+
+  if (settings.task_overrides[taskKey]) {
+    // Disable: remove the override
+    delete settings.task_overrides[taskKey];
+  } else {
+    // Enable: add an empty override (inherits all defaults)
+    settings.task_overrides[taskKey] = {};
+  }
+  render();
 }
 
 // ─── Timeline Drag Handlers ──────────────────────────────────────────────────
@@ -457,6 +498,9 @@ async function handleClick(event) {
     if (action === "review-batch-rerender") {
       return runReviewBatchRerender(button.dataset.batchAction || "rerender-video");
     }
+    if (action === "rerender-shot-video") {
+      return runReviewShotRerender(button.dataset.sceneOrder, button.dataset.shotId);
+    }
     if (action === "asset-tab") {
       state.assets.activeTab = button.dataset.assetTab || "character";
       render();
@@ -540,6 +584,10 @@ async function handleClick(event) {
     if (action === "apply-script") return applyScript();
     if (action === "repair-story-text") return repairStoryText();
     if (action === "save-tts-providers") return saveTtsProviders();
+    if (action === "save-llm-settings") return saveLlmSettings();
+    if (action === "test-llm") return testLlmConnection();
+    if (action === "llm-preset") return applyLlmPreset(Number(button.dataset.presetIdx || 0));
+    if (action === "task-override-toggle") return toggleTaskOverride(button.dataset.taskKey);
     if (action === "save-comfyui-url") return saveComfyUIUrl();
     if (action === "check-comfyui") return loadComfyUIStatus();
     if (action === "open-comfyui") return openComfyUI();
@@ -568,6 +616,8 @@ function defaultReviewTriageState() {
     governance_status: "all",
     provenance: "all",
     deliverable: "all",
+    prototype_mode: "all",
+    prototype_gap: "all",
     min_rating: 0,
     sort: "scene_order",
   };
@@ -630,6 +680,23 @@ async function runReviewBatchRerender(action) {
     showToast(failures ? `Batch finished with ${failures} failure(s)` : "Batch rerender completed", failures ? "danger" : "ok");
   } finally {
     state.reviewBatchRerender.running = false;
+    setBusy(false);
+  }
+}
+
+async function runReviewShotRerender(sceneOrderValue, shotId) {
+  const sceneOrder = Number(sceneOrderValue || state.selectedSceneOrder || 0);
+  const normalizedShotId = String(shotId || "").trim();
+  if (!state.currentProjectId || !sceneOrder || !normalizedShotId) return;
+  const confirmed = window.confirm(`Rerender shot ${normalizedShotId}? This may use provider quota.`);
+  if (!confirmed) return;
+  state.selectedSceneOrder = sceneOrder;
+  setBusy(true, "Rerender shot");
+  try {
+    await runShotRerender(sceneOrder, normalizedShotId);
+    showToast("Shot rerender submitted", "ok");
+    await refreshCurrentProject();
+  } finally {
     setBusy(false);
   }
 }

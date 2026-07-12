@@ -13,7 +13,9 @@ from backend.project_models import (
     default_drama_config,
     _coerce_int_field,
     _scene_from_payload,
+    project_dir,
     scene_to_dict,
+    validate_project_id,
 )
 
 
@@ -64,6 +66,21 @@ class TestDeriveProjectTitle:
     def test_leading_trailing_whitespace_stripped(self):
         result = derive_project_title("  hello  ")
         assert result == "hello"
+
+
+class TestProjectIdValidation:
+    def test_accepts_legacy_safe_project_ids(self, tmp_path, monkeypatch):
+        import backend.project_models as project_models
+
+        monkeypatch.setattr(project_models, "WORKSPACE", tmp_path)
+
+        assert validate_project_id("legacy_project") == "legacy_project"
+        assert project_dir("proj_20260625_120000_abcdef") == tmp_path / "proj_20260625_120000_abcdef"
+
+    @pytest.mark.parametrize("project_id", ["../escape", "..\\escape", "C:\\escape", ".", "", "bad/id"])
+    def test_rejects_path_traversal_project_ids(self, project_id):
+        with pytest.raises(ValueError):
+            validate_project_id(project_id)
 
 
 # ─── normalize_crop_box ───────────────────────────────────────────────────────

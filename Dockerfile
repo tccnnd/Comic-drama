@@ -14,8 +14,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/workspace /app/outputs /app/data && \
+    chown -R appuser:appuser /app
+
 # Copy project code
 COPY . .
+RUN chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 

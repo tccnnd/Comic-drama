@@ -90,7 +90,21 @@ Each picture clip represents one scene cut:
       "generated_at": "2026-06-06T12:00:00Z"
     }
   },
-  "shot_timeline": []
+  "shot_timeline": [
+    {
+      "shot_id": "scene_001_shot_01",
+      "start_seconds": 0.0,
+      "duration_seconds": 2.0,
+      "generation": {
+        "status": "real_video",
+        "provider_id": "doubao",
+        "backend": "remote",
+        "path": "scenes/scene_001/shots/scene_001_shot_01.mp4",
+        "attempts": 1,
+        "cache_key": "sha256:..."
+      }
+    }
+  ]
 }
 ```
 
@@ -100,6 +114,12 @@ project-relative. `metadata.generation` mirrors the latest persisted
 from local 2.5D fallback output. `summary.real_video_scene_count` and
 `summary.fallback_scene_count` count only scenes with known generation
 provenance.
+
+For shot-level renders, each `shot_timeline[]` item may include compact
+`generation` provenance copied from `scene.generation_meta.shot_outputs[]`.
+Existing scene-level consumers can keep reading `metadata.generation`; new
+consumers can inspect per-shot status, provider, path, attempts, fallback/error
+state, and cache key from `shot_timeline[]`.
 
 ## Current Producers
 

@@ -78,6 +78,7 @@ pipeline doc for details.
 
 - [Production pipeline overview](docs/production_pipeline.md)
 - [Demo guide](docs/demo.md)
+- [Video provider troubleshooting](docs/troubleshooting_video_providers.md)
 - [Roadmap](docs/roadmap.md)
 - [Initial release notes](docs/releases/v0.1.0.md)
 - [Codex open-source application notes](docs/open_source_application.md)
@@ -147,6 +148,12 @@ http://127.0.0.1:8000/
 
 The workbench supports project creation, script recognition, character assets,
 scene editing, review notes, rerendering, full build, and export.
+
+The backend defaults CORS to loopback origins only. If you serve a separate
+frontend during development, set `APP_CORS_ORIGINS` to a comma-separated list
+such as `http://127.0.0.1:5173,http://localhost:5173`. Avoid exposing the local
+backend publicly because `/workspace` and `/outputs` serve generated project
+assets.
 
 ## Model And Provider Integrations
 

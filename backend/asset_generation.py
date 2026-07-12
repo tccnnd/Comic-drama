@@ -19,8 +19,10 @@ from backend.assets import (
     update_project_asset,
 )
 from backend.event_bus import project_event_bus
+from backend.llm_hub import llm_client
 from backend.project_runtime import load_project, project_snapshot, workspace_url
 from backend.styles import get_default_style_id, get_style
+from scripts.run_workflow import extract_json_object
 from scripts.run_workflow import (
     clean_comfyui_visual_prompt,
     comfyui_base_url,
@@ -258,6 +260,73 @@ def _asset_negative_prompt(asset: Asset) -> str:
     return ", ".join(base)
 
 
+def _asset_context_for_llm(asset: Asset, style: dict[str, str]) -> dict[str, Any]:
+    return {
+        "asset_type": asset.asset_type.value,
+        "name": asset.name,
+        "description": asset.description,
+        "appearance": asset.appearance,
+        "visual_prompt": asset.visual_prompt,
+        "age": asset.age,
+        "gender": asset.gender,
+        "personality": asset.personality,
+        "style": {
+            "name": style.get("name", ""),
+            "positive_suffix": style.get("positive_suffix", ""),
+            "negative_suffix": style.get("negative_suffix", ""),
+        },
+    }
+
+
+def _llm_asset_prompts(asset: Asset, style: dict[str, str]) -> tuple[str, str]:
+    """Generate asset prompts through the configured LLM profile.
+
+    This is the default prompt path for asset image generation. Callers fall
+    back to deterministic prompts if the LLM is unavailable or returns bad JSON.
+    """
+    system_prompt = (
+        "You are a professional anime production asset prompt writer. "
+        "Return only JSON with keys positive_prompt and negative_prompt. "
+        "Write concise English comma-separated prompts optimized for image generation."
+    )
+    user_prompt = json.dumps(
+        {
+            "task": "Create a production-ready image prompt for this comic drama asset.",
+            "requirements": [
+                "Keep the asset identity consistent with the provided description.",
+                "Use clear visual attributes, composition, lighting, and style tags.",
+                "For characters, prefer a clean single-character reference portrait.",
+                "For backgrounds, avoid people and keep the environment readable.",
+                "For props, isolate the object and avoid hands or characters.",
+                "Avoid markdown and explanations.",
+            ],
+            "asset": _asset_context_for_llm(asset, style),
+        },
+        ensure_ascii=False,
+    )
+    content = llm_client.chat(
+        system_prompt,
+        user_prompt,
+        task="character_image",
+        temperature=0.25,
+    )
+    parsed = extract_json_object(content)
+    positive = clean_comfyui_visual_prompt(str(parsed.get("positive_prompt") or "").strip())
+    negative = str(parsed.get("negative_prompt") or "").strip()
+    if not positive:
+        raise RuntimeError("LLM asset prompt response missing positive_prompt")
+    return positive, negative
+
+
+def _asset_generation_prompts(asset: Asset, style: dict[str, str]) -> tuple[str, str]:
+    try:
+        positive, negative = _llm_asset_prompts(asset, style)
+        return positive, negative or _asset_negative_prompt(asset)
+    except Exception as exc:
+        logger.warning("LLM asset prompt generation failed for %s; using local prompt: %s", asset.id, exc)
+        return _asset_prompt(asset), _asset_negative_prompt(asset)
+
+
 def _project_style(project_id: str) -> dict[str, str]:
     project = load_project(project_id)
     style_id = str(project.get("style_id") or get_default_style_id()).strip()
@@ -275,11 +344,11 @@ def _project_style(project_id: str) -> dict[str, str]:
     }
 
 
-def _asset_workflow_replacements(asset: Asset) -> dict[str, Any]:
+def _asset_workflow_replacements(asset: Asset, positive_prompt: str, negative_prompt: str) -> dict[str, Any]:
     width, height = ASSET_DIMENSIONS.get(asset.asset_type, (768, 1024))
     return {
-        "__PROMPT__": _asset_prompt(asset),
-        "__NEGATIVE__": _asset_negative_prompt(asset),
+        "__PROMPT__": positive_prompt,
+        "__NEGATIVE__": negative_prompt,
         "__SEED__": int(time.time() * 1000) % 2_147_483_647,
         "__WIDTH__": width,
         "__HEIGHT__": height,
@@ -320,6 +389,7 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
 
     asset = _load_asset_record(project_id, asset_id)
     style = _project_style(project_id)
+    positive_prompt, negative_prompt = _asset_generation_prompts(asset, style)
     workflow_template = load_json(ASSET_WORKFLOW_PATH)
 
     # Resolve checkpoint: use style hint, fallback to whatever is available
@@ -343,7 +413,7 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
             },
         ),
         {
-            **_asset_workflow_replacements(asset),
+            **_asset_workflow_replacements(asset, positive_prompt, negative_prompt),
             "__CHECKPOINT_NAME__": checkpoint_name,
         },
     )

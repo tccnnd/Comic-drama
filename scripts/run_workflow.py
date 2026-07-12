@@ -48,7 +48,8 @@ from scripts.subtitle_style import build_ass_document
 from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
 from scripts.video_provider_adapters import VideoRenderRequest, render_remote_video_provider
 from video_providers import get_video_provider_spec, normalize_video_provider as resolve_video_provider_name
-from backend.video_generation import VideoGenerationResult, generation_meta_from_result, video_fallback_mode
+from backend.video_generation import VideoGenerationResult, generation_meta_from_result, normalize_generation_meta, video_fallback_mode, video_render_granularity
+from backend.llm_hub import llm_client
 
 edge_tts = tts_engines.edge_tts
 
@@ -2062,6 +2063,60 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
     return normalize_shot_plan_visual_content(scene, shot_plan)
 
 
+def _compact_shot_generation(output: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(output, dict):
+        return {}
+    fields = (
+        "shot_id",
+        "index",
+        "status",
+        "provider_id",
+        "provider_label",
+        "backend",
+        "model",
+        "path",
+        "duration_seconds",
+        "target_duration_seconds",
+        "attempts",
+        "fallback_used",
+        "warnings",
+        "error",
+        "cache_key",
+    )
+    compact = {key: deepcopy(output.get(key)) for key in fields if key in output}
+    return {key: value for key, value in compact.items() if value not in ("", [], {}, None)}
+
+
+def _shot_timeline_with_generation(shot_timeline: list[dict[str, Any]], generation_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    shot_outputs = generation_meta.get("shot_outputs") if isinstance(generation_meta, dict) else []
+    if not isinstance(shot_outputs, list) or not shot_outputs:
+        return shot_timeline
+    outputs_by_id: dict[str, dict[str, Any]] = {}
+    outputs_by_index: dict[int, dict[str, Any]] = {}
+    for fallback_index, output in enumerate(shot_outputs, start=1):
+        if not isinstance(output, dict):
+            continue
+        shot_id = str(output.get("shot_id") or "").strip()
+        if shot_id:
+            outputs_by_id[shot_id] = output
+        try:
+            output_index = int(output.get("index") or fallback_index)
+        except (TypeError, ValueError):
+            output_index = fallback_index
+        outputs_by_index[output_index] = output
+    enriched: list[dict[str, Any]] = []
+    for fallback_index, shot in enumerate(shot_timeline, start=1):
+        if not isinstance(shot, dict):
+            continue
+        item = deepcopy(shot)
+        shot_id = str(item.get("shot_id") or "").strip()
+        output = outputs_by_id.get(shot_id) or outputs_by_index.get(fallback_index)
+        if isinstance(output, dict):
+            item["generation"] = _compact_shot_generation(output)
+        enriched.append(item)
+    return enriched
+
+
 def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
     scenes_raw = project.get("scenes", []) if isinstance(project, dict) else []
     scenes: list[dict[str, Any]] = [scene for scene in scenes_raw if isinstance(scene, dict)]
@@ -2089,11 +2144,11 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
         total_duration = end_seconds
         temporal_spec = scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
         shot_plan = build_shot_plan(scene)
-        shot_timeline = deepcopy(shot_plan.get("shots") or [])
         video_ref = _scene_media_reference(scene, "video")
         image_ref = _scene_media_reference(scene, "image")
         picture_ref = video_ref if video_ref.get("path") or video_ref.get("url") else image_ref
-        generation_meta = deepcopy(scene.get("generation_meta") or {}) if isinstance(scene.get("generation_meta"), dict) else {}
+        generation_meta = normalize_generation_meta(scene.get("generation_meta"))
+        shot_timeline = _shot_timeline_with_generation(deepcopy(shot_plan.get("shots") or []), generation_meta)
         if generation_meta.get("is_real_video") is True:
             real_video_scene_count += 1
         if generation_meta.get("fallback_used") is True:
@@ -2746,6 +2801,15 @@ def _existing_scene_shot_plan(scene: StoryScene | dict[str, Any]) -> dict[str, A
     return value if isinstance(value, dict) else None
 
 
+def _prototype_constraint_prompt_line(label: str, directive: str, values: Any) -> str | None:
+    if not isinstance(values, list):
+        return None
+    items = [str(item).strip() for item in values if str(item).strip()]
+    if not items:
+        return None
+    return f"{label} {directive}: {', '.join(items)}"
+
+
 def _shot_visual_content_prompt_lines(shot_plan: dict[str, Any]) -> list[str]:
     shots = shot_plan.get("shots") if isinstance(shot_plan, dict) else []
     if not isinstance(shots, list):
@@ -2765,8 +2829,9 @@ def _shot_visual_content_prompt_lines(shot_plan: dict[str, Any]) -> list[str]:
             f"visual_content_source: {visual_content.get('_source')}",
             f"prototype_id: {visual_prototype.get('id')}",
             f"prototype_mode: {visual_prototype.get('mode')}",
-            f"hard_constraints: {', '.join(str(item) for item in constraints.get('hard', []) if item)}",
-            f"soft_constraints: {', '.join(str(item) for item in constraints.get('soft', []) if item)}",
+            _prototype_constraint_prompt_line("prototype_constraints_hard", "MUST PRESERVE", constraints.get("hard")),
+            _prototype_constraint_prompt_line("prototype_constraints_soft", "SHOULD PRESERVE", constraints.get("soft")),
+            _prototype_constraint_prompt_line("prototype_constraints_guidelines", "GUIDE", constraints.get("guidelines")),
             f"shot_description: {visual_content.get('shot_description')}",
             f"foreground: {visual_content.get('foreground')}",
             f"midground: {visual_content.get('midground')}",
@@ -2779,7 +2844,13 @@ def _shot_visual_content_prompt_lines(shot_plan: dict[str, Any]) -> list[str]:
             f"camera_language: {camera_language.get('movement')}; {camera_language.get('lens')}; {camera_language.get('depth_of_field')}",
             f"dramatic_intent: {shot.get('dramatic_intent')}",
         ]
-        lines.append("; ".join(str(part).strip() for part in parts if str(part).strip() and not str(part).endswith(": None")))
+        lines.append(
+            "; ".join(
+                str(part).strip()
+                for part in parts
+                if part is not None and str(part).strip() and not str(part).endswith(": None")
+            )
+        )
     return lines
 
 
@@ -3547,24 +3618,14 @@ def post_llm_chat_completion(base_url: str, api_key: str, payload: dict, timeout
 
 
 def _call_llm_chat_content(system_prompt: str, user_prompt: str, model: str = "") -> str:
-    load_env_file()
-    api_key = os.environ.get("LLM_API_KEY", "").strip()
-    base_url = os.environ.get("LLM_BASE_URL", "").strip().rstrip("/")
-    resolved_model = (model or os.environ.get("LLM_MODEL", "").strip()).strip()
-    if not api_key or not base_url or not resolved_model:
-        raise RuntimeError("Missing LLM_API_KEY, LLM_BASE_URL, or LLM_MODEL. Configure .env or use rule mode.")
-
-    payload = {
-        "model": resolved_model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.2,
-    }
-    body = post_llm_chat_completion(base_url, api_key, payload)
-    response_json = json.loads(body)
-    return response_json["choices"][0]["message"]["content"]
+    """Call LLM via the unified hub client."""
+    return llm_client.chat(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        task="director_classify",
+        model=model,
+        temperature=0.2,
+    )
 
 
 def _apply_director_rule_recommendation(scene: StoryScene) -> None:
@@ -3780,28 +3841,12 @@ def coerce_scene(raw: dict, index: int) -> StoryScene:
 
 
 def call_llm_storyboard(story: str, scene_count: int) -> list[StoryScene]:
-    load_env_file()
-    api_key = os.environ.get("LLM_API_KEY", "").strip()
-    base_url = os.environ.get("LLM_BASE_URL", "").strip().rstrip("/")
-    model = os.environ.get("LLM_MODEL", "").strip()
-
-    if not api_key or not base_url or not model:
-        raise RuntimeError("Missing LLM_API_KEY, LLM_BASE_URL, or LLM_MODEL. Configure .env or use --planner rule.")
-
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": DIRECTOR_SYSTEM_PROMPT,
-            },
-            {"role": "user", "content": storyboard_prompt(story, scene_count)},
-        ],
-        "temperature": 0.7,
-    }
-    body = post_llm_chat_completion(base_url, api_key, payload)
-    response_json = json.loads(body)
-    content = response_json["choices"][0]["message"]["content"]
+    content = llm_client.chat(
+        system_prompt=DIRECTOR_SYSTEM_PROMPT,
+        user_prompt=storyboard_prompt(story, scene_count),
+        task="storyboard",
+        temperature=0.7,
+    )
     parsed = extract_json_object(content)
     raw_scenes = parsed.get("scenes")
     if not isinstance(raw_scenes, list) or not raw_scenes:
@@ -4198,28 +4243,12 @@ def script_storyboard_prompt(script: str, max_scenes: int, script_hint: str = ""
 
 
 def call_llm_script_storyboard(script: str, max_scenes: int, script_hint: str = "") -> list[StoryScene]:
-    load_env_file()
-    api_key = os.environ.get("LLM_API_KEY", "").strip()
-    base_url = os.environ.get("LLM_BASE_URL", "").strip().rstrip("/")
-    model = os.environ.get("LLM_MODEL", "").strip()
-
-    if not api_key or not base_url or not model:
-        raise RuntimeError("Missing LLM_API_KEY, LLM_BASE_URL, or LLM_MODEL. Configure .env or use rule mode.")
-
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": DIRECTOR_SYSTEM_PROMPT,
-            },
-            {"role": "user", "content": script_storyboard_prompt(script, max_scenes, script_hint=script_hint)},
-        ],
-        "temperature": 0.3,
-    }
-    body = post_llm_chat_completion(base_url, api_key, payload)
-    response_json = json.loads(body)
-    content = response_json["choices"][0]["message"]["content"]
+    content = llm_client.chat(
+        system_prompt=DIRECTOR_SYSTEM_PROMPT,
+        user_prompt=script_storyboard_prompt(script, max_scenes, script_hint=script_hint),
+        task="script_storyboard",
+        temperature=0.3,
+    )
     parsed = extract_json_object(content)
     raw_scenes = parsed.get("scenes")
     if not isinstance(raw_scenes, list) or not raw_scenes:
@@ -5257,9 +5286,7 @@ def render_clip_with_meta(
     visual_generated = False
     provider_spec = get_video_provider_spec(video_provider)
     provider = provider_spec.id
-    fallback_mode = video_fallback_mode()
-    if env_bool(f"{provider.upper().replace('-', '_')}_VIDEO_STRICT", default=False):
-        fallback_mode = "strict"
+    fallback_mode = video_fallback_mode(provider)
     attempts = 1
     last_error = ""
     warnings: list[str] = []
@@ -5272,7 +5299,7 @@ def render_clip_with_meta(
             visual_generated = True
         except Exception as exc:
             last_error = str(exc)
-            if env_bool("VIDEO_STRICT", "COMFYUI_VIDEO_STRICT", default=False) or fallback_mode == "strict":
+            if fallback_mode == "strict":
                 raise
             fallback_used = True
             used_backend = "local"
@@ -5338,8 +5365,7 @@ def render_clip_with_meta(
                     time.sleep(backoff)
                     retry_delay = min(retry_delay * 2.0, 120.0)
                 else:
-                    strict_name = f"{provider.upper().replace('-', '_')}_VIDEO_STRICT"
-                    if env_bool("VIDEO_STRICT", strict_name, default=False) or fallback_mode == "strict":
+                    if fallback_mode == "strict":
                         raise
                     fallback_used = True
                     used_backend = "local"
@@ -5779,6 +5805,7 @@ def main() -> None:
     parser.add_argument("--scene-count", type=int, default=5, help="Number of storyboard scenes for LLM planning.")
     parser.add_argument("--keyframe-provider", choices=["auto", "local", "comfyui"], default="auto", help="Keyframe renderer backend.")
     parser.add_argument("--video-provider", type=str, default="auto", help="Scene video provider id (for example: auto, local, comfyui).")
+    parser.add_argument("--video-render-granularity", choices=["scene", "shot"], default="", help="Video render granularity. Defaults to VIDEO_RENDER_GRANULARITY or scene.")
     parser.add_argument("--voice-provider", choices=["auto", "edge", "local", "silent"], default="auto", help="Voice renderer backend.")
     args = parser.parse_args()
 
@@ -5797,6 +5824,7 @@ def main() -> None:
     if keyframe_provider == "auto":
         keyframe_provider = env_value("KEYFRAME_PROVIDER", default="auto").lower()
     video_provider = normalize_video_provider(args.video_provider)
+    render_granularity = video_render_granularity(cli_value=args.video_render_granularity)
     voice_provider = args.voice_provider
     if voice_provider == "auto":
         voice_provider = env_value("TTS_PROVIDER", default="auto").lower()
@@ -5851,6 +5879,7 @@ def main() -> None:
                 "planner": planner_used,
                 "keyframe_provider": keyframe_provider,
                 "video_provider": video_provider,
+                "video_render_granularity": render_granularity,
                 "voice_provider": voice_provider,
                 "canonical_timeline_path": str(canonical_timeline_path),
                 "canonical_timeline": canonical_timeline,
@@ -5898,7 +5927,7 @@ def main() -> None:
         storyboard_scene["generation_meta"] = generation_meta_from_result(
             render_result,
             requested_provider=video_provider,
-            fallback_mode=video_fallback_mode(),
+            fallback_mode=video_fallback_mode(video_provider),
         )
         storyboard_scene["shot_plan"] = build_shot_plan(storyboard_scene)
 
@@ -5917,6 +5946,7 @@ def main() -> None:
                 "planner": planner_used,
                 "keyframe_provider": keyframe_provider,
                 "video_provider": video_provider,
+                "video_render_granularity": render_granularity,
                 "voice_provider": voice_provider,
                 "canonical_timeline_path": str(canonical_timeline_path),
                 "canonical_timeline": canonical_timeline,
@@ -5940,6 +5970,7 @@ def main() -> None:
         "planner": planner_used,
         "keyframe_provider": keyframe_provider,
         "video_provider": video_provider,
+        "video_render_granularity": render_granularity,
         "voice_provider": voice_provider,
         "ffmpeg": ffmpeg,
         "storyboard": str(storyboard_path),
