@@ -1,0 +1,24 @@
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,8 +1,18 @@
+ FROM python:3.11-slim
+ 
+ WORKDIR /app
+ 
++# --------------------------------------------------------------------------
++# Security: run as non-root user
++# --------------------------------------------------------------------------
++RUN groupadd -r appuser \
++ && useradd -r -g appuser -u 1000 -m appuser
++
+ COPY requirements.txt .
+ RUN pip install --no-cache-dir -r requirements.txt
+ 
+ COPY . .
+ 
++# Give the app user ownership of the working directory
++RUN chown -R appuser:appuser /app
++
++USER appuser
++
+ CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

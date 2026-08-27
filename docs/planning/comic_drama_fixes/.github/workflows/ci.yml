@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 20
     env:
       PYTHONUNBUFFERED: "1"
-      COVERAGE_THRESHOLD: "0"
+      COVERAGE_THRESHOLD: "30"
       VIDEO_FALLBACK_MODE: "report"
       VIDEO_PROVIDER: "local"
       KEYFRAME_PROVIDER: "local"
@@ -66,11 +66,18 @@ jobs:
             backend/project_runtime.py \
             backend/app.py \
             video_providers.py \
-            scripts/video_provider_adapters.py
+            scripts/video_provider_adapters.py \
+            scripts/check_text_hygiene.py \
+            backend/video_generation.py \
+            backend/scene_renderer.py
+
+      - name: Check text hygiene
+        run: |
+          python scripts/check_text_hygiene.py frontend backend tests scripts docs README.md
 
       - name: Run pytest with coverage
         run: |
-          python -m pytest -p no:cacheprovider --basetemp "${{ runner.temp }}/cd_pytest" \
+          python -m pytest \
             --cov=. \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml:coverage.xml \
@@ -103,19 +110,26 @@ jobs:
         run: |
           node --check frontend/app.js
           node --check frontend/render.js
+          node --check frontend/api.js
+          node --check frontend/events.js
+          node --check frontend/utils.js
+          node --check frontend/state.js
+          node --check frontend/timeline.js
 
       - name: Run frontend helper tests
         run: |
+          node tests/test_frontend_imports.mjs
           node tests/test_review_console_helpers.mjs
 
   docker:
     name: Docker build
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_build == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.docker_build == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build image
-        run: docker build --pull --no-cache -t comic-drama-workflow:ci .
+      - name: Build Docker image
+        run: |
+          docker build -t comic-drama-workflow:ci .

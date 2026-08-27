@@ -1,0 +1,40 @@
+--- a/backend/project_models.py
++++ b/backend/project_models.py
+@@ -1,6 +1,7 @@
+ # backend/project_models.py  (top of file, after existing imports)
++import re
+ import threading
+ from pathlib import Path
+ 
++# ---------------------------------------------------------------------------
++# Project-ID validation – defence against path-traversal via crafted IDs
++# ---------------------------------------------------------------------------
++_PROJECT_ID_PATTERN = re.compile(r"^proj_[0-9]{8}_[0-9]{6}_[a-f0-9]{6}$")
++_TASK_ID_PATTERN    = re.compile(r"^task_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^task_[0-9]{8}_[0-9]{6}_[a-f0-9]{6}$")
++
++
++def _validate_project_id(project_id: str) -> None:
++    """Raise ValueError if *project_id* does not match the expected format.
++
++    This is a first-line defence: it prevents ``../``-style traversal from
++    reaching the filesystem before ``project_dir()`` is called.
++    """
++    if not _PROJECT_ID_PATTERN.match(project_id):
++        raise ValueError(
++            f"Invalid project_id format {project_id!r}. "
++            "Expected: proj_YYYYMMDD_HHMMSS_xxxxxx"
++        )
++
++
+ # ---------------------------------------------------------------------------
+ # Workspace root
+ # ---------------------------------------------------------------------------
+@@ -78,7 +95,8 @@ _LOCKS: dict[str, threading.Lock] = {}
+ 
+ def project_dir(project_id: str) -> Path:
+-    return WORKSPACE / project_id
++    _validate_project_id(project_id)
++    return WORKSPACE / project_id
+ 
+ 
+ def project_file(project_id: str) -> Path:
