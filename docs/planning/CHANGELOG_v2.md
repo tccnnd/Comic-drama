@@ -57,3 +57,11 @@
 - **验收(2) Gate B 端到端 PASS**：`run_workflow --planner rule --voice-provider silent --keyframe-provider local --video-provider local` 跑 sample_story → `GATE_B_EXIT=0`，产物含 `comic_drama_demo.mp4`(7.7MB)、`canonical_timeline.json`、`storyboard.json`、5 个场景片段与各帧/音频。依赖、rule planner（免 LLM）、local 渲染、ffmpeg 合成全部可用。
 - **沙箱坑（重要复用 #3）**：WorkBuddy 沙箱 safe-delete shim 对**非 OS-tmp 目录**的文件删除强制走 trash，而沙箱无 trash → fail-closed 抛 OSError，导致 run_workflow 在 outputs 目录删临时文件时崩溃。验证时通过新增的 `WB_OUTDIR` 环境变量（run_workflow 读取 `os.environ.get("WB_OUTDIR")` 覆盖输出目录，默认仍为 `ROOT/"outputs"`）把产物重定向到 OS tmp，绕开拦截。**建议保留该覆盖**，便于在 WorkBuddy 沙箱内跑 run_workflow。
 - **commit**：本地提交（`requirements*` + `pyproject.toml` + 计划/日志 + rw_config `WB_OUTDIR` 增强），未推 GitHub。
+
+### 2026-08-27 — T1.4 路由拆分收尾（契约快照 + WebSocket 连通测试）
+
+- **现状确认**：P2 合入已实质完成 T1.4 主体——`backend/app.py` 仅 65 行（0 路由装饰器），11 个 router 文件含 57 个路由装饰器（REST + 1 WebSocket），`/api/tasks/{task_id}/stream` 已在 `backend/routers/tasks.py`。故本次仅补齐计划要求的契约快照与连通测试。
+- **契约快照**：`docs/planning/api_contract_snapshot.json`（FastAPI 自动导出，56 路由：含 method/path/status_codes/summary + WebSocket）。无历史拆分前快照可 diff（P2 直接完成拆分未留基线），已注明。
+- **新增测试**：`tests/test_tasks_stream_connectivity.py` —— 验证 `/api/tasks/{task_id}/stream` 握手成功并受控关闭（1000/1008），证明端点可达且遵循契约。
+- **验收**：全量 **511 passed / 10 warnings / exit=0**（较合并前 +2，即新增连通测试）；`import backend.app` 向后兼容；`node --check` 前端此前已通过（T1.2）。
+- **commit**：本地提交，未推 GitHub。

@@ -1,0 +1,459 @@
+{
+  "title": "Comic Drama Backend",
+  "version": "0.1.0",
+  "openapi_version": "3.1.0",
+  "route_count": 56,
+  "routes": {
+    "/": {
+      "GET": {
+        "name": "index",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/bgm-library": {
+      "GET": {
+        "name": "bgm_library",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/bgm-upload": {
+      "POST": {
+        "name": "upload_bgm",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/comfyui/status": {
+      "GET": {
+        "name": "comfyui_status",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/health": {
+      "GET": {
+        "name": "health",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/llm-settings": {
+      "GET": {
+        "name": "llm_settings_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "PUT": {
+        "name": "save_llm_settings_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/llm-test": {
+      "POST": {
+        "name": "test_llm_connection",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/llm-usage": {
+      "GET": {
+        "name": "llm_usage_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects": {
+      "GET": {
+        "name": "list_projects",
+        "status_codes": [],
+        "summary": ""
+      },
+      "POST": {
+        "name": "create_project_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}": {
+      "GET": {
+        "name": "get_project",
+        "status_codes": [],
+        "summary": ""
+      },
+      "DELETE": {
+        "name": "delete_project_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "PATCH": {
+        "name": "patch_project",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/apply-script-preview": {
+      "POST": {
+        "name": "apply_script_preview",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/assets": {
+      "GET": {
+        "name": "list_assets_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "POST": {
+        "name": "create_asset_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/assets/extract": {
+      "POST": {
+        "name": "extract_assets_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/assets/generate-all": {
+      "POST": {
+        "name": "generate_all_assets_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/assets/{asset_id}": {
+      "PUT": {
+        "name": "update_asset_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "DELETE": {
+        "name": "delete_asset_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/assets/{asset_id}/generate": {
+      "POST": {
+        "name": "generate_asset_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/build": {
+      "POST": {
+        "name": "build_project_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/characters/{char_index}": {
+      "PATCH": {
+        "name": "patch_character",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/characters/{char_index}/reference-image": {
+      "POST": {
+        "name": "upload_character_reference_image",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/characters/{char_name}/consistency-status": {
+      "GET": {
+        "name": "character_consistency_status",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/cleanup": {
+      "POST": {
+        "name": "cleanup_project_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/comfyui-health": {
+      "GET": {
+        "name": "project_comfyui_health",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/consistency-report": {
+      "GET": {
+        "name": "project_consistency_report",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/cost-estimate": {
+      "GET": {
+        "name": "project_cost_estimate",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/events": {
+      "GET": {
+        "name": "project_events",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/export": {
+      "POST": {
+        "name": "export_project_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/export-otio": {
+      "GET": {
+        "name": "export_otio",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/fill-missing-assets": {
+      "POST": {
+        "name": "fill_missing_assets_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/recognize-script": {
+      "POST": {
+        "name": "recognize_script",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/recognize-script/preview": {
+      "POST": {
+        "name": "preview_recognize_script",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/repair-story-text": {
+      "POST": {
+        "name": "repair_story_text",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}": {
+      "PATCH": {
+        "name": "patch_scene",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/candidates/{kind}/select": {
+      "POST": {
+        "name": "select_scene_candidate",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/merge-next": {
+      "POST": {
+        "name": "merge_scene_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/rebuild": {
+      "POST": {
+        "name": "rebuild_scene_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/rerender-audio": {
+      "POST": {
+        "name": "rerender_scene_audio_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/rerender-image": {
+      "POST": {
+        "name": "rerender_scene_image_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/rerender-video": {
+      "POST": {
+        "name": "rerender_scene_video_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/restore": {
+      "POST": {
+        "name": "restore_scene_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/shots/{shot_id}/rerender-video": {
+      "POST": {
+        "name": "rerender_scene_shot_video_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/scenes/{scene_order}/split": {
+      "POST": {
+        "name": "split_scene_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/projects/{project_id}/style": {
+      "GET": {
+        "name": "get_project_style",
+        "status_codes": [],
+        "summary": ""
+      },
+      "POST": {
+        "name": "set_project_style",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/styles": {
+      "GET": {
+        "name": "list_styles_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "POST": {
+        "name": "create_style_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/styles/{style_id}": {
+      "PUT": {
+        "name": "update_style_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "DELETE": {
+        "name": "delete_style_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/tasks": {
+      "POST": {
+        "name": "create_task",
+        "status_codes": [],
+        "summary": ""
+      },
+      "GET": {
+        "name": "list_tasks",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "GET": {
+        "name": "get_task",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/tasks/{task_id}/files": {
+      "GET": {
+        "name": "task_files",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/tasks/{task_id}/stream": {
+      "WS": {
+        "name": "task_stream",
+        "summary": ""
+      }
+    },
+    "/api/tasks/{task_id}/video": {
+      "GET": {
+        "name": "task_video",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/tts-diagnostics": {
+      "GET": {
+        "name": "tts_diagnostics_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/tts-providers": {
+      "GET": {
+        "name": "tts_providers_endpoint",
+        "status_codes": [],
+        "summary": ""
+      },
+      "PUT": {
+        "name": "save_tts_providers_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/video-providers": {
+      "GET": {
+        "name": "list_video_providers_endpoint",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/video-providers/status": {
+      "GET": {
+        "name": "video_providers_status",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/voice-catalog": {
+      "GET": {
+        "name": "voice_catalog",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/voice-presets": {
+      "GET": {
+        "name": "voice_presets",
+        "status_codes": [],
+        "summary": ""
+      },
+      "PUT": {
+        "name": "save_voice_presets",
+        "status_codes": [],
+        "summary": ""
+      }
+    },
+    "/api/voice-preview": {
+      "POST": {
+        "name": "create_voice_preview",
+        "status_codes": [],
+        "summary": ""
+      }
+    }
+  }
+}

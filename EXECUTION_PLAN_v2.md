@@ -362,7 +362,7 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | T1.1 | P2 分支合入 | 1 | completed（509 passed/10 warnings/exit=0；13 rw_* 落位；run_workflow.py 411 行；py_compile+node --check 通过） |
 | T1.2 | 测试基线+覆盖率阶梯 | 1 | completed（实测 43.92%；阈值设 43% 保 CI 绿；scope=backend/scripts/video_providers.py；后续爬升 54→64→80） |
 | T1.3 | 依赖现代化 | 1 | completed |
-| T1.4 | app.py 路由拆分 | 1 | planned |
+| T1.4 | app.py 路由拆分 | 1 | completed（主体由 P2 合入完成；补契约快照+WebSocket 连通测试） |
 | T1.5 | 前端工具链 | 1 | planned |
 | T1.6 | 格式化 | 1 | planned |
 | T1.7 | mypy 渐进 | 1 | planned |
