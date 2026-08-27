@@ -19,3 +19,15 @@ extend-exclude = "_external|\\.venv|\\.tmp|workspace|outputs|data|node_modules"
 profile = "black"
 line_length = 100
 extend_skip = ["_external", ".venv", ".tmp", "workspace", "outputs", "data", "node_modules"]
+
+[tool.mypy]
+python_version = "3.11"
+# 渐进策略（T1.7）：仅对核心模块严格检查；其余模块暂忽略错误，后续逐步收紧。
+files = [
+    "backend/project_models.py",
+    "backend/task_store.py",
+    "video_providers.py",
+]
+follow_imports = "skip"
+ignore_missing_imports = true
+cache_dir = ".mypy_cache"

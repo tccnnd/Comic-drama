@@ -85,3 +85,12 @@
 - **执行**：scope=`backend scripts tests video_providers.py`（按计划收窄，不扫 `.`）。首次 black 88 个文件需 reformat（实际写入 81 个）、isort 修复一批 imports；写入后 `--check` 全部回填通过（black 100 文件 unchanged、isort exit=0）。
 - **验收**：全量 **511 passed / 10 warnings / exit=0**（格式化无语义变化）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T1.7 mypy 渐进
+
+- **依赖**：mypy==2.3.1 加入 `requirements-dev.in` 并重新 pip-compile（已入锁）。⚠️ PyPI 直连超时，用阿里云镜像安装成功。
+- **配置**：`pyproject.toml` 新增 `[tool.mypy]`——`files = [backend/project_models.py, backend/task_store.py, video_providers.py]`（3 核心模块严格检查），`follow_imports = "skip"` + `ignore_missing_imports = true`（其余模块暂不沿 import 检查），`cache_dir = ".mypy_cache"`（已加入 .gitignore）。渐进收紧计划：后续每轮将 1 个模块移入 `files` 并修复至零错误。
+- **修复 1 处真实类型错误**：`video_providers.py` L228-234 的 `key_names`/`model_names`/`base_names` tuple 被 mypy 推断为固定长度，sora 分支重新赋不同长度导致 3 个 `[assignment]` 错误 → 显式注解 `tuple[str, ...]`。
+- **沙箱坑（复用 #4）**：mypy INTERNAL ERROR 的根因是 `.mypy_cache` 写入被 safe-delete shim 拦截（非 mypy 自身 bug）；`--cache-dir` 指向 OS tmp 即恢复。本地跑 mypy 建议 `CODEBUDDY_SAFE_DELETE_SANDBOX=0` + 自定义 cache-dir。
+- **验收**：`mypy`（按 pyproject 配置）→ `Success: no issues found in 3 source files`；全量 **511 passed / 10 warnings / exit=0**（tuple 注解无语义变化）。
+- **commit**：本地提交，未推 GitHub。

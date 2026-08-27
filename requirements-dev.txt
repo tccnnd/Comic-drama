@@ -18,6 +18,8 @@ anyio==4.14.2
     # via
     #   httpx
     #   starlette
+ast-serialize==0.8.0
+    # via mypy
 attrs==26.1.0
     # via aiohttp
 bcrypt==5.0.0
@@ -79,14 +81,19 @@ invoke==3.0.3
     # via paramiko
 isort==9.0.0
     # via -r requirements-dev.in
+librt==0.15.0
+    # via mypy
 multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
+mypy==2.3.1
+    # via -r requirements-dev.in
 mypy-extensions==1.1.0
     # via
     #   black
     #   isort
+    #   mypy
 packaging==26.3
     # via
     #   black
@@ -96,7 +103,9 @@ packaging==26.3
 paramiko==5.0.0
     # via -r requirements.in
 pathspec==1.1.1
-    # via black
+    # via
+    #   black
+    #   mypy
 pillow==12.2.0
     # via -r requirements.in
 pip-tools==7.6.1
@@ -151,6 +160,7 @@ typing-extensions==4.16.0
     # via
     #   edge-tts
     #   fastapi
+    #   mypy
     #   pydantic
     #   pydantic-core
     #   typing-inspection

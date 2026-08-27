@@ -225,9 +225,13 @@ def _provider_readiness(spec: VideoProviderSpec) -> dict[str, object]:
         }
 
     prefix = spec.id.upper().replace("-", "_")
-    key_names = (f"{prefix}_API_KEY",)
-    model_names = (f"{prefix}_MODEL",)
-    base_names = (f"{prefix}_BASE_URL", f"{prefix}_SUBMIT_URL", f"{prefix}_SUBMIT_PATH")
+    key_names: tuple[str, ...] = (f"{prefix}_API_KEY",)
+    model_names: tuple[str, ...] = (f"{prefix}_MODEL",)
+    base_names: tuple[str, ...] = (
+        f"{prefix}_BASE_URL",
+        f"{prefix}_SUBMIT_URL",
+        f"{prefix}_SUBMIT_PATH",
+    )
     if spec.id == "sora":
         key_names = (*key_names, "OPENAI_API_KEY")
         model_names = (*model_names, "OPENAI_VIDEO_MODEL")
