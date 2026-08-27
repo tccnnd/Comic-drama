@@ -1,0 +1,94 @@
+{
+  "provider_id": "seedance_incomplete_run",
+  "evaluated_at": "2026-06-24",
+  "evaluator": "desktop_research",
+  "samples": [
+    {
+      "scene": 1,
+      "type": "character_closeup",
+      "expected_style": "anime",
+      "usable": true,
+      "vlm_score": 0.83,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 0.6,
+      "latency_ms": 7000,
+      "evidence_paths": {
+        "image": "outputs/viability/seedance/scene_01_keyframe.png",
+        "video": "outputs/viability/seedance/scene_01_video.mp4"
+      }
+    },
+    {
+      "scene": 2,
+      "type": "dialogue_two_shot",
+      "expected_style": "anime",
+      "usable": true,
+      "vlm_score": 0.79,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 0.6,
+      "latency_ms": 7500,
+      "evidence_paths": {
+        "image": "outputs/viability/seedance/scene_02_keyframe.png",
+        "video": "outputs/viability/seedance/scene_02_video.mp4"
+      }
+    },
+    {
+      "scene": 3,
+      "type": "broll_empty",
+      "expected_style": "realistic",
+      "usable": true,
+      "vlm_score": 0.76,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 0.6,
+      "latency_ms": 6800,
+      "evidence_paths": {
+        "image": "outputs/viability/seedance/scene_03_keyframe.png",
+        "video": "outputs/viability/seedance/scene_03_video.mp4"
+      }
+    },
+    {
+      "scene": 4,
+      "type": "motion_walking",
+      "expected_style": "anime",
+      "usable": true,
+      "vlm_score": 0.74,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 0.6,
+      "latency_ms": 8200,
+      "evidence_paths": {
+        "image": "",
+        "video": ""
+      }
+    },
+    {
+      "scene": 5,
+      "type": "complex_crowd",
+      "expected_style": "anime",
+      "usable": true,
+      "vlm_score": 0.71,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 0.6,
+      "latency_ms": 9000,
+      "evidence_paths": {
+        "image": "outputs/viability/seedance/scene_05_keyframe.png",
+        "video": "outputs/viability/seedance/scene_05_video.mp4"
+      }
+    }
+  ],
+  "scores": {
+    "api_stability": 4,
+    "doc_quality": 4,
+    "domestic_access": 5,
+    "cost": 4,
+    "output_quality": 3,
+    "comic_fit": 2
+  },
+  "flags": {
+    "license_clear": true,
+    "compliance_blocked": false
+  },
+  "manual_notes": "scene 4 的 motion_walking 镜头 evidence 路径为空（任务中断 / 文件丢失）→ F7 触发。scorecard 不可信，必须重跑。",
+  "expected_decision": {
+    "status": "reject",
+    "fail_codes": ["F7"]
+  }
+}

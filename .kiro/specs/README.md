@@ -27,13 +27,16 @@ branch/merge state):
 - `director-interpretation-mainline` (v0.5.0): structured `director_plan` +
   per-shot `visual_content`, consumed by the video-provider prompt.
   **Spec complete (local); implementation pending.**
+- `shot-level-video-rendering`: per-shot provider rendering, shot clip
+  assembly, shot-level provenance, resume/targeted rerender, and quota guards.
+  **Draft spec; implementation pending acceptance.**
 
 Future / deferred specs (not yet written):
 
 - `provider-cost-controls`: cost/timing/quota accounting across video providers.
 - consistency-regeneration: the deferred `regenerate` policy mode from v0.3.0
   (governance-driven re-render), only after verdicts prove stable.
-- Long-form / multi-episode management and finer shot-language/prompt governance.
+- Long-form / multi-episode management.
 
 ## Handoff Rule
 

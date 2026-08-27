@@ -186,6 +186,58 @@ def list_video_providers() -> list[dict[str, object]]:
     return [asdict(spec) for spec in list_video_provider_specs()]
 
 
+def _env_configured(*names: str) -> bool:
+    return any(bool(os.environ.get(name, "").strip()) for name in names)
+
+
+def _provider_readiness(spec: VideoProviderSpec) -> dict[str, object]:
+    if spec.backend == "local":
+        return {
+            "ready": True,
+            "level": "ready",
+            "summary": "Local 2.5D provider is always available.",
+            "blocking_env": [],
+        }
+
+    blocking_env: list[str] = []
+    if spec.backend == "comfyui":
+        if not _env_configured("COMFYUI_VIDEO_WORKFLOW_PATH"):
+            blocking_env.append("COMFYUI_VIDEO_WORKFLOW_PATH")
+        if not _env_configured("COMFYUI_VIDEO_CHECKPOINT_NAME", "COMFYUI_CHECKPOINT_NAME"):
+            blocking_env.append("COMFYUI_VIDEO_CHECKPOINT_NAME")
+        summary = "ComfyUI video provider is configured." if not blocking_env else f"Missing {len(blocking_env)} required ComfyUI setting(s)."
+        return {
+            "ready": not blocking_env,
+            "level": "ready" if not blocking_env else "missing_config",
+            "summary": summary,
+            "blocking_env": blocking_env,
+        }
+
+    prefix = spec.id.upper().replace("-", "_")
+    key_names = (f"{prefix}_API_KEY",)
+    model_names = (f"{prefix}_MODEL",)
+    base_names = (f"{prefix}_BASE_URL", f"{prefix}_SUBMIT_URL", f"{prefix}_SUBMIT_PATH")
+    if spec.id == "sora":
+        key_names = (*key_names, "OPENAI_API_KEY")
+        model_names = (*model_names, "OPENAI_VIDEO_MODEL")
+        base_names = (*base_names, "OPENAI_BASE_URL", "OPENAI_SUBMIT_PATH")
+
+    if not _env_configured(*key_names):
+        blocking_env.append(" or ".join(key_names))
+    if not _env_configured(*model_names):
+        blocking_env.append(" or ".join(model_names))
+    if not _env_configured(*base_names):
+        blocking_env.append(" or ".join(base_names))
+
+    summary = "Remote video provider is configured." if not blocking_env else f"Missing {len(blocking_env)} required remote provider setting(s)."
+    return {
+        "ready": not blocking_env,
+        "level": "ready" if not blocking_env else "missing_config",
+        "summary": summary,
+        "blocking_env": blocking_env,
+    }
+
+
 def get_video_provider_status(provider: str | None = None) -> dict[str, object]:
     spec = get_video_provider_spec(provider)
     ignore_env = {"VIDEO_PROVIDER", "VIDEO_STRICT"}
@@ -210,6 +262,7 @@ def get_video_provider_status(provider: str | None = None) -> dict[str, object]:
         "env": env_status,
         "configured_count": sum(1 for item in env_status if item["configured"]),
         "missing_env": missing_env,
+        "readiness": _provider_readiness(spec),
     }
 
 

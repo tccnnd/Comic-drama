@@ -1,0 +1,94 @@
+{
+  "provider_id": "vidu_low_quality",
+  "evaluated_at": "2026-06-24",
+  "evaluator": "desktop_research",
+  "samples": [
+    {
+      "scene": 1,
+      "type": "character_closeup",
+      "expected_style": "anime",
+      "usable": false,
+      "vlm_score": 0.21,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 2.4,
+      "latency_ms": 22000,
+      "evidence_paths": {
+        "image": "outputs/viability/vidu/scene_01_keyframe.png",
+        "video": "outputs/viability/vidu/scene_01_video.mp4"
+      }
+    },
+    {
+      "scene": 2,
+      "type": "dialogue_two_shot",
+      "expected_style": "anime",
+      "usable": false,
+      "vlm_score": 0.18,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 2.4,
+      "latency_ms": 24500,
+      "evidence_paths": {
+        "image": "outputs/viability/vidu/scene_02_keyframe.png",
+        "video": "outputs/viability/vidu/scene_02_video.mp4"
+      }
+    },
+    {
+      "scene": 3,
+      "type": "broll_empty",
+      "expected_style": "realistic",
+      "usable": false,
+      "vlm_score": 0.25,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 2.3,
+      "latency_ms": 21000,
+      "evidence_paths": {
+        "image": "outputs/viability/vidu/scene_03_keyframe.png",
+        "video": "outputs/viability/vidu/scene_03_video.mp4"
+      }
+    },
+    {
+      "scene": 4,
+      "type": "motion_walking",
+      "expected_style": "anime",
+      "usable": false,
+      "vlm_score": 0.19,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 2.5,
+      "latency_ms": 26000,
+      "evidence_paths": {
+        "image": "outputs/viability/vidu/scene_04_keyframe.png",
+        "video": "outputs/viability/vidu/scene_04_video.mp4"
+      }
+    },
+    {
+      "scene": 5,
+      "type": "complex_crowd",
+      "expected_style": "anime",
+      "usable": false,
+      "vlm_score": 0.15,
+      "duration_seconds": 4,
+      "cost_per_second_cny": 2.5,
+      "latency_ms": 28000,
+      "evidence_paths": {
+        "image": "outputs/viability/vidu/scene_05_keyframe.png",
+        "video": "outputs/viability/vidu/scene_05_video.mp4"
+      }
+    }
+  ],
+  "scores": {
+    "api_stability": 3,
+    "doc_quality": 3,
+    "domestic_access": 5,
+    "cost": 2,
+    "output_quality": 0,
+    "comic_fit": 3
+  },
+  "flags": {
+    "license_clear": true,
+    "compliance_blocked": false
+  },
+  "manual_notes": "模拟一个版本回退场景：API 文档 OK，国内可访问，但 5 个测试镜头全 VLM < 0.3（人物崩 + 风格错）→ F2 触发",
+  "expected_decision": {
+    "status": "reject",
+    "fail_codes": ["F2"]
+  }
+}

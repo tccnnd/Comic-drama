@@ -34,5 +34,26 @@ voice_sources/
 *.bak
 *.bak_rw4
 .workbuddy/
-coverage.xml
 pytest_dirs.txt
+
+# Runtime upload directory
+.uploads/
+
+# IDE / editor directories
+.idea/
+.vscode/settings.json
+
+# Coverage and lint caches
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ruff_cache/
+
+# Python packaging
+*.egg-info/
+*.egg
+.eggs/
+
+# Large generated review / LLM output files
+docs/project_review_report.md

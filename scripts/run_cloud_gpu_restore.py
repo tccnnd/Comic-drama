@@ -33,7 +33,7 @@ def connect() -> paramiko.SSHClient:
         raise RuntimeError("COMFYUI_SSH_PASSWORD is required. Put it in .env or set the environment variable.")
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.set_missing_host_key_policy(paramiko.WarningPolicy())
     client.connect(
         hostname=host,
         port=port,

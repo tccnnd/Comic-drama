@@ -18,7 +18,8 @@ Status: mostly complete.
 
 ## Phase 1: Real Video Generation
 
-Status: active priority.
+Status: scene-level mainline delivered; shot-level rendering is the active next
+step.
 
 - Treat generated video clips as first-class scene media.
 - Route each scene through a pluggable `VIDEO_PROVIDER`.
@@ -27,10 +28,13 @@ Status: active priority.
 - Add gateway adapters for Sora-style, Doubao, Seedance, and aggregator
   platforms.
 - Persist provider request, response, cost, timing, and failure metadata.
+- Render `shot_plan.shots[]` as provider clips, assemble them into the scene
+  video, and persist per-shot provenance.
+- Add dry-run quota guards before enabling shot-level live calls by default.
 
 ## Phase 2: Global Consistency Governance
 
-Status: planned.
+Status: delivered in v0.3.0.
 
 - Generate a production bible for characters, locations, props, lighting, and
   camera grammar.
@@ -46,13 +50,14 @@ Status: planned.
 
 ## Phase 3: Review And Editorial Workflow
 
-Status: in progress.
+Status: delivered in v0.4.0.
 
 - Expand the storyboard review canvas into a director review console.
 - Add A/B comparison for regenerated scene versions.
 - Add review filters, ratings, blocking reasons, and rerender queues.
 - Export canonical timeline data for external editing tools.
-- Support shot-level notes and acceptance criteria.
+- Support shot-level render status, notes, targeted rerender, and acceptance
+  criteria.
 
 ## Phase 4: Screenplay Import And Authoring
 

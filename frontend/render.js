@@ -1,4 +1,4 @@
-// ─── DOM Rendering Functions ─────────────────────────────────────────────────
+// DOM Rendering Functions
 
 import {
   state,
@@ -18,6 +18,8 @@ import {
   reviewGovernanceFilterOptions,
   reviewProvenanceFilterOptions,
   reviewDeliverableFilterOptions,
+  reviewPrototypeModeFilterOptions,
+  reviewPrototypeGapFilterOptions,
   reviewSortOptions,
   TIMELINE_PX_PER_SECOND,
 } from "./state.js";
@@ -66,11 +68,28 @@ import {
 } from "./utils.js";
 import { renderVoiceCatalogDatalist } from "./api.js";
 import { stopTemporalPreview } from "./timeline.js";
+import { renderStoryboardReviewCanvas } from "./components/review/canvas.js";
 
 export function render() {
   stopTemporalPreview();
+  const previousContent = appRoot.querySelector?.(".content");
+  const previousShell = appRoot.querySelector?.(".shell");
+  const shouldRestoreSettingsScroll = previousShell?.dataset?.activeTab === "settings" && state.activeTab === "settings" && previousContent;
+  if (shouldRestoreSettingsScroll) {
+    const previousSettingsBody = appRoot.querySelector?.("#settingsSection .window-body");
+    state.settingsScrollTop = previousContent.scrollTop;
+    state.settingsBodyScrollTop = previousSettingsBody?.scrollTop || 0;
+  }
   appRoot.innerHTML = renderShell();
   renderVoiceCatalogDatalist();
+  if (shouldRestoreSettingsScroll) {
+    requestAnimationFrame(() => {
+      const content = document.querySelector(".content");
+      const settingsBody = document.querySelector("#settingsSection .window-body");
+      if (content) content.scrollTop = state.settingsScrollTop || 0;
+      if (settingsBody) settingsBody.scrollTop = state.settingsBodyScrollTop || 0;
+    });
+  }
 }
 
 export function renderShell() {
@@ -99,7 +118,7 @@ export function renderModal() {
   else return "";
   return `
     <div class="modal-overlay" data-action="modal-close-overlay">
-      <div class="modal-shell" data-modal-stop>
+      <div class="modal-shell" data-modal-stop role="dialog" aria-modal="true" aria-labelledby="modal-title">
         ${body}
       </div>
     </div>
@@ -221,11 +240,13 @@ function renderVideoProviderStatus(project) {
   const provider = status.provider || {};
   const configuredCount = Number(status.configured_count || 0);
   const missing = Array.isArray(status.missing_env) ? status.missing_env.length : 0;
+  const readiness = status.readiness && typeof status.readiness === "object" ? status.readiness : {};
+  const blocking = Array.isArray(readiness.blocking_env) ? readiness.blocking_env.length : missing;
   const label = provider.label || provider.id || project.settings?.video_provider || "auto";
   const backend = provider.backend || "unknown";
-  const ready = backend === "local" || missing === 0;
-  const readiness = ready ? "ready" : `${missing} missing`;
-  return `<span class="summary-chip provider-status ${ready ? "is-ready" : "is-missing"}" title="${h(`${configuredCount} configured, ${missing} missing`)}">Video: ${h(label)} / ${h(backend)} / ${h(readiness)}</span>`;
+  const ready = readiness.ready === true || backend === "local";
+  const readinessLabel = ready ? "ready" : `${blocking} missing`;
+  return `<span class="summary-chip provider-status ${ready ? "is-ready" : "is-missing"}" title="${h(`${configuredCount} configured, ${missing} optional missing, ${blocking} blocking`)}">Video: ${h(label)} / ${h(backend)} / ${h(readinessLabel)}</span>`;
 }
 
 function projectContinuityLedger(project) {
@@ -281,6 +302,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "assets") return renderAssetsView(project);
   if (state.activeTab === "storyboard") return renderStoryboardView(project);
   if (state.activeTab === "produce") return renderProduceView(project);
+  if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
 
@@ -550,6 +572,233 @@ export function renderSettingsView(project) {
         </div>
       </section>
     </div>
+    ${renderLlmConfigSection()}
+  `;
+}
+
+function renderLlmConfigSection() {
+  const llm = state.llmSettings;
+  const testing = state.llmTesting;
+  const testResult = state.llmTestResult;
+  const presets = llm?.presets || [];
+  const cfg = llm?.settings || {};
+
+  const presetButtons = presets.map((p, i) =>
+    `<button class="ghost-button" type="button" data-action="llm-preset" data-preset-idx="${i}" style="font-size:12px;padding:4px 10px">${h(p.label)}</button>`
+  ).join(" ");
+
+  const testBadge = !testResult ? "" :
+    testResult.ok
+      ? `<span class="asset-readiness is-ready" style="font-size:12px">✓ 连接成功 (${h(testResult.model || cfg.model)})</span>`
+      : `<span class="asset-readiness is-blocked" style="font-size:12px">✗ ${h(testResult.error || "连接失败")}</span>`;
+
+  return `
+    <section id="settingsSection" class="window-pane" style="margin-top:16px">
+      <div class="window-head">LLM API 配置 <small>用于 AI 剧本拆解与导演解读</small></div>
+      <div class="window-body section-stack">
+        <div class="form-grid">
+          ${apiConfigInput("llmApiKeyInput", "API Key", cfg.api_key_masked || "", "sk-...", "password")}
+          ${apiConfigInput("llmBaseUrlInput", "Base URL", cfg.base_url || "https://api.deepseek.com/v1", "https://api.openai.com/v1")}
+          ${apiConfigInput("llmModelInput", "Model", cfg.model || "deepseek-chat", "deepseek-chat")}
+        </div>
+        <div class="toggle-row">
+          ${fieldCheckbox("llmJsonModeInput", "JSON Mode（结构化输出）", cfg.json_mode !== false)}
+        </div>
+        <div class="row-actions" style="flex-wrap:wrap;gap:6px">
+          <span class="muted" style="font-size:12px;line-height:28px">快捷预设：</span>
+          ${presetButtons}
+        </div>
+        <div class="row-actions">
+          <button class="primary-button" type="button" data-action="save-llm-settings">保存配置</button>
+          <button class="ghost-button" type="button" data-action="test-llm" ${testing ? "disabled" : ""}>
+            ${testing ? "测试中..." : "测试连接"}
+          </button>
+          ${testBadge}
+        </div>
+        ${cfg.api_key_set === false ? `<div class="preview-note" style="color:var(--warn)">⚠ 尚未配置 API Key，LLM 相关功能将不可用</div>` : ""}
+        ${renderApiProfileCards(cfg)}
+        ${renderTaskOverridesSection(cfg, llm?.task_definitions || [])}
+        ${renderLlmUsageSection()}
+      </div>
+    </section>
+  `;
+}
+
+function apiConfigInput(id, label, value = "", placeholder = "", type = "text") {
+  return `
+    <label class="field">
+      <span>${h(label)}</span>
+      <input id="${h(id)}" type="${h(type)}" value="${h(value)}" placeholder="${h(placeholder)}">
+    </label>
+  `;
+}
+
+function renderApiProfileCards(cfg) {
+  const cards = [
+    {
+      key: "language_model",
+      title: "语言模型 API",
+      desc: "文本改写、剧本拆解、导演解读等语言任务优先使用此配置；留空则继承上方默认 LLM。",
+      modelPlaceholder: cfg.model || "deepseek-chat",
+    },
+    {
+      key: "character_image",
+      title: "角色图生成 API",
+      desc: "为角色设定图、参考图生成预留的独立接口；留空则继承上方默认 LLM 配置。",
+      modelPlaceholder: "image-model-or-compatible-model",
+    },
+  ];
+
+  const overrides = cfg.task_overrides || {};
+  const defaultBaseUrl = cfg.base_url || "https://api.openai.com/v1";
+
+  return `
+    <div class="api-profile-grid">
+      ${cards.map((card) => renderApiProfileCard(card, overrides[card.key] || {}, defaultBaseUrl)).join("")}
+    </div>
+  `;
+}
+
+function renderApiProfileCard(card, override, defaultBaseUrl) {
+  const apiKeySet = override.api_key_set === true;
+  return `
+    <section class="api-profile-card" data-api-profile="${h(card.key)}">
+      <div class="api-profile-head">
+        <div>
+          <div class="item-title">${h(card.title)}</div>
+          <div class="item-meta">${h(card.desc)}</div>
+        </div>
+        <span class="summary-chip">${apiKeySet ? "已设置 Key" : "继承默认"}</span>
+      </div>
+      <div class="form-grid three">
+        ${apiConfigInput(`taskOvApiKey_${card.key}`, "API Key", override.api_key_masked || "", apiKeySet ? "••••••••(已设置)" : "留空则继承默认", "password")}
+        ${apiConfigInput(`taskOvBaseUrl_${card.key}`, "Base URL", override.base_url || "", `留空则继承默认 (${defaultBaseUrl})`)}
+        ${apiConfigInput(`taskOvModel_${card.key}`, "Model", override.model || "", card.modelPlaceholder)}
+      </div>
+    </section>
+  `;
+}
+
+function renderTaskOverridesSection(cfg, taskDefs) {
+  const overrides = cfg.task_overrides || {};
+  const defaultBaseUrl = cfg.base_url || "";
+  const defaultModel = cfg.model || "";
+  const visibleProfileKeys = new Set(["language_model", "character_image"]);
+
+  const taskCards = taskDefs.map(td => {
+    const key = td.key;
+    if (visibleProfileKeys.has(key)) return "";
+    const ov = overrides[key] || {};
+    const enabled = overrides[key] != null;
+    const ovBaseUrl = ov.base_url || "";
+    const ovModel = ov.model || "";
+    const ovKeyMasked = ov.api_key_masked || "";
+    const ovKeySet = ov.api_key_set === true;
+
+    return `
+      <div class="task-override-card" style="border:1px solid var(--line-soft);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px">
+            <input type="checkbox" data-action="task-override-toggle" data-task-key="${h(key)}" ${enabled ? "checked" : ""} style="margin:0" />
+            <strong>${h(td.label)}</strong>
+          </label>
+          <span class="muted" style="font-size:11px">${h(td.desc)}</span>
+        </div>
+        ${enabled ? `
+          <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div>
+              <label style="font-size:11px;color:var(--muted)">独立 API Key</label>
+              <input type="password" id="taskOvApiKey_${h(key)}" value="${h(ovKeyMasked)}" placeholder="${ovKeySet ? "••••••••(已设置)" : "留空则继承默认"}" style="width:100%;font-size:12px" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted)">独立 Base URL</label>
+              <input type="text" id="taskOvBaseUrl_${h(key)}" value="${h(ovBaseUrl)}" placeholder="留空则继承默认 (${h(defaultBaseUrl)})" style="width:100%;font-size:12px" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--muted)">独立 Model</label>
+              <input type="text" id="taskOvModel_${h(key)}" value="${h(ovModel)}" placeholder="留空则继承默认 (${h(defaultModel)})" style="width:100%;font-size:12px" />
+            </div>
+          </div>
+        ` : `<div class="muted" style="font-size:12px">使用默认配置（${h(defaultModel)} @ ${h(defaultBaseUrl)}）</div>`}
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--muted)">
+        🔧 任务级配置：为不同任务分别指定 LLM
+      </summary>
+      <div style="margin-top:8px">
+        ${taskCards}
+        <div class="muted" style="font-size:11px;margin-top:4px">
+          勾选任务后可填写独立的 API Key / Base URL / Model。留空的字段会自动继承默认配置。
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+function renderLlmUsageSection() {
+  const usage = state.llmUsage;
+  if (!usage || usage.total_calls === 0) {
+    return `<div class="muted" style="font-size:12px;margin-top:8px">暂无 LLM 调用记录</div>`;
+  }
+
+  const byTaskEntries = Object.entries(usage.by_task || {});
+  const byModelEntries = Object.entries(usage.by_model || {});
+  const recent = usage.recent || [];
+
+  const taskRows = byTaskEntries.length === 0
+    ? ""
+    : byTaskEntries.map(([task, info]) =>
+      `<tr><td>${h(task)}</td><td style="text-align:right">${info.calls}</td><td style="text-align:right">${(info.tokens || 0).toLocaleString()}</td></tr>`
+    ).join("");
+
+  const modelRows = byModelEntries.length === 0
+    ? ""
+    : byModelEntries.map(([model, info]) =>
+      `<tr><td>${h(model)}</td><td style="text-align:right">${info.calls}</td><td style="text-align:right">${(info.tokens || 0).toLocaleString()}</td></tr>`
+    ).join("");
+
+  const recentRows = recent.length === 0
+    ? ""
+    : recent.slice(-5).reverse().map(r => {
+      const status = r.ok ? '<span style="color:var(--ok)">✓</span>' : '<span style="color:var(--danger)">✗</span>';
+      return `<tr><td>${h(r.ts || "")}</td><td>${h(r.task || "")}</td><td>${h(r.model || "")}</td><td style="text-align:right">${(r.total_tokens || 0).toLocaleString()}</td><td style="text-align:right">${r.duration_ms || 0}ms</td><td>${status}</td></tr>`;
+    }).join("");
+
+  return `
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--muted)">
+        📊 用量统计：${usage.total_calls} 次调用 · ${usage.total_tokens.toLocaleString()} tokens
+      </summary>
+      <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">按任务</div>
+          <table class="mini-table" style="width:100%;font-size:12px">
+            <thead><tr><th>任务</th><th style="text-align:right">调用</th><th style="text-align:right">tokens</th></tr></thead>
+            <tbody>${taskRows}</tbody>
+          </table>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">按模型</div>
+          <table class="mini-table" style="width:100%;font-size:12px">
+            <thead><tr><th>模型</th><th style="text-align:right">调用</th><th style="text-align:right">tokens</th></tr></thead>
+            <tbody>${modelRows}</tbody>
+          </table>
+        </div>
+      </div>
+      ${recentRows ? `
+        <div style="margin-top:8px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">最近调用</div>
+          <table class="mini-table" style="width:100%;font-size:12px">
+            <thead><tr><th>时间</th><th>任务</th><th>模型</th><th style="text-align:right">tokens</th><th style="text-align:right">耗时</th><th>状态</th></tr></thead>
+            <tbody>${recentRows}</tbody>
+          </table>
+        </div>
+      ` : ""}
+    </details>
   `;
 }
 
@@ -1037,176 +1286,21 @@ function renderClipPreview(scene) {
   `;
 }
 
-export function renderStoryboardReviewCanvas(project) {
-  const scenes = timelineSceneItems(project);
-  if (!scenes.length) return `<div class="empty-state">暂无 canonical timeline。</div>`;
-  const triage = activeReviewTriageState();
-  const visibleScenes = applyReviewTriage(scenes, triage);
-  const selected = visibleScenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || selectedTimelineScene(project);
-  const filter = triage.review_status;
-  const summary = scenes.reduce((acc, scene) => {
-    const meta = sceneReviewMeta(scene);
-    acc[meta.status] = (acc[meta.status] || 0) + 1;
-    return acc;
-  }, {});
-  const ledger = projectContinuityLedger(project);
-  const counts = ledger.status_counts || {};
-  const blocked = Number(ledger.blocked_scene_count || 0);
-  return `
-    <div class="storyboard-review">
-      ${renderReviewOverviewHeader(project)}
-      ${renderReviewTriageBar(project)}
-      <div class="review-summary">
-        <span>${h(scenes.length)} 镜</span>
-        <span>通过 ${h(summary.approved || 0)}</span>
-        <span>需修改 ${h(summary.needs_work || 0)}</span>
-        <span>阻塞 ${h(summary.blocked || 0)}</span>
-        <span>连贯 ${h(counts.pass || 0)} / ${h(counts.warn || 0)} / ${h(counts.fail || 0)}</span>
-        ${blocked ? `<span class="danger-text">治理阻塞 ${h(blocked)}</span>` : ""}
-      </div>
-      <div class="review-filter-bar">
-        ${reviewFilterOptions.map(([value, label]) => `
-          <button class="filter-chip ${filter === value ? "is-active" : ""}" type="button" data-action="review-filter" data-review-filter="${h(value)}">${h(label)}</button>
-        `).join("")}
-      </div>
-      <div class="storyboard-review-list">
-        ${visibleScenes.length ? visibleScenes.map(renderStoryboardReviewCard).join("") : `<div class="empty-state">当前筛选下没有分镜。</div>`}
-      </div>
-      <div class="storyboard-review-detail">
-        ${renderStoryboardReviewDetail(selected)}
-      </div>
-    </div>
-  `;
-}
-
-function selectedTimelineScene(project = state.project) {
-  const scenes = timelineSceneItems(project);
-  return scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || scenes[0] || null;
-}
-
-function activeReviewTriageState() {
-  const triage = state.reviewTriageState && typeof state.reviewTriageState === "object" ? state.reviewTriageState : {};
-  return {
-    review_status: triage.review_status || state.reviewFilter || "all",
-    governance_status: triage.governance_status || "all",
-    provenance: triage.provenance || "all",
-    deliverable: triage.deliverable || "all",
-    min_rating: asNumber(triage.min_rating, 0),
-    sort: triage.sort || "scene_order",
-  };
-}
-
-function renderReviewOverviewHeader(project) {
-  const overview = deriveReviewOverview(project);
-  const continuity = overview.continuity || {};
-  const provenance = overview.provenance || {};
-  const review = overview.review || {};
-  const readiness = overview.readiness || {};
-  const reviewed = overview.total_scenes - (review.unreviewed || 0);
-  return `
-    <div class="review-overview">
-      ${renderReviewMetric("review_status", "all", "Scenes", overview.total_scenes)}
-      ${renderReviewMetric("review_status", "approved", "Approved", review.approved || 0)}
-      ${renderReviewMetric("review_status", "needs_work", "Needs work", review.needs_work || 0)}
-      ${renderReviewMetric("review_status", "blocked", "Review blocked", review.blocked || 0)}
-      ${renderReviewMetric("provenance", "real", "Real video", provenance.real || 0)}
-      ${renderReviewMetric("provenance", "fallback", "Fallback", provenance.fallback || 0)}
-      ${renderReviewMetric("governance_status", "fail", "Continuity fail", continuity.fail || 0, (continuity.fail || 0) ? "is-danger" : "")}
-      ${renderReviewMetric("deliverable", "blocked", "Export blocked", readiness.blocked || 0, readiness.blocked ? "is-danger" : "")}
-      <div class="review-overview-progress">
-        <span>Reviewed ${h(reviewed)} / ${h(overview.total_scenes)}</span>
-        <span>Continuity ${h(continuity.pass || 0)} / ${h(continuity.warn || 0)} / ${h(continuity.fail || 0)} / ${h(continuity.not_evaluated || 0)}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderReviewMetric(field, value, label, count, extraClass = "") {
-  return `
-    <button class="review-metric ${h(extraClass)}" type="button" data-action="review-overview-filter" data-triage-field="${h(field)}" data-triage-value="${h(value)}">
-      <span>${h(label)}</span>
-      <strong>${h(count)}</strong>
-    </button>
-  `;
-}
-
-function renderReviewTriageBar(project) {
-  const triage = activeReviewTriageState();
-  const scenes = timelineSceneItems(project);
-  const visible = applyReviewTriage(scenes, triage).length;
-  return `
-    <div class="review-triage-bar">
-      <div class="review-triage-controls">
-        ${renderTriageSelect("governance_status", reviewGovernanceFilterOptions, triage.governance_status)}
-        ${renderTriageSelect("provenance", reviewProvenanceFilterOptions, triage.provenance)}
-        ${renderTriageSelect("deliverable", reviewDeliverableFilterOptions, triage.deliverable)}
-        <label class="triage-field"><span>Min rating</span><input type="number" min="0" max="5" step="0.5" value="${h(triage.min_rating || 0)}" data-action="review-triage-input" data-triage-field="min_rating"></label>
-        ${renderTriageSelect("sort", reviewSortOptions, triage.sort)}
-        <button type="button" class="ghost-button" data-action="review-triage-reset">Reset</button>
-        <span class="muted">${h(visible)} / ${h(scenes.length)} shown</span>
-      </div>
-      ${renderBatchRerenderBar(visible)}
-    </div>
-  `;
-}
-
-function renderTriageSelect(field, options, value) {
-  return `
-    <label class="triage-field">
-      <span>${h(field.replaceAll("_", " "))}</span>
-      <select data-action="review-triage-input" data-triage-field="${h(field)}">
-        ${options.map(([optionValue, optionLabel]) => `<option value="${h(optionValue)}" ${String(optionValue) === String(value) ? "selected" : ""}>${h(optionLabel)}</option>`).join("")}
-      </select>
-    </label>
-  `;
-}
-
-function renderBatchRerenderBar(visibleCount) {
-  const batch = state.reviewBatchRerender && typeof state.reviewBatchRerender === "object" ? state.reviewBatchRerender : {};
-  const running = Boolean(batch.running);
-  const results = Array.isArray(batch.results) ? batch.results : [];
-  const latest = results.slice(-4);
-  return `
-    <div class="review-batch-bar">
-      <div class="review-batch-actions">
-        <span class="section-label">Filtered rerender</span>
-        ${renderBatchButton("rerender-image", "Image", visibleCount, running)}
-        ${renderBatchButton("rerender-audio", "Audio", visibleCount, running)}
-        ${renderBatchButton("rerender-video", "Video", visibleCount, running)}
-        ${renderBatchButton("rebuild-scene", "Full", visibleCount, running)}
-      </div>
-      ${running || results.length ? `
-        <div class="review-batch-progress">
-          <span>${running ? "Running" : "Last batch"} ${h(batch.completed || 0)} / ${h(batch.total || 0)}</span>
-          ${latest.map((item) => `<span class="${item.status === "failed" ? "danger-text" : "muted"}">#${h(item.order)} ${h(item.status)}${item.message ? `: ${h(item.message)}` : ""}</span>`).join("")}
-        </div>
-      ` : ""}
-    </div>
-  `;
-}
-
-function renderBatchButton(action, label, visibleCount, running) {
-  return `<button class="ghost-button small" type="button" data-action="review-batch-rerender" data-batch-action="${h(action)}" ${running || !visibleCount ? "disabled" : ""}>${h(label)}</button>`;
-}
-
 function sceneGenerationMeta(scene) {
   return scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
 }
-
 function generationBadgeClass(meta) {
   if (!meta || !Object.keys(meta).length) return "is-unknown";
   if (meta.fallback_used) return "is-fallback";
   if (meta.is_real_video) return "is-real";
   return "is-local";
 }
-
 function generationLabel(meta) {
   if (!meta || !Object.keys(meta).length) return "Unknown";
   if (meta.fallback_used) return "2.5D fallback";
   if (meta.is_real_video) return "Real video";
   return "Local 2.5D";
 }
-
 function renderGenerationBadge(scene) {
   const meta = sceneGenerationMeta(scene);
   const provider = meta.provider_label || meta.provider_id || "";
@@ -1214,7 +1308,6 @@ function renderGenerationBadge(scene) {
   const suffix = [provider, attempts > 1 ? `${attempts} tries` : ""].filter(Boolean).join(" · ");
   return `<div class="generation-badge ${generationBadgeClass(meta)}">${h(generationLabel(meta))}${suffix ? ` · ${h(suffix)}` : ""}</div>`;
 }
-
 function renderGenerationDetail(scene) {
   const meta = sceneGenerationMeta(scene);
   if (!Object.keys(meta).length) {
@@ -1229,7 +1322,6 @@ function renderGenerationDetail(scene) {
     </div>
   `;
 }
-
 function renderGovernanceBadge(scene) {
   const status = governanceStatus(scene);
   const governance = sceneGovernance(scene);
@@ -1237,7 +1329,6 @@ function renderGovernanceBadge(scene) {
   const blocked = policy.mode === "block" && governance.deliverable === false;
   return `<div class="governance-badge ${governanceStatusClass(status)}${blocked ? " is-blocked" : ""}">${h(governanceStatusLabel(status))}${blocked ? " · blocked" : ""}</div>`;
 }
-
 function renderGovernanceDetail(scene) {
   const governance = sceneGovernance(scene);
   const status = governanceStatus(scene);
@@ -1258,142 +1349,6 @@ function renderGovernanceDetail(scene) {
       <span>${h(policy.mode || "report")} · ${h(policy.action || "recorded")} · ${governance.deliverable === false ? "not deliverable" : "deliverable"}</span>
       <div class="governance-dimension-grid">${dimensionRows}</div>
       ${offenders.length ? `<span class="danger-text">${h(offenders.join(" / "))}</span>` : ""}
-    </div>
-  `;
-}
-
-function renderReviewUnit(scene, project) {
-  const assets = scene.assets || {};
-  const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
-  const meta = sceneReviewMeta(scene);
-  const sClass = reviewStatusClass(meta.status);
-  const gaps = sceneAssetGaps(scene);
-  const governance = sceneGovernance(scene);
-  const blocked = governance?.policy?.mode === "block" && governance.deliverable === false;
-  const media = assets.image_url
-    ? `<img src="${h(assets.image_url)}" alt="">`
-    : assets.video_url
-      ? `<video src="${h(assets.video_url)}" muted playsinline preload="metadata"></video>`
-      : `<span>鏆傛棤鐢婚潰</span>`;
-  return `
-    <article class="review-unit ${active}" data-scene-order="${h(scene.order)}">
-      <button class="review-unit-main" type="button" data-action="select-scene" data-scene-order="${h(scene.order)}">
-        <div class="storyboard-thumb">${media}</div>
-        <div class="review-unit-body">
-          <div class="review-unit-head">
-            <strong>#${h(scene.order)} ${h(scene.title || "鍒嗛暅")}</strong>
-            <span>${formatSeconds(scene.duration_seconds)} 路 ${h(scene.emotion_tone || scene.emotion || "")}</span>
-          </div>
-          <div class="review-unit-badges">
-            ${renderGenerationBadge(scene)}
-            ${renderGovernanceBadge(scene)}
-            <span class="review-badge ${sClass}">${h(reviewStatusLabel(meta.status))}${meta.rating ? ` 路 ${h(meta.rating)}/5` : ""}</span>
-            <span class="asset-readiness ${gaps.length ? "is-warn" : "is-ready"}">${gaps.length ? `Missing ${h(gaps.join(" / "))}` : "Assets ready"}</span>
-            ${blocked ? `<span class="asset-readiness is-blocked">Export blocked</span>` : ""}
-          </div>
-          <div class="review-unit-summary">${nl(scene.dialogue || "鏆傛棤鍙拌瘝")}</div>
-          <div class="review-unit-details">
-            ${renderGenerationDetail(scene)}
-            ${renderGovernanceDetail(scene)}
-          </div>
-        </div>
-      </button>
-      <div class="review-unit-actions">
-        <span class="section-label">Rerender</span>
-        <button class="ghost-button small" type="button" data-action="rerender-image" data-scene-order="${h(scene.order)}">Image</button>
-        <button class="ghost-button small" type="button" data-action="rerender-audio" data-scene-order="${h(scene.order)}">Audio</button>
-        <button class="ghost-button small" type="button" data-action="rerender-video" data-scene-order="${h(scene.order)}">Video</button>
-        <button class="ghost-button small" type="button" data-action="rebuild-scene" data-scene-order="${h(scene.order)}">Full</button>
-      </div>
-    </article>
-  `;
-}
-
-function renderStoryboardReviewCard(scene) {
-  return renderReviewUnit(scene, state.project);
-  const assets = scene.assets || {};
-  const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
-  const meta = sceneReviewMeta(scene);
-  const sClass = reviewStatusClass(meta.status);
-  const media = assets.image_url
-    ? `<img src="${h(assets.image_url)}" alt="">`
-    : assets.video_url
-      ? `<video src="${h(assets.video_url)}" muted playsinline preload="metadata"></video>`
-      : `<span>暂无画面</span>`;
-  return `
-    <button class="storyboard-review-card ${active}" type="button" data-action="select-scene" data-scene-order="${h(scene.order)}">
-      <div class="storyboard-thumb">${media}</div>
-      <div class="storyboard-review-card-body">
-        ${renderGenerationBadge(scene)}
-        ${renderGovernanceBadge(scene)}
-        <div class="storyboard-review-card-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
-        <div class="storyboard-review-card-meta">${formatSeconds(scene.duration_seconds)} · ${h(scene.emotion_tone || scene.emotion || "")}</div>
-        <div class="review-badge ${sClass}">${h(reviewStatusLabel(meta.status))}${meta.rating ? ` · ${h(meta.rating)}/5` : ""}</div>
-      </div>
-    </button>
-  `;
-}
-
-function renderStoryboardReviewDetail(scene) {
-  if (!scene) return `<div class="empty-state">请选择分镜。</div>`;
-  const assets = scene.assets || {};
-  const meta = sceneReviewMeta(scene);
-  const media = assets.video_url
-    ? `<video src="${h(assets.video_url)}" controls playsinline></video>`
-    : assets.image_url
-      ? `<img src="${h(assets.image_url)}" alt="">`
-      : `<span>暂无画面</span>`;
-  return `
-    <div class="review-detail-preview">
-      <div class="thumb-frame">${media}</div>
-      <div class="section-stack">
-        ${renderGenerationDetail(scene)}
-        ${renderGovernanceDetail(scene)}
-        <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
-        <div class="muted">${formatSeconds(scene.duration_seconds)} · ${h(scene.camera_movement || "镜头")} · ${h(scene.emotion_tone || scene.emotion || "")}</div>
-        <div>${nl(scene.dialogue || "暂无台词")}</div>
-      </div>
-    </div>
-    <div class="review-form">
-      ${fieldSelect("reviewStatusInput", "审片状态", reviewStatusOptions, meta.status)}
-      ${fieldNumber("reviewRatingInput", "评分", meta.rating || "", 'min="0" max="5" step="0.5"')}
-      ${fieldTextarea("reviewNoteInput", "导演备注", meta.note, 3, "记录画面、表演、连贯性或重做原因")}
-      ${renderReviewCompare(scene)}
-      <div class="row-actions">
-        <button class="primary-button" type="button" data-action="save-scene-review">保存审片</button>
-        ${meta.reviewed_at ? `<span class="muted">上次保存：${h(meta.reviewed_at)}</span>` : ""}
-      </div>
-    </div>
-  `;
-}
-
-function renderReviewCompare(scene) {
-  const assets = scene?.assets || {};
-  const versions = assets.versions || {};
-  const history = Array.isArray(scene?.history) ? scene.history.slice(0, 4) : [];
-  return `
-    <div class="review-compare">
-      <div class="section-label">版本对比</div>
-      <div class="review-version-row">
-        <span>图 v${h(versions.image || 0)}</span>
-        <span>音 v${h(versions.audio || 0)}</span>
-        <span>视 v${h(versions.video || 0)}</span>
-      </div>
-      <div class="review-compare-links">
-        ${assets.image_url ? `<a href="${h(assets.image_url)}" target="_blank" rel="noreferrer">图片</a>` : `<span>无图片</span>`}
-        ${assets.audio_url ? `<a href="${h(assets.audio_url)}" target="_blank" rel="noreferrer">音频</a>` : `<span>无音频</span>`}
-        ${assets.video_url ? `<a href="${h(assets.video_url)}" target="_blank" rel="noreferrer">视频</a>` : `<span>无视频</span>`}
-      </div>
-      ${history.length ? `
-        <div class="review-history">
-          ${history.map((item) => `
-            <div>
-              <strong>${h(item.label || item.action || "记录")}</strong>
-              <span>${h(item.status || "")} · ${h(item.ts || "")}</span>
-            </div>
-          `).join("")}
-        </div>
-      ` : `<div class="muted">暂无历史版本记录。</div>`}
     </div>
   `;
 }

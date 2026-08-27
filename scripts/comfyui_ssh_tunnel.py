@@ -94,7 +94,7 @@ def ensure_comfyui_tunnel() -> str | None:
             return f"http://{config.local_host}:{config.local_port}"
 
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
         client.connect(
             hostname=config.ssh_host,
             port=config.ssh_port,

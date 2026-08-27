@@ -25,6 +25,7 @@ class TaskRecord:
     planner: str = "auto"
     keyframe_provider: str = "auto"
     video_provider: str = "auto"
+    video_render_granularity: str = "scene"
     voice_provider: str = "auto"
     scene_count: int = 5
     created_at: str = field(default_factory=isoformat)
@@ -45,6 +46,7 @@ class TaskRecord:
             "planner": self.planner,
             "keyframe_provider": self.keyframe_provider,
             "video_provider": self.video_provider,
+            "video_render_granularity": self.video_render_granularity,
             "voice_provider": self.voice_provider,
             "scene_count": self.scene_count,
             "created_at": self.created_at,
