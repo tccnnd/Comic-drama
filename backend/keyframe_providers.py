@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import os
 import time
 from pathlib import Path
@@ -19,7 +18,9 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _env(name: str, default: str = "") -> str:

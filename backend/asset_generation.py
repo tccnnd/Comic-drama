@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import threading
 import time
 import uuid
@@ -20,6 +19,7 @@ from backend.assets import (
 )
 from backend.event_bus import project_event_bus
 from backend.llm_hub import llm_client
+from backend.logger import get_logger
 from backend.project_runtime import load_project, project_snapshot, workspace_url
 from backend.styles import get_default_style_id, get_style
 from scripts.run_workflow import (
@@ -35,7 +35,7 @@ from scripts.run_workflow import (
     unresolved_placeholders,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 ROOT = Path(__file__).resolve().parents[1]

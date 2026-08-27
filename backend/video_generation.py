@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 import re
 import time
@@ -22,6 +21,7 @@ from typing import Any, Callable
 
 from backend.config_utils import coerce_bool as _coerce_bool
 from backend.config_utils import env_bool as _env_bool
+from backend.logger import get_logger
 
 try:
     from scripts.video_provider_adapters import (
@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover - adapter import is optional for pure help
 
 render_remote_video_provider = _default_render_remote_video_provider
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration

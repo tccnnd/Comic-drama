@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass

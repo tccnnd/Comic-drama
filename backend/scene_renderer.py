@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import shutil
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from backend.logger import get_logger
 from backend.project_models import (
     _scene_from_payload,
     get_ffmpeg_exe,
@@ -39,7 +39,7 @@ from scripts.run_workflow import (
     wav_duration,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _scene_assets(scene: dict[str, Any]) -> dict[str, Any]:

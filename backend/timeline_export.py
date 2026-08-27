@@ -9,11 +9,12 @@ OTIO schema: https://opentimelineio.readthedocs.io/
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 OTIO_SCHEMA_VERSION = "0.15.0"
 

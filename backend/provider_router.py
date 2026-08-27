@@ -14,15 +14,15 @@ Provider tiers:
 
 from __future__ import annotations
 
-import logging
 import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.logger import get_logger
 from video_providers import VideoProviderSpec, get_video_provider_spec, list_video_provider_specs
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

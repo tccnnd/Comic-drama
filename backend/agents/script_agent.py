@@ -16,12 +16,12 @@ Usage:
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 from backend.agents.base import BaseAgent
+from backend.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SCRIPT_AGENT_SYSTEM_PROMPT = """你是一个专业的漫剧分镜编剧助手。你的任务是将用户提供的故事/剧本拆解为适合竖屏短视频的分镜脚本。
 

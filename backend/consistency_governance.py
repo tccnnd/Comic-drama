@@ -6,7 +6,6 @@ aggregation, report/block policy decisions, and project-level ledger rollups.
 
 from __future__ import annotations
 
-import logging
 import os
 import time
 from copy import deepcopy
@@ -25,8 +24,9 @@ from backend.consistency_validator import (
     validate_prop_continuity,
     validate_style_consistency,
 )
+from backend.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 DIMENSIONS = ("character", "lighting", "environment", "prop", "camera")
 STATUS_ORDER = {"fail": 3, "warn": 2, "pass": 1, "info": 0, "not_evaluated": 0}

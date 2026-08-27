@@ -13,7 +13,6 @@ The validation pipeline:
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from copy import deepcopy
@@ -21,7 +20,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration

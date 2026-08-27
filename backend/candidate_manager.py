@@ -15,14 +15,15 @@ Data model:
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 DEFAULT_CANDIDATE_COUNT = 2
 MAX_CANDIDATE_COUNT = 5

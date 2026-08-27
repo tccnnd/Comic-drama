@@ -13,11 +13,12 @@ Data flow:
 
 from __future__ import annotations
 
-import logging
 from copy import deepcopy
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from backend.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _normalized_key(value: object) -> str:

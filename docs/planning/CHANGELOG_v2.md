@@ -182,3 +182,12 @@
 - **⚠️ 坑（复用 #6）**：`language: system` 的 entry 若写 `python` 会解析到系统解释器（非 venv）→ 一律用 `.venv/Scripts/...` 相对路径；secret-scan 初版 rglob 扫入 `tools/`（38029 文件）导致超时 → 排除列表补 tools/.vscode/.idea/.github；`.env` 本地真实 key 误报 → 排除。
 - **验收**：`pre-commit run --all-files` 4 hooks 全 Passed（exit=0）；secret 违规拦截实测（构造 `sk-` key 文件 → exit=1 阻止）；bandit High 4→0；全量 **515 passed / 10 warnings / exit=0**。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-28 — T2.4 日志规范化
+
+- **增强 `backend/logger.py`**：统一配置——StreamHandler（控制台 INFO+，LOG_LEVEL 可覆盖）+ 模块级共享 FileHandler（WARNING+ 落盘 `logs/backend.log`，RotatingFileHandler 5MB x3）；格式统一 `%(asctime)s [%(name)s] %(levelname)s: %(message)s`；`propagate=False` 防双写。
+- **收敛 12 处直接 `logging.getLogger(__name__)`** → `get_logger(__name__)`（backend/agents/base、script_agent、asset_generation、candidate_manager、character_sync、consistency_governance、consistency_validator、keyframe_providers、provider_router、scene_renderer、timeline_export、video_generation）——各模块日志格式/级别/落盘行为一致。
+- **`.gitignore` 新增 `logs/`**（运行时日志不入 git）。
+- **测试**：新增 `tests/test_logger.py`（3 个）——handlers 与格式断言、WARNING+ 落盘而 INFO 不落、文件 handler 单例。
+- **验收**：实测 WARNING/ERROR 写入 backend.log（INFO 仅控制台）；py_compile 12 文件 OK；全量 **518 passed / 10 warnings / exit=0**（+3）。
+- **commit**：本地提交，未推 GitHub。

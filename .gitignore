@@ -45,6 +45,9 @@ data/styles.json
 # Health probe temp files (backend/routers/system.py _check_storage)
 .health_probe_*.tmp
 
+# Runtime logs (backend/logger.py WARNING+ file handler)
+logs/
+
 # IDE / editor directories
 .idea/
 .vscode/settings.json
