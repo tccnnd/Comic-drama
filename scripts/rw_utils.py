@@ -13,7 +13,9 @@ from scripts.rw_config import ROOT
 
 
 def wrap_cn(text: str, width: int) -> str:
-    return "\n".join(textwrap.wrap(text, width=width, break_long_words=True, replace_whitespace=False))
+    return "\n".join(
+        textwrap.wrap(text, width=width, break_long_words=True, replace_whitespace=False)
+    )
 
 
 def write_text(path: Path, text: str) -> None:

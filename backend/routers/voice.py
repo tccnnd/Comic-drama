@@ -14,10 +14,10 @@ from backend.routers._common import OUTPUTS
 from scripts.run_workflow import load_voice_presets, voice_presets_path
 from scripts.tts_engines import (
     edge_tts,
-    synthesize_preview,
-    tts_diagnostics,
     load_tts_provider_settings,
     save_tts_provider_settings,
+    synthesize_preview,
+    tts_diagnostics,
     tts_provider_settings_path,
 )
 
@@ -127,7 +127,9 @@ class VoicePresetSaveRequest(BaseModel):
 class VoicePreviewRequest(BaseModel):
     voice: str
     text: str = Field(default="这是一次漫剧配音试听。", min_length=1, max_length=120)
-    engine: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
+    engine: Literal[
+        "auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"
+    ] = "auto"
     rate: float = Field(default=1.0, ge=0.1, le=5.0)
     pitch: float = Field(default=0.0, ge=-24.0, le=24.0)
     volume: float = Field(default=1.0, ge=0.0, le=5.0)
@@ -210,7 +212,9 @@ async def load_voice_catalog_data() -> list[dict]:
             voices = await edge_tts.list_voices()
             catalog = filter_voice_catalog(voices)
             if catalog:
-                VOICE_CATALOG_CACHE.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                VOICE_CATALOG_CACHE.write_text(
+                    json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                )
                 return catalog
         except Exception as exc:
             logger.error("Failed to load live voice catalog: %s", exc)
@@ -289,8 +293,14 @@ def create_voice_preview(payload: VoicePreviewRequest) -> dict:
     if payload.engine == "edge" and not re.match(r"^[A-Za-z0-9-]+Neural$", voice):
         raise HTTPException(status_code=400, detail="Invalid Edge TTS voice name")
 
-    logger.info("[voice-preview] engine=%s voice=%s voice_id=%s ref_audio=%s emotion=%s",
-                payload.engine, voice, payload.voice_id, payload.reference_audio_path, payload.emotion)
+    logger.info(
+        "[voice-preview] engine=%s voice=%s voice_id=%s ref_audio=%s emotion=%s",
+        payload.engine,
+        voice,
+        payload.voice_id,
+        payload.reference_audio_path,
+        payload.emotion,
+    )
 
     preview_dir = OUTPUTS / "voice_previews"
     preview_dir.mkdir(parents=True, exist_ok=True)

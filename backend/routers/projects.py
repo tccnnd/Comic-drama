@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Literal
 
 from backend.asset_retention import cleanup_project_versions
 from backend.event_bus import project_event_bus
@@ -14,7 +14,9 @@ from backend.project_runtime import (
     create_project,
     delete_project,
     fallback_scene_clip_path,
-    list_projects as load_projects,
+)
+from backend.project_runtime import list_projects as load_projects
+from backend.project_runtime import (
     load_project,
     project_lock,
     project_snapshot,
@@ -44,7 +46,9 @@ class CreateProjectRequest(BaseModel):
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
     video_provider: str = "auto"
     video_render_granularity: Literal["scene", "shot"] = "scene"
-    voice_provider: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
+    voice_provider: Literal[
+        "auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"
+    ] = "auto"
 
 
 class UpdateProjectRequest(BaseModel):
@@ -66,13 +70,18 @@ def scene_missing_asset_kinds(project_id: str, scene: dict) -> list[str]:
     missing: list[str] = []
     if not scene_asset_file_exists(project_id, scene, "image"):
         missing.append("image")
-    if str(scene.get("dialogue") or "").strip() and not scene_asset_file_exists(project_id, scene, "audio"):
+    if str(scene.get("dialogue") or "").strip() and not scene_asset_file_exists(
+        project_id, scene, "audio"
+    ):
         missing.append("audio")
     try:
         video_path = scene_latest_path(project_id, scene, "video")
     except ValueError:
         video_path = None
-    if not (video_path and video_path.is_file()) and not fallback_scene_clip_path(project_id, scene).is_file():
+    if (
+        not (video_path and video_path.is_file())
+        and not fallback_scene_clip_path(project_id, scene).is_file()
+    ):
         missing.append("video")
     return missing
 
@@ -144,7 +153,12 @@ def set_project_style(project_id: str, payload: UpdateProjectStyleRequest) -> di
         project = update_project_fields(project_id, {"style_id": style.id})
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    return {"project_id": project_id, "style_id": style.id, "style": style.model_dump(), "project": project_snapshot(project)}
+    return {
+        "project_id": project_id,
+        "style_id": style.id,
+        "style": style.model_dump(),
+        "project": project_snapshot(project),
+    }
 
 
 @router.get("/api/projects/{project_id}/events")
@@ -195,7 +209,9 @@ def patch_project(project_id: str, payload: UpdateProjectRequest) -> dict:
 
 
 @router.post("/api/projects/{project_id}/fill-missing-assets")
-def fill_missing_assets_endpoint(project_id: str, payload: FillMissingAssetsRequest | None = None) -> dict:
+def fill_missing_assets_endpoint(
+    project_id: str, payload: FillMissingAssetsRequest | None = None
+) -> dict:
     project_or_404(project_id)
     requested = set(payload.kinds) if payload and payload.kinds else {"image", "audio", "video"}
     run_background_job(

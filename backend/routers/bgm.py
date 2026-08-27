@@ -30,11 +30,13 @@ def bgm_library() -> dict:
                 files = []
                 for f in sorted(style_dir.iterdir()):
                     if f.suffix.lower() in {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}:
-                        files.append({
-                            "name": f.stem,
-                            "path": f"assets/audio/bgm/{style_dir.name}/{f.name}",
-                            "size_kb": round(f.stat().st_size / 1024, 1),
-                        })
+                        files.append(
+                            {
+                                "name": f.stem,
+                                "path": f"assets/audio/bgm/{style_dir.name}/{f.name}",
+                                "size_kb": round(f.stat().st_size / 1024, 1),
+                            }
+                        )
                 if files:
                     library[style_dir.name] = files
     return {"library": library, "root": str(bgm_root)}
@@ -47,6 +49,7 @@ def upload_bgm(payload: BgmUploadRequest) -> dict:
         raise HTTPException(status_code=400, detail="Invalid data URL")
     _, encoded = payload.data_url.split(",", 1)
     import binascii
+
     try:
         raw = base64.b64decode(encoded)
     except (binascii.Error, ValueError) as exc:
@@ -59,8 +62,16 @@ def upload_bgm(payload: BgmUploadRequest) -> dict:
 
     # Validate style parameter against allowed values (path traversal prevention)
     ALLOWED_BGM_STYLES = {
-        "neutral", "happy", "sad", "tense", "epic", "romantic",
-        "mysterious", "comedic", "dramatic", "action",
+        "neutral",
+        "happy",
+        "sad",
+        "tense",
+        "epic",
+        "romantic",
+        "mysterious",
+        "comedic",
+        "dramatic",
+        "action",
     }
     style = (payload.style or "neutral").strip().lower()
     if not style:
@@ -84,7 +95,10 @@ def upload_bgm(payload: BgmUploadRequest) -> dict:
         safe_name = f"bgm_{uuid.uuid4().hex[:8]}.mp3"
     ext = Path(safe_name).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
 
     # Quick magic byte check for common audio formats
     if ext == ".mp3" and len(raw) >= 3:

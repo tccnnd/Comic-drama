@@ -22,11 +22,11 @@ from backend.event_bus import project_event_bus
 from backend.llm_hub import llm_client
 from backend.project_runtime import load_project, project_snapshot, workspace_url
 from backend.styles import get_default_style_id, get_style
-from scripts.run_workflow import extract_json_object
 from scripts.run_workflow import (
     clean_comfyui_visual_prompt,
     comfyui_base_url,
     download_comfyui_image,
+    extract_json_object,
     inject_comfyui_workflow,
     load_json,
     poll_comfyui_history,
@@ -82,12 +82,7 @@ def _comfyui_available_loras() -> list[str]:
         request = Request(url)
         with urlopen(request, timeout=10) as response:
             data = json.loads(response.read().decode("utf-8"))
-        raw = (
-            data.get("LoraLoader", {})
-            .get("input", {})
-            .get("required", {})
-            .get("lora_name", [])
-        )
+        raw = data.get("LoraLoader", {}).get("input", {}).get("required", {}).get("lora_name", [])
         if isinstance(raw, list) and raw and isinstance(raw[0], list):
             return [str(item) for item in raw[0]]
         return []
@@ -236,22 +231,24 @@ def _asset_negative_prompt(asset: Asset) -> str:
         "duplicate",
     ]
     if asset.asset_type == AssetType.CHARACTER:
-        base.extend([
-            "multiple people",
-            "multiple views",
-            "reference sheet",
-            "turnaround",
-            "character sheet",
-            "crowd",
-            "complex background",
-            "busy background",
-            "extra heads",
-            "wrong eye color",
-            "inconsistent clothing",
-            "exaggerated muscles",
-            "disproportionate body",
-            "chibi",
-        ])
+        base.extend(
+            [
+                "multiple people",
+                "multiple views",
+                "reference sheet",
+                "turnaround",
+                "character sheet",
+                "crowd",
+                "complex background",
+                "busy background",
+                "extra heads",
+                "wrong eye color",
+                "inconsistent clothing",
+                "exaggerated muscles",
+                "disproportionate body",
+                "chibi",
+            ]
+        )
     elif asset.asset_type == AssetType.SCENE_BG:
         base.extend(["people", "characters", "faces", "person", "human figure"])
     elif asset.asset_type == AssetType.PROP:
@@ -323,7 +320,9 @@ def _asset_generation_prompts(asset: Asset, style: dict[str, str]) -> tuple[str,
         positive, negative = _llm_asset_prompts(asset, style)
         return positive, negative or _asset_negative_prompt(asset)
     except Exception as exc:
-        logger.warning("LLM asset prompt generation failed for %s; using local prompt: %s", asset.id, exc)
+        logger.warning(
+            "LLM asset prompt generation failed for %s; using local prompt: %s", asset.id, exc
+        )
         return _asset_prompt(asset), _asset_negative_prompt(asset)
 
 
@@ -344,7 +343,9 @@ def _project_style(project_id: str) -> dict[str, str]:
     }
 
 
-def _asset_workflow_replacements(asset: Asset, positive_prompt: str, negative_prompt: str) -> dict[str, Any]:
+def _asset_workflow_replacements(
+    asset: Asset, positive_prompt: str, negative_prompt: str
+) -> dict[str, Any]:
     width, height = ASSET_DIMENSIONS.get(asset.asset_type, (768, 1024))
     return {
         "__PROMPT__": positive_prompt,
@@ -419,7 +420,9 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
     )
     unresolved = unresolved_placeholders(filled)
     if unresolved:
-        raise RuntimeError(f"ComfyUI workflow has unresolved placeholders: {', '.join(unresolved[:5])}")
+        raise RuntimeError(
+            f"ComfyUI workflow has unresolved placeholders: {', '.join(unresolved[:5])}"
+        )
 
     prompt_id = f"asset-{asset_id}-{int(time.time() * 1000)}"
     client_id = f"client-{uuid.uuid4().hex[:8]}"
@@ -429,14 +432,20 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
     # Check for immediate validation errors from ComfyUI
     if "error" in submit_response:
         error_info = submit_response["error"]
-        error_msg = error_info.get("message", str(error_info)) if isinstance(error_info, dict) else str(error_info)
+        error_msg = (
+            error_info.get("message", str(error_info))
+            if isinstance(error_info, dict)
+            else str(error_info)
+        )
         node_errors = submit_response.get("node_errors", {})
         if node_errors:
             details = []
             for node_id, node_err in node_errors.items():
                 errors = node_err.get("errors", []) if isinstance(node_err, dict) else []
                 for err in errors:
-                    details.append(str(err.get("message", err)) if isinstance(err, dict) else str(err))
+                    details.append(
+                        str(err.get("message", err)) if isinstance(err, dict) else str(err)
+                    )
             if details:
                 error_msg += " | " + "; ".join(details)
         raise RuntimeError(f"ComfyUI 拒绝了工作流: {error_msg}")
@@ -454,7 +463,9 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
         for node_id, node in filled.items()
         if isinstance(node, dict) and node.get("class_type") == "SaveImage"
     ]
-    ordered_node_ids = save_node_ids + [node_id for node_id in outputs.keys() if node_id not in save_node_ids]
+    ordered_node_ids = save_node_ids + [
+        node_id for node_id in outputs.keys() if node_id not in save_node_ids
+    ]
     output_path = _asset_output_path(project_id, asset_id)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     for node_id in ordered_node_ids:
@@ -475,13 +486,17 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
 
 
 def generate_asset_image(project_id: str, asset_id: str) -> Asset:
-    asset = update_project_asset(project_id, asset_id, {"status": AssetStatus.GENERATING, "error": ""})
+    asset = update_project_asset(
+        project_id, asset_id, {"status": AssetStatus.GENERATING, "error": ""}
+    )
     _publish_project_update(project_id)
     try:
         result = _render_asset_image(project_id, asset_id)
     except Exception as exc:
         logger.error("Asset generation failed for %s: %s", asset_id, exc)
-        update_project_asset(project_id, asset_id, {"status": AssetStatus.FAILED, "error": str(exc)})
+        update_project_asset(
+            project_id, asset_id, {"status": AssetStatus.FAILED, "error": str(exc)}
+        )
         _publish_project_update(project_id)
         raise
     _publish_project_update(project_id)
@@ -497,7 +512,11 @@ def generate_all_assets(project_id: str) -> dict[str, Any]:
         )
 
     store = load_asset_store(project_id)
-    asset_ids = [asset.id for bucket in ("characters", "scene_bgs", "props") for asset in getattr(store, bucket)]
+    asset_ids = [
+        asset.id
+        for bucket in ("characters", "scene_bgs", "props")
+        for asset in getattr(store, bucket)
+    ]
     for asset_id in asset_ids:
         update_project_asset(project_id, asset_id, {"status": AssetStatus.GENERATING, "error": ""})
     _publish_project_update(project_id)
@@ -509,7 +528,9 @@ def generate_all_assets(project_id: str) -> dict[str, Any]:
             _publish_project_update(project_id)
         except Exception as exc:
             logger.error("Asset generation failed for %s: %s", asset_id, exc)
-            update_project_asset(project_id, asset_id, {"status": AssetStatus.FAILED, "error": str(exc)})
+            update_project_asset(
+                project_id, asset_id, {"status": AssetStatus.FAILED, "error": str(exc)}
+            )
             _publish_project_update(project_id)
             results.append({"id": asset_id, "status": AssetStatus.FAILED.value, "error": str(exc)})
     store = load_asset_store(project_id)

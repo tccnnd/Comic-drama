@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-
 PRIMARY_ASSET_PATTERN = re.compile(r"^(image|audio|video)_v(\d+)\.(png|wav|mp4)$")
 SUBTITLE_ASSET_PATTERN = re.compile(r"^subtitle_v(\d+)\.(ass|srt)$")
 TEMP_ASSET_PATTERN = re.compile(r"^.+_v(\d+)\.(tmp|log)$")
@@ -34,7 +33,9 @@ def _extract_version(filename: str) -> tuple[str, int] | None:
     return None
 
 
-def cleanup_scene_versions(scene_dir: Path, current_versions: dict[str, Any], keep: int = 2) -> list[Path]:
+def cleanup_scene_versions(
+    scene_dir: Path, current_versions: dict[str, Any], keep: int = 2
+) -> list[Path]:
     if keep < 1 or not scene_dir.is_dir():
         return []
 
@@ -67,7 +68,9 @@ def cleanup_scene_versions(scene_dir: Path, current_versions: dict[str, Any], ke
     return deleted
 
 
-def cleanup_project_versions(project_dir: Path, project_data: dict[str, Any], keep: int = 2) -> dict[str, int]:
+def cleanup_project_versions(
+    project_dir: Path, project_data: dict[str, Any], keep: int = 2
+) -> dict[str, int]:
     scenes_dir = project_dir / "scenes"
     if not scenes_dir.is_dir():
         return {"deleted_files": 0, "scenes_cleaned": 0}

@@ -94,7 +94,9 @@ def comfyui_model_status() -> dict:
         for filename in filenames:
             path = group_dir / filename
             exists = path.is_file()
-            items.append({"name": filename, "exists": exists, "size": path.stat().st_size if exists else 0})
+            items.append(
+                {"name": filename, "exists": exists, "size": path.stat().st_size if exists else 0}
+            )
             if not exists:
                 result["missing"].append(f"{group}/{filename}")
         result["groups"][group] = items
@@ -115,7 +117,9 @@ def comfyui_status() -> dict:
         "VAEDecode",
         "SaveImage",
     ]
-    workflow_path = Path(os.environ.get("COMFYUI_WORKFLOW_PATH", "workflows/comfyui_keyframe_template.json"))
+    workflow_path = Path(
+        os.environ.get("COMFYUI_WORKFLOW_PATH", "workflows/comfyui_keyframe_template.json")
+    )
     if not workflow_path.is_absolute():
         workflow_path = ROOT / workflow_path
     try:
@@ -151,7 +155,9 @@ def comfyui_status() -> dict:
             result["system"] = read_comfyui_json("/system_stats", timeout=2.0).get("system", {})
         except Exception:
             result["system"] = {}
-        result["available"] = not missing and not result["models"]["missing"] and bool(result["workflow_exists"])
+        result["available"] = (
+            not missing and not result["models"]["missing"] and bool(result["workflow_exists"])
+        )
     except HTTPError as exc:
         result["error"] = f"HTTP {exc.code}: {exc.read().decode('utf-8', errors='replace')}"
     except (URLError, TimeoutError, OSError) as exc:

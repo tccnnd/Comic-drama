@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
 # ASS color format is &HAABBGGRR&.  Alpha 00 means fully opaque.
 SPEAKER_PALETTE = [
     "&H0066D1FF&",  # warm yellow
@@ -144,7 +143,9 @@ def _speaker_colors(entries: list[AssDialogueEntry]) -> dict[str, str]:
     return colors
 
 
-def _styles_for_entries(entries: list[AssDialogueEntry], speaker_colors: dict[str, str]) -> dict[str, AssStyle]:
+def _styles_for_entries(
+    entries: list[AssDialogueEntry], speaker_colors: dict[str, str]
+) -> dict[str, AssStyle]:
     styles: dict[str, AssStyle] = {
         "ComicDrama": AssStyle("ComicDrama", DEFAULT_COLOR, bold=0, italic=0)
     }
@@ -160,7 +161,9 @@ def _styles_for_entries(entries: list[AssDialogueEntry], speaker_colors: dict[st
 
 def _style_name_for_entry(entry: AssDialogueEntry, speaker_colors: dict[str, str]) -> str:
     if entry.speaker:
-        speaker_index = list(speaker_colors).index(entry.speaker) + 1 if entry.speaker in speaker_colors else 0
+        speaker_index = (
+            list(speaker_colors).index(entry.speaker) + 1 if entry.speaker in speaker_colors else 0
+        )
         base = f"Speaker{speaker_index:02d}" if speaker_index else "ComicDrama"
     else:
         base = "ComicDrama"

@@ -1,4 +1,5 @@
 """Tests for scene split, merge, renumbering, and validation logic."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -6,14 +7,13 @@ from copy import deepcopy
 import pytest
 
 from backend.scene_renderer import (
+    AUDIO_STALE_FIELDS,
+    IMAGE_STALE_FIELDS,
+    VIDEO_STALE_FIELDS,
     _invalidate_scene_assets,
     _scene_validation_blocked,
     _scene_validation_resolved,
-    IMAGE_STALE_FIELDS,
-    AUDIO_STALE_FIELDS,
-    VIDEO_STALE_FIELDS,
 )
-
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,17 +96,35 @@ def _simulate_merge(current: dict, following: dict) -> dict:
     """Simulate the merge logic from project_runtime.merge_scene_with_next without I/O."""
     merged = deepcopy(current)
     merged["title"] = " / ".join(
-        part for part in [str(current.get("title") or "").strip(), str(following.get("title") or "").strip()] if part
+        part
+        for part in [
+            str(current.get("title") or "").strip(),
+            str(following.get("title") or "").strip(),
+        ]
+        if part
     )[:80]
     merged["visual_prompt"] = "\n".join(
-        part for part in [str(current.get("visual_prompt") or "").strip(), str(following.get("visual_prompt") or "").strip()] if part
+        part
+        for part in [
+            str(current.get("visual_prompt") or "").strip(),
+            str(following.get("visual_prompt") or "").strip(),
+        ]
+        if part
     )
     merged["dialogue"] = "\n".join(
-        part for part in [str(current.get("dialogue") or "").strip(), str(following.get("dialogue") or "").strip()] if part
+        part
+        for part in [
+            str(current.get("dialogue") or "").strip(),
+            str(following.get("dialogue") or "").strip(),
+        ]
+        if part
     )
-    merged["characters"] = list(dict.fromkeys([*(current.get("characters") or []), *(following.get("characters") or [])]))
+    merged["characters"] = list(
+        dict.fromkeys([*(current.get("characters") or []), *(following.get("characters") or [])])
+    )
     merged["duration_seconds"] = round(
-        float(current.get("duration_seconds") or 0) + float(following.get("duration_seconds") or 0), 1
+        float(current.get("duration_seconds") or 0) + float(following.get("duration_seconds") or 0),
+        1,
     )
     merged["assets"] = {
         "status": "pending",

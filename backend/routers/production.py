@@ -39,7 +39,9 @@ def export_project_endpoint(project_id: str) -> dict:
         message = str(exc)
         if message == "Project not found":
             raise HTTPException(status_code=404, detail="Project not found")
-        raise HTTPException(status_code=409, detail={"code": "EXPORT_ASSET_NOT_READY", "message": message})
+        raise HTTPException(
+            status_code=409, detail={"code": "EXPORT_ASSET_NOT_READY", "message": message}
+        )
     except ExportAssetReadinessError as exc:
         raise HTTPException(status_code=409, detail=exc.detail)
     except ValueError as exc:
@@ -55,6 +57,7 @@ def export_otio(project_id: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
     from backend.timeline_export import export_project_to_otio, save_otio_file
+
     proj_dir = project_dir(project_id)
     timeline = export_project_to_otio(project, proj_dir)
     output_path = proj_dir / "export" / f"{project_id}.otio"
@@ -74,4 +77,5 @@ def project_cost_estimate(project_id: str, provider: str = "") -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
     from backend.provider_router import estimate_project_cost
+
     return estimate_project_cost(project, provider)

@@ -3,6 +3,7 @@
 The validator remains the stateless scoring engine. This module owns verdict
 aggregation, report/block policy decisions, and project-level ledger rollups.
 """
+
 from __future__ import annotations
 
 import logging
@@ -97,7 +98,9 @@ def _dimension_from_checks(dimension: str, checks: list[ValidationCheck]) -> dic
 
     scores = [float(check.score or 0.0) for check in checks]
     score = min(scores) if scores else 0.0
-    reasons = [str(check.details or "").strip() for check in checks if str(check.details or "").strip()]
+    reasons = [
+        str(check.details or "").strip() for check in checks if str(check.details or "").strip()
+    ]
     threshold = DEFAULT_THRESHOLDS.get(dimension, 0.0)
     return {
         "status": status,
@@ -138,7 +141,9 @@ def _character_refs(project: dict[str, Any], scene: dict[str, Any]) -> list[dict
         name = str(character.get("name") or "").strip()
         if scene_names and name not in scene_names:
             continue
-        ref_path = str(character.get("reference_image_path") or character.get("reference_image_abs_path") or "").strip()
+        ref_path = str(
+            character.get("reference_image_path") or character.get("reference_image_abs_path") or ""
+        ).strip()
         if not ref_path:
             continue
         refs.append({"name": name, "reference_image_path": ref_path})
@@ -186,12 +191,16 @@ def evaluate_scene_governance(
     policy_mode: str | None = None,
 ) -> dict[str, Any]:
     current_image = _image_path(images, "current_image", "current", "image")
-    previous_image = _as_path(prev_image) or _image_path(images, "previous_image", "previous", "prev")
+    previous_image = _as_path(prev_image) or _image_path(
+        images, "previous_image", "previous", "prev"
+    )
 
     dimension_checks: dict[str, list[ValidationCheck]] = {dimension: [] for dimension in DIMENSIONS}
     if current_image is None:
         for dimension in DIMENSIONS:
-            dimension_checks[dimension].append(_info_check(f"{dimension}_continuity", "No current image available"))
+            dimension_checks[dimension].append(
+                _info_check(f"{dimension}_continuity", "No current image available")
+            )
     else:
         character_refs = _character_refs(project, scene)
         if character_refs:
@@ -205,16 +214,24 @@ def evaluate_scene_governance(
                         )
                     )
                 except Exception as exc:
-                    dimension_checks["character"].append(_exception_check("character_identity", exc))
+                    dimension_checks["character"].append(
+                        _exception_check("character_identity", exc)
+                    )
         else:
-            dimension_checks["character"].append(_info_check("character_identity", "No character reference image available"))
+            dimension_checks["character"].append(
+                _info_check("character_identity", "No character reference image available")
+            )
 
         try:
-            dimension_checks["environment"].append(validate_style_consistency(current_image, previous_image))
+            dimension_checks["environment"].append(
+                validate_style_consistency(current_image, previous_image)
+            )
         except Exception as exc:
             dimension_checks["environment"].append(_exception_check("style_consistency", exc))
         try:
-            dimension_checks["lighting"].append(validate_lighting_continuity(current_image, previous_image))
+            dimension_checks["lighting"].append(
+                validate_lighting_continuity(current_image, previous_image)
+            )
         except Exception as exc:
             dimension_checks["lighting"].append(_exception_check("lighting_continuity", exc))
 
@@ -226,7 +243,9 @@ def evaluate_scene_governance(
                 except Exception as exc:
                     dimension_checks["prop"].append(_exception_check("prop_continuity", exc))
         else:
-            dimension_checks["prop"].append(_info_check("prop_continuity", "No tracked prop in scene"))
+            dimension_checks["prop"].append(
+                _info_check("prop_continuity", "No tracked prop in scene")
+            )
 
         try:
             dimension_checks["camera"].append(evaluate_camera_continuity(scene, prev_scene))
@@ -315,7 +334,9 @@ def build_continuity_ledger(project: dict[str, Any]) -> dict[str, Any]:
         if status in {"warn", "fail"}:
             offending_scenes.append(
                 {
-                    "scene_id": str(governance.get("scene_id") or scene.get("scene_id") or "").strip(),
+                    "scene_id": str(
+                        governance.get("scene_id") or scene.get("scene_id") or ""
+                    ).strip(),
                     "scene_order": int(governance.get("scene_order") or scene.get("order") or 0),
                     "status": status,
                     "offending_dimensions": list(governance.get("offending_dimensions") or []),
@@ -323,7 +344,9 @@ def build_continuity_ledger(project: dict[str, Any]) -> dict[str, Any]:
             )
         if governance.get("deliverable") is False:
             blocked_count += 1
-        dimensions = governance.get("dimensions") if isinstance(governance.get("dimensions"), dict) else {}
+        dimensions = (
+            governance.get("dimensions") if isinstance(governance.get("dimensions"), dict) else {}
+        )
         for dimension in DIMENSIONS:
             data = dimensions.get(dimension) if isinstance(dimensions.get(dimension), dict) else {}
             dim_status = str(data.get("status") or "")
@@ -333,9 +356,11 @@ def build_continuity_ledger(project: dict[str, Any]) -> dict[str, Any]:
                     dimension_passes[dimension] += 1
 
     pass_rates = {
-        dimension: round(dimension_passes[dimension] / dimension_totals[dimension], 3)
-        if dimension_totals[dimension]
-        else 0.0
+        dimension: (
+            round(dimension_passes[dimension] / dimension_totals[dimension], 3)
+            if dimension_totals[dimension]
+            else 0.0
+        )
         for dimension in DIMENSIONS
     }
     return {

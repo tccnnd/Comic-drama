@@ -70,7 +70,11 @@ class ProjectEventBus:
         try:
             queue.put_nowait(event)
         except asyncio.QueueFull:
-            logger.warning("subscriber queue full, dropped %s for %s", event.get('type'), event.get('project_id'))
+            logger.warning(
+                "subscriber queue full, dropped %s for %s",
+                event.get("type"),
+                event.get("project_id"),
+            )
 
     def publish_scene_updated(self, project_id: str, scene: dict[str, Any]) -> None:
         self.publish(
@@ -79,21 +83,27 @@ class ProjectEventBus:
             {"scene_order": scene.get("order"), "scene": scene},
         )
 
-    def publish_scene_split(self, project_id: str, original_order: int, project: dict[str, Any]) -> None:
+    def publish_scene_split(
+        self, project_id: str, original_order: int, project: dict[str, Any]
+    ) -> None:
         self.publish(
             project_id,
             EventType.SCENE_SPLIT,
             {"original_order": original_order, "project": project},
         )
 
-    def publish_scene_merged(self, project_id: str, merged_order: int, project: dict[str, Any]) -> None:
+    def publish_scene_merged(
+        self, project_id: str, merged_order: int, project: dict[str, Any]
+    ) -> None:
         self.publish(
             project_id,
             EventType.SCENE_MERGED,
             {"merged_order": merged_order, "project": project},
         )
 
-    def publish_scene_restored(self, project_id: str, scene_order: int, project: dict[str, Any]) -> None:
+    def publish_scene_restored(
+        self, project_id: str, scene_order: int, project: dict[str, Any]
+    ) -> None:
         self.publish(
             project_id,
             EventType.SCENE_RESTORED,

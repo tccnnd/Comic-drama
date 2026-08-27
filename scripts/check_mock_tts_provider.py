@@ -4,7 +4,6 @@ import json
 from urllib.error import URLError
 from urllib.request import urlopen
 
-
 URL = "http://127.0.0.1:8010/health"
 
 

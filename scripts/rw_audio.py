@@ -6,15 +6,13 @@ import re
 import wave
 from pathlib import Path
 
-from backend.config_utils import (
-    coerce_bool as _coerce_bool,
-    coerce_float as _coerce_float,
-    coerce_int as _coerce_int,
-)
+from backend.config_utils import coerce_bool as _coerce_bool
+from backend.config_utils import coerce_float as _coerce_float
+from backend.config_utils import coerce_int as _coerce_int
 from scripts.bgm_matcher import select_bgm_for_scene
 from scripts.rw_config import (
-    AUDIO_ASSETS,
     AUDIO_ASSET_EXTENSIONS,
+    AUDIO_ASSETS,
     DEFAULT_AUDIO_MANIFEST,
     DEFAULT_SUBPROCESS_TIMEOUTS,
     DEFAULT_SUBTITLE_STYLE,
@@ -167,7 +165,12 @@ def burn_subtitles_to_video(
         "copy",
         str(out_path),
     ]
-    run_guarded(cmd, cwd=out_path.parent, timeout=timeout_s or DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_render"], stage="ffmpeg_burn_subtitles")
+    run_guarded(
+        cmd,
+        cwd=out_path.parent,
+        timeout=timeout_s or DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_render"],
+        stage="ffmpeg_burn_subtitles",
+    )
     return out_path
 
 
@@ -175,7 +178,9 @@ def db_to_linear(value_db: float) -> float:
     return 10 ** (float(value_db) / 20.0)
 
 
-def normalize_audio_track(ffmpeg: str, input_path: Path, out_path: Path, audio_style: dict | None = None) -> Path:
+def normalize_audio_track(
+    ffmpeg: str, input_path: Path, out_path: Path, audio_style: dict | None = None
+) -> Path:
     style = normalize_audio_style(audio_style)
     audio_filter = ",".join(
         [
@@ -194,7 +199,12 @@ def normalize_audio_track(ffmpeg: str, input_path: Path, out_path: Path, audio_s
         "pcm_s16le",
         str(out_path),
     ]
-    run_guarded(cmd, cwd=out_path.parent, timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_audio"], stage="ffmpeg_normalize_audio")
+    run_guarded(
+        cmd,
+        cwd=out_path.parent,
+        timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_audio"],
+        stage="ffmpeg_normalize_audio",
+    )
     return out_path
 
 
@@ -322,7 +332,9 @@ def normalize_sfx_kind(value: object) -> str:
     return aliases.get(raw, raw)
 
 
-def scene_audio_style(scene: StoryScene, audio_style: dict | None = None, project_root: Path | None = None) -> dict:
+def scene_audio_style(
+    scene: StoryScene, audio_style: dict | None = None, project_root: Path | None = None
+) -> dict:
     style = normalize_audio_style(audio_style)
     manifest = audio_manifest_dict(scene)
     bgm_root = AUDIO_ASSETS / "bgm"
@@ -334,12 +346,16 @@ def scene_audio_style(scene: StoryScene, audio_style: dict | None = None, projec
         if selection.source:
             style["bgm_source"] = selection.source
     elif manifest.get("bgm_file") or manifest.get("bgm_path") or manifest.get("bgm_style"):
-        bgm_value = manifest.get("bgm_file") or manifest.get("bgm_path") or manifest.get("bgm_style")
+        bgm_value = (
+            manifest.get("bgm_file") or manifest.get("bgm_path") or manifest.get("bgm_style")
+        )
         bgm_path = resolve_audio_asset("bgm", bgm_value, project_root=project_root)
         if bgm_path is not None:
             style["bgm_path"] = str(bgm_path)
     if manifest.get("bgm_gain_db") not in (None, ""):
-        style["bgm_gain_db"] = _coerce_float(manifest.get("bgm_gain_db"), style["bgm_gain_db"], -60.0, 0.0)
+        style["bgm_gain_db"] = _coerce_float(
+            manifest.get("bgm_gain_db"), style["bgm_gain_db"], -60.0, 0.0
+        )
     return style
 
 
@@ -369,9 +385,7 @@ def write_srt_entries(entries: list[tuple[float, float, str]], path: Path) -> No
         if not text.strip():
             continue
         chunks.append(
-            f"{index}\n"
-            f"{srt_timestamp(start)} --> {srt_timestamp(end)}\n"
-            f"{text.strip()}\n"
+            f"{index}\n" f"{srt_timestamp(start)} --> {srt_timestamp(end)}\n" f"{text.strip()}\n"
         )
         index += 1
     write_text(path, "\n".join(chunks))
@@ -431,7 +445,9 @@ def parse_srt_entries(path: Path) -> list[tuple[float, float, str]]:
     return entries
 
 
-def offset_srt_entries(entries: list[tuple[float, float, str]], offset: float) -> list[tuple[float, float, str]]:
+def offset_srt_entries(
+    entries: list[tuple[float, float, str]], offset: float
+) -> list[tuple[float, float, str]]:
     return [(start + offset, end + offset, text) for start, end, text in entries]
 
 
@@ -474,10 +490,16 @@ def stitch_scene_subtitles(
     entries: list[tuple[float, float, str]] = []
     ass_entries: list[tuple[float, float, str, str, str]] = []
     for index, scene_file in enumerate(scene_files):
-        scene = fallback_scenes[index] if fallback_scenes is not None and index < len(fallback_scenes) else None
+        scene = (
+            fallback_scenes[index]
+            if fallback_scenes is not None and index < len(fallback_scenes)
+            else None
+        )
         local_entries = parse_srt_entries(scene_file)
         if not local_entries and scene is not None:
-            local_entries = [(0.0, durations[index], str(_scene_field(scene, "dialogue", "") or "").strip())]
+            local_entries = [
+                (0.0, durations[index], str(_scene_field(scene, "dialogue", "") or "").strip())
+            ]
         offset_entries = offset_srt_entries(local_entries, cursor)
         entries.extend(offset_entries)
         scene_segments = _scene_dialogue_segments(scene)
@@ -630,7 +652,9 @@ def _beat_sfx_triggers(
     return triggers
 
 
-def scene_sfx_triggers(scene: StoryScene, run_dir: Path, duration: float, project_root: Path | None = None) -> list[dict[str, object]]:
+def scene_sfx_triggers(
+    scene: StoryScene, run_dir: Path, duration: float, project_root: Path | None = None
+) -> list[dict[str, object]]:
     from scripts.run_workflow import build_scene_beats
 
     manifest = audio_manifest_dict(scene)
@@ -647,7 +671,14 @@ def scene_sfx_triggers(scene: StoryScene, run_dir: Path, duration: float, projec
         file_value = item.get("file") or item.get("path") or item.get("style") or item.get("name")
         sfx_path = resolve_audio_asset("sfx", file_value, project_root=project_root)
         generated_kind = normalize_sfx_kind(file_value)
-        if sfx_path is None and generated_kind in {"whoosh", "hit", "spark", "boom", "thunder", "drop"}:
+        if sfx_path is None and generated_kind in {
+            "whoosh",
+            "hit",
+            "spark",
+            "boom",
+            "thunder",
+            "drop",
+        }:
             sfx_path = write_tone_sfx(
                 run_dir / f"scene_{scene.scene:02}_sfx_{generated_kind}_{len(triggers) + 1}.wav",
                 generated_kind,
@@ -657,7 +688,9 @@ def scene_sfx_triggers(scene: StoryScene, run_dir: Path, duration: float, projec
             continue
         timestamp_ms = _coerce_int(item.get("timestamp_ms"), 0, 0, int(max(0.0, duration) * 1000))
         volume = _coerce_float(item.get("volume"), 0.65, 0.0, 2.0)
-        triggers.append({"path": sfx_path, "delay_ms": timestamp_ms, "volume": volume, "source": "manifest"})
+        triggers.append(
+            {"path": sfx_path, "delay_ms": timestamp_ms, "volume": volume, "source": "manifest"}
+        )
 
     spoken_text = split_dialogue_speaker(scene.dialogue)[1]
     beat_specs = build_scene_beats(scene, duration, spoken_text)
@@ -667,11 +700,17 @@ def scene_sfx_triggers(scene: StoryScene, run_dir: Path, duration: float, projec
 
     beat_kind = sfx_kind_for_scene(scene)
     if beat_kind != "none":
-        start_sfx = write_tone_sfx(run_dir / f"scene_{scene.scene:02}_sfx_start.wav", "whoosh", 0.26)
+        start_sfx = write_tone_sfx(
+            run_dir / f"scene_{scene.scene:02}_sfx_start.wav", "whoosh", 0.26
+        )
         beat_sfx = write_tone_sfx(run_dir / f"scene_{scene.scene:02}_sfx_beat.wav", beat_kind, 0.34)
-        beat_delay_ms = int(max(400, min(float(duration) * 1000 - 360, float(duration) * 1000 * 0.66)))
+        beat_delay_ms = int(
+            max(400, min(float(duration) * 1000 - 360, float(duration) * 1000 * 0.66))
+        )
         triggers.append({"path": start_sfx, "delay_ms": 0, "volume": 0.22, "source": "auto_scene"})
-        triggers.append({"path": beat_sfx, "delay_ms": beat_delay_ms, "volume": 0.18, "source": "auto_scene"})
+        triggers.append(
+            {"path": beat_sfx, "delay_ms": beat_delay_ms, "volume": 0.18, "source": "auto_scene"}
+        )
 
     ranked_sources = {"manifest": 0, "auto_beat": 1, "auto_scene": 2}
     triggers.sort(
@@ -694,7 +733,9 @@ def scene_sfx_triggers(scene: StoryScene, run_dir: Path, duration: float, projec
             prev_rank = ranked_sources.get(str(deduped[-1].get("source") or ""), 99)
             current_volume = float(trigger.get("volume") or 0.0)
             prev_volume = float(deduped[-1].get("volume") or 0.0)
-            if current_rank < prev_rank or (current_rank == prev_rank and current_volume > prev_volume):
+            if current_rank < prev_rank or (
+                current_rank == prev_rank and current_volume > prev_volume
+            ):
                 deduped[-1] = trigger
             continue
         deduped.append(trigger)
@@ -715,7 +756,25 @@ def scene_should_screen_shake(scene: StoryScene) -> bool:
                 for item in value
                 if isinstance(item, dict)
             )
-    return any(token in tokens for token in ("hit", "impact", "slap", "punch", "thunder", "boom", "explosion", "击", "打", "雷", "巴掌", "轰", "拍", "巨响"))
+    return any(
+        token in tokens
+        for token in (
+            "hit",
+            "impact",
+            "slap",
+            "punch",
+            "thunder",
+            "boom",
+            "explosion",
+            "击",
+            "打",
+            "雷",
+            "巴掌",
+            "轰",
+            "拍",
+            "巨响",
+        )
+    )
 
 
 def mix_scene_sfx(
@@ -759,17 +818,24 @@ def mix_scene_sfx(
     ]
     for trigger in triggers:
         cmd.extend(["-i", str(trigger["path"])])
-    cmd.extend([
-        "-filter_complex",
-        filter_complex,
-        "-map",
-        "[mixed]",
-        "-c:a",
-        "pcm_s16le",
-        str(out_path),
-    ])
+    cmd.extend(
+        [
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[mixed]",
+            "-c:a",
+            "pcm_s16le",
+            str(out_path),
+        ]
+    )
     try:
-        run_guarded(cmd, cwd=run_dir, timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_audio"], stage="ffmpeg_mix_sfx")
+        run_guarded(
+            cmd,
+            cwd=run_dir,
+            timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_audio"],
+            stage="ffmpeg_mix_sfx",
+        )
     except Exception as exc:
         print(f"[audio] SFX mix failed for scene {scene_id}: {exc}")
         return voice_path
@@ -809,5 +875,10 @@ def apply_scene_grade(ffmpeg: str, input_path: Path, out_path: Path, scene: Stor
         "copy",
         str(out_path),
     ]
-    run_guarded(cmd, cwd=out_path.parent, timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_render"], stage="ffmpeg_apply_grade")
+    run_guarded(
+        cmd,
+        cwd=out_path.parent,
+        timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_render"],
+        stage="ffmpeg_apply_grade",
+    )
     return out_path

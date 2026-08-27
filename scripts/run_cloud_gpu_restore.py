@@ -8,7 +8,6 @@ from pathlib import Path
 
 import paramiko
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RESTORE_SCRIPT = ROOT / "scripts" / "cloud_gpu_restore_comfyui.sh"
 
@@ -30,7 +29,9 @@ def connect() -> paramiko.SSHClient:
     user = os.environ.get("COMFYUI_SSH_USER", "root")
     password = os.environ.get("COMFYUI_SSH_PASSWORD", "")
     if not password:
-        raise RuntimeError("COMFYUI_SSH_PASSWORD is required. Put it in .env or set the environment variable.")
+        raise RuntimeError(
+            "COMFYUI_SSH_PASSWORD is required. Put it in .env or set the environment variable."
+        )
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.WarningPolicy())
@@ -104,4 +105,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

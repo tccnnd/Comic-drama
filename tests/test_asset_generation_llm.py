@@ -1,7 +1,7 @@
 import json
 
-from backend.assets import Asset, AssetType
 from backend import asset_generation
+from backend.assets import Asset, AssetType
 
 
 def test_asset_generation_prompts_use_character_image_llm(monkeypatch):

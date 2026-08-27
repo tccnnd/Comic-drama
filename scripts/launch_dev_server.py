@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "scripts" / "dev_server.py"
 OUT_LOG = ROOT / "dev_server.out.log"
@@ -19,7 +18,10 @@ def main() -> int:
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
 
-    with OUT_LOG.open("a", encoding="utf-8") as stdout, ERR_LOG.open("a", encoding="utf-8") as stderr:
+    with (
+        OUT_LOG.open("a", encoding="utf-8") as stdout,
+        ERR_LOG.open("a", encoding="utf-8") as stderr,
+    ):
         creationflags = (
             subprocess.CREATE_NEW_PROCESS_GROUP
             | subprocess.DETACHED_PROCESS

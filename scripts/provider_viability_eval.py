@@ -122,13 +122,9 @@ def _validate_dim_scores(provider_id: str, scores: dict[str, Any]) -> dict[str, 
         try:
             value = int(raw)
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"{provider_id}: scores[{key}] must be int, got {raw!r}"
-            ) from exc
+            raise ValueError(f"{provider_id}: scores[{key}] must be int, got {raw!r}") from exc
         if value < 0 or value > 5:
-            raise ValueError(
-                f"{provider_id}: scores[{key}]={value} must be in [0, 5]"
-            )
+            raise ValueError(f"{provider_id}: scores[{key}]={value} must be in [0, 5]")
         out[key] = value
     return out
 
@@ -140,7 +136,8 @@ def _compute_sample_stats(samples: list[dict[str, Any]]) -> tuple[float, float, 
     usable_count = sum(1 for s in samples if s.get("usable"))
     pass_rate = usable_count / sample_count
     vlm_scores = [
-        float(s["vlm_score"]) for s in samples
+        float(s["vlm_score"])
+        for s in samples
         if isinstance(s, dict) and s.get("vlm_score") is not None
     ]
     avg_vlm = (sum(vlm_scores) / len(vlm_scores)) if vlm_scores else 0.0

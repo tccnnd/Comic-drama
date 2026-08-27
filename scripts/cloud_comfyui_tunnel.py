@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 import paramiko
 
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(ROOT, ".env")
 
@@ -84,14 +83,51 @@ def env_value(*names: str, default: str = "") -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Open a local SSH tunnel to cloud ComfyUI.")
-    parser.add_argument("--ssh-host", default=env_value("CLOUD_COMFYUI_SSH_HOST", "COMFYUI_SSH_HOST", default="sc01-ssh.gpuhome.cc"))
-    parser.add_argument("--ssh-port", type=int, default=int(env_value("CLOUD_COMFYUI_SSH_PORT", "COMFYUI_SSH_PORT", default="30935")))
-    parser.add_argument("--username", default=env_value("CLOUD_COMFYUI_SSH_USER", "COMFYUI_SSH_USER", default="root"))
-    parser.add_argument("--password", default=env_value("CLOUD_COMFYUI_SSH_PASSWORD", "COMFYUI_SSH_PASSWORD", default=""))
-    parser.add_argument("--local-host", default=env_value("CLOUD_COMFYUI_TUNNEL_HOST", "COMFYUI_SSH_LOCAL_HOST", default="127.0.0.1"))
-    parser.add_argument("--local-port", type=int, default=int(env_value("CLOUD_COMFYUI_TUNNEL_PORT", "COMFYUI_SSH_LOCAL_PORT", default="8189")))
-    parser.add_argument("--remote-host", default=env_value("CLOUD_COMFYUI_REMOTE_HOST", "COMFYUI_SSH_REMOTE_HOST", default="127.0.0.1"))
-    parser.add_argument("--remote-port", type=int, default=int(env_value("CLOUD_COMFYUI_REMOTE_PORT", "COMFYUI_SSH_REMOTE_PORT", default="8188")))
+    parser.add_argument(
+        "--ssh-host",
+        default=env_value(
+            "CLOUD_COMFYUI_SSH_HOST", "COMFYUI_SSH_HOST", default="sc01-ssh.gpuhome.cc"
+        ),
+    )
+    parser.add_argument(
+        "--ssh-port",
+        type=int,
+        default=int(env_value("CLOUD_COMFYUI_SSH_PORT", "COMFYUI_SSH_PORT", default="30935")),
+    )
+    parser.add_argument(
+        "--username",
+        default=env_value("CLOUD_COMFYUI_SSH_USER", "COMFYUI_SSH_USER", default="root"),
+    )
+    parser.add_argument(
+        "--password",
+        default=env_value("CLOUD_COMFYUI_SSH_PASSWORD", "COMFYUI_SSH_PASSWORD", default=""),
+    )
+    parser.add_argument(
+        "--local-host",
+        default=env_value(
+            "CLOUD_COMFYUI_TUNNEL_HOST", "COMFYUI_SSH_LOCAL_HOST", default="127.0.0.1"
+        ),
+    )
+    parser.add_argument(
+        "--local-port",
+        type=int,
+        default=int(
+            env_value("CLOUD_COMFYUI_TUNNEL_PORT", "COMFYUI_SSH_LOCAL_PORT", default="8189")
+        ),
+    )
+    parser.add_argument(
+        "--remote-host",
+        default=env_value(
+            "CLOUD_COMFYUI_REMOTE_HOST", "COMFYUI_SSH_REMOTE_HOST", default="127.0.0.1"
+        ),
+    )
+    parser.add_argument(
+        "--remote-port",
+        type=int,
+        default=int(
+            env_value("CLOUD_COMFYUI_REMOTE_PORT", "COMFYUI_SSH_REMOTE_PORT", default="8188")
+        ),
+    )
     return parser
 
 

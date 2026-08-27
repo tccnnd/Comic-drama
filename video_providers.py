@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict, dataclass
 from typing import Literal
-import os
 
 VideoProviderBackend = Literal["local", "comfyui", "remote"]
 
@@ -114,7 +114,14 @@ def _register_defaults() -> None:
             id="xl",
             label="XL Aggregator",
             backend="remote",
-            aliases=("moyin", "memefast", "moyin-creator", "xl-aggregate", "happyhorse", "happy-horse"),
+            aliases=(
+                "moyin",
+                "memefast",
+                "moyin-creator",
+                "xl-aggregate",
+                "happyhorse",
+                "happy-horse",
+            ),
             description="Aggregated video provider compatible with Moyin-style gateway routing (supports DashScope/Happy Horse)",
             config_env=(
                 "XL_API_KEY",
@@ -205,7 +212,11 @@ def _provider_readiness(spec: VideoProviderSpec) -> dict[str, object]:
             blocking_env.append("COMFYUI_VIDEO_WORKFLOW_PATH")
         if not _env_configured("COMFYUI_VIDEO_CHECKPOINT_NAME", "COMFYUI_CHECKPOINT_NAME"):
             blocking_env.append("COMFYUI_VIDEO_CHECKPOINT_NAME")
-        summary = "ComfyUI video provider is configured." if not blocking_env else f"Missing {len(blocking_env)} required ComfyUI setting(s)."
+        summary = (
+            "ComfyUI video provider is configured."
+            if not blocking_env
+            else f"Missing {len(blocking_env)} required ComfyUI setting(s)."
+        )
         return {
             "ready": not blocking_env,
             "level": "ready" if not blocking_env else "missing_config",
@@ -229,7 +240,11 @@ def _provider_readiness(spec: VideoProviderSpec) -> dict[str, object]:
     if not _env_configured(*base_names):
         blocking_env.append(" or ".join(base_names))
 
-    summary = "Remote video provider is configured." if not blocking_env else f"Missing {len(blocking_env)} required remote provider setting(s)."
+    summary = (
+        "Remote video provider is configured."
+        if not blocking_env
+        else f"Missing {len(blocking_env)} required remote provider setting(s)."
+    )
     return {
         "ready": not blocking_env,
         "level": "ready" if not blocking_env else "missing_config",
@@ -266,7 +281,9 @@ def get_video_provider_status(provider: str | None = None) -> dict[str, object]:
     }
 
 
-def get_video_provider_spec(provider: str | None = None, default: str = "local") -> VideoProviderSpec:
+def get_video_provider_spec(
+    provider: str | None = None, default: str = "local"
+) -> VideoProviderSpec:
     value = (provider or "auto").strip().lower()
     if value == "auto":
         value = os.environ.get("VIDEO_PROVIDER", "").strip().lower() or default
@@ -281,5 +298,7 @@ def normalize_video_provider(provider: str | None = None, default: str = "local"
     return get_video_provider_spec(provider, default=default).id
 
 
-def video_provider_backend(provider: str | None = None, default: str = "local") -> VideoProviderBackend:
+def video_provider_backend(
+    provider: str | None = None, default: str = "local"
+) -> VideoProviderBackend:
     return get_video_provider_spec(provider, default=default).backend

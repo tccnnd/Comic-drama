@@ -4,11 +4,9 @@ import math
 from copy import deepcopy
 from typing import Any
 
-from backend.config_utils import (
-    coerce_bool as _coerce_bool,
-    coerce_float as _coerce_float,
-    coerce_int as _coerce_int,
-)
+from backend.config_utils import coerce_bool as _coerce_bool
+from backend.config_utils import coerce_float as _coerce_float
+from backend.config_utils import coerce_int as _coerce_int
 from scripts.rw_config import (
     DEFAULT_AUDIO_MANIFEST,
     DEFAULT_AUDIO_STYLE,
@@ -48,7 +46,12 @@ def normalize_episode_pacing(pacing: dict | None = None) -> dict:
     merged = default_episode_pacing()
     if isinstance(pacing, dict):
         merged.update({key: value for key, value in pacing.items() if value is not None})
-    preset = str(merged.get("preset") or DEFAULT_EPISODE_PACING["preset"]).strip().lower().replace("-", "_")
+    preset = (
+        str(merged.get("preset") or DEFAULT_EPISODE_PACING["preset"])
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
     if preset not in {"classic_four_act", "fast_hook", "slow_burn"}:
         preset = DEFAULT_EPISODE_PACING["preset"]
     phase_order = merged.get("phase_order")
@@ -60,7 +63,9 @@ def normalize_episode_pacing(pacing: dict | None = None) -> dict:
         cleaned_order = list(EPISODE_PHASES)
     return {
         "preset": preset,
-        "auto_assign": _coerce_bool(merged.get("auto_assign"), DEFAULT_EPISODE_PACING["auto_assign"]),
+        "auto_assign": _coerce_bool(
+            merged.get("auto_assign"), DEFAULT_EPISODE_PACING["auto_assign"]
+        ),
         "phase_order": cleaned_order,
     }
 
@@ -81,7 +86,9 @@ def infer_episode_phase(scene_index: int, scene_count: int, pacing: dict | None 
     return phases[1] if len(phases) > 1 else "setup"
 
 
-def apply_episode_pacing_to_scenes(scenes: list[StoryScene], pacing: dict | None = None) -> list[StoryScene]:
+def apply_episode_pacing_to_scenes(
+    scenes: list[StoryScene], pacing: dict | None = None
+) -> list[StoryScene]:
     normalized = normalize_episode_pacing(pacing)
     total = max(1, len(scenes))
     for index, scene in enumerate(scenes, start=1):
@@ -99,13 +106,23 @@ def normalize_subtitle_style(style: dict | None = None) -> dict:
     merged = default_subtitle_style()
     if isinstance(style, dict):
         merged.update({key: value for key, value in style.items() if value is not None})
-    merged["font_name"] = str(merged.get("font_name") or DEFAULT_SUBTITLE_STYLE["font_name"]).strip()
-    merged["font_size"] = _coerce_int(merged.get("font_size"), DEFAULT_SUBTITLE_STYLE["font_size"], 12, 96)
-    merged["margin_v"] = _coerce_int(merged.get("margin_v"), DEFAULT_SUBTITLE_STYLE["margin_v"], 0, 600)
+    merged["font_name"] = str(
+        merged.get("font_name") or DEFAULT_SUBTITLE_STYLE["font_name"]
+    ).strip()
+    merged["font_size"] = _coerce_int(
+        merged.get("font_size"), DEFAULT_SUBTITLE_STYLE["font_size"], 12, 96
+    )
+    merged["margin_v"] = _coerce_int(
+        merged.get("margin_v"), DEFAULT_SUBTITLE_STYLE["margin_v"], 0, 600
+    )
     merged["outline"] = _coerce_int(merged.get("outline"), DEFAULT_SUBTITLE_STYLE["outline"], 0, 8)
     merged["shadow"] = _coerce_int(merged.get("shadow"), DEFAULT_SUBTITLE_STYLE["shadow"], 0, 8)
-    merged["alignment"] = _coerce_int(merged.get("alignment"), DEFAULT_SUBTITLE_STYLE["alignment"], 1, 9)
-    merged["show_speaker"] = _coerce_bool(merged.get("show_speaker"), DEFAULT_SUBTITLE_STYLE["show_speaker"])
+    merged["alignment"] = _coerce_int(
+        merged.get("alignment"), DEFAULT_SUBTITLE_STYLE["alignment"], 1, 9
+    )
+    merged["show_speaker"] = _coerce_bool(
+        merged.get("show_speaker"), DEFAULT_SUBTITLE_STYLE["show_speaker"]
+    )
     merged["burn_in"] = _coerce_bool(merged.get("burn_in"), DEFAULT_SUBTITLE_STYLE["burn_in"])
     return merged
 
@@ -118,16 +135,34 @@ def normalize_audio_style(style: dict | None = None) -> dict:
     merged = default_audio_style()
     if isinstance(style, dict):
         merged.update({key: value for key, value in style.items() if value is not None})
-    merged["master_lufs"] = _coerce_float(merged.get("master_lufs"), DEFAULT_AUDIO_STYLE["master_lufs"], -30.0, -6.0)
-    merged["true_peak"] = _coerce_float(merged.get("true_peak"), DEFAULT_AUDIO_STYLE["true_peak"], -6.0, 0.0)
-    merged["loudness_range"] = _coerce_float(merged.get("loudness_range"), DEFAULT_AUDIO_STYLE["loudness_range"], 5.0, 20.0)
-    merged["limiter_level"] = _coerce_float(merged.get("limiter_level"), DEFAULT_AUDIO_STYLE["limiter_level"], 0.5, 0.999)
+    merged["master_lufs"] = _coerce_float(
+        merged.get("master_lufs"), DEFAULT_AUDIO_STYLE["master_lufs"], -30.0, -6.0
+    )
+    merged["true_peak"] = _coerce_float(
+        merged.get("true_peak"), DEFAULT_AUDIO_STYLE["true_peak"], -6.0, 0.0
+    )
+    merged["loudness_range"] = _coerce_float(
+        merged.get("loudness_range"), DEFAULT_AUDIO_STYLE["loudness_range"], 5.0, 20.0
+    )
+    merged["limiter_level"] = _coerce_float(
+        merged.get("limiter_level"), DEFAULT_AUDIO_STYLE["limiter_level"], 0.5, 0.999
+    )
     merged["bgm_path"] = str(merged.get("bgm_path") or "").strip()
-    merged["bgm_gain_db"] = _coerce_float(merged.get("bgm_gain_db"), DEFAULT_AUDIO_STYLE["bgm_gain_db"], -60.0, 0.0)
-    merged["duck_threshold"] = _coerce_float(merged.get("duck_threshold"), DEFAULT_AUDIO_STYLE["duck_threshold"], 0.01, 1.0)
-    merged["duck_ratio"] = _coerce_float(merged.get("duck_ratio"), DEFAULT_AUDIO_STYLE["duck_ratio"], 1.0, 20.0)
-    merged["duck_attack_ms"] = _coerce_int(merged.get("duck_attack_ms"), DEFAULT_AUDIO_STYLE["duck_attack_ms"], 1, 1000)
-    merged["duck_release_ms"] = _coerce_int(merged.get("duck_release_ms"), DEFAULT_AUDIO_STYLE["duck_release_ms"], 10, 5000)
+    merged["bgm_gain_db"] = _coerce_float(
+        merged.get("bgm_gain_db"), DEFAULT_AUDIO_STYLE["bgm_gain_db"], -60.0, 0.0
+    )
+    merged["duck_threshold"] = _coerce_float(
+        merged.get("duck_threshold"), DEFAULT_AUDIO_STYLE["duck_threshold"], 0.01, 1.0
+    )
+    merged["duck_ratio"] = _coerce_float(
+        merged.get("duck_ratio"), DEFAULT_AUDIO_STYLE["duck_ratio"], 1.0, 20.0
+    )
+    merged["duck_attack_ms"] = _coerce_int(
+        merged.get("duck_attack_ms"), DEFAULT_AUDIO_STYLE["duck_attack_ms"], 1, 1000
+    )
+    merged["duck_release_ms"] = _coerce_int(
+        merged.get("duck_release_ms"), DEFAULT_AUDIO_STYLE["duck_release_ms"], 10, 5000
+    )
     return merged
 
 

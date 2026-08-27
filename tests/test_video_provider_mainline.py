@@ -31,7 +31,9 @@ PNG_1X1 = base64.b64decode(
 )
 
 
-def _minimal_project_payload(project_id: str, *, video_provider: str = "doubao", legacy: bool = False) -> dict:
+def _minimal_project_payload(
+    project_id: str, *, video_provider: str = "doubao", legacy: bool = False
+) -> dict:
     scene = {
         "scene_id": "scene_001",
         "order": 1,
@@ -114,7 +116,12 @@ def provider_project(tmp_path, monkeypatch):
     monkeypatch.setattr(project_models, "WORKSPACE", workspace)
     monkeypatch.setattr(project_runtime, "WORKSPACE", workspace)
 
-    def create(project_id: str = "provider_project", *, video_provider: str = "doubao", legacy: bool = False) -> dict:
+    def create(
+        project_id: str = "provider_project",
+        *,
+        video_provider: str = "doubao",
+        legacy: bool = False,
+    ) -> dict:
         project_root = workspace / project_id
         scene_root = project_root / "scenes" / "scene_001"
         (project_root / "characters").mkdir(parents=True, exist_ok=True)
@@ -122,7 +129,9 @@ def provider_project(tmp_path, monkeypatch):
         (project_root / "output").mkdir(parents=True, exist_ok=True)
         (scene_root / "image_v1.png").write_bytes(PNG_1X1)
         payload = _minimal_project_payload(project_id, video_provider=video_provider, legacy=legacy)
-        (project_root / "project.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (project_root / "project.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return {"project_id": project_id, "workspace": workspace, "project_root": project_root}
 
     return create
@@ -146,16 +155,58 @@ def patched_render_runtime(monkeypatch):
     monkeypatch.setattr(scene_renderer, "render_voice_track", fake_voice_track)
     monkeypatch.setattr(run_workflow.time, "sleep", lambda seconds: None)
     monkeypatch.setattr(rw_render.time, "sleep", lambda seconds: None)
-    monkeypatch.setattr(run_workflow, "mix_voice_with_bgm", lambda ffmpeg, voice_path, out_path, duration, style, project_root=None: voice_path)
-    monkeypatch.setattr(rw_render, "mix_voice_with_bgm", lambda ffmpeg, voice_path, out_path, duration, style, project_root=None: voice_path)
-    monkeypatch.setattr(run_workflow, "mix_scene_sfx", lambda ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=None: scene_audio)
-    monkeypatch.setattr(rw_render, "mix_scene_sfx", lambda ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=None: scene_audio)
-    monkeypatch.setattr(run_workflow, "build_scene_video_prompts", lambda scene, duration, run_dir: ("positive prompt", "negative prompt"))
-    monkeypatch.setattr(rw_render, "build_scene_video_prompts", lambda scene, duration, run_dir: ("positive prompt", "negative prompt"))
-    monkeypatch.setattr(run_workflow, "mux_audio_to_visual", lambda ffmpeg, visual_path, voice_path, out_path: out_path.write_bytes(b"muxed") or out_path)
-    monkeypatch.setattr(rw_render, "mux_audio_to_visual", lambda ffmpeg, visual_path, voice_path, out_path: out_path.write_bytes(b"muxed") or out_path)
-    monkeypatch.setattr(run_workflow, "apply_scene_grade", lambda ffmpeg, input_path, out_path, scene: out_path.write_bytes(b"graded") or out_path)
-    monkeypatch.setattr(rw_render, "apply_scene_grade", lambda ffmpeg, input_path, out_path, scene: out_path.write_bytes(b"graded") or out_path)
+    monkeypatch.setattr(
+        run_workflow,
+        "mix_voice_with_bgm",
+        lambda ffmpeg, voice_path, out_path, duration, style, project_root=None: voice_path,
+    )
+    monkeypatch.setattr(
+        rw_render,
+        "mix_voice_with_bgm",
+        lambda ffmpeg, voice_path, out_path, duration, style, project_root=None: voice_path,
+    )
+    monkeypatch.setattr(
+        run_workflow,
+        "mix_scene_sfx",
+        lambda ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=None: scene_audio,
+    )
+    monkeypatch.setattr(
+        rw_render,
+        "mix_scene_sfx",
+        lambda ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=None: scene_audio,
+    )
+    monkeypatch.setattr(
+        run_workflow,
+        "build_scene_video_prompts",
+        lambda scene, duration, run_dir: ("positive prompt", "negative prompt"),
+    )
+    monkeypatch.setattr(
+        rw_render,
+        "build_scene_video_prompts",
+        lambda scene, duration, run_dir: ("positive prompt", "negative prompt"),
+    )
+    monkeypatch.setattr(
+        run_workflow,
+        "mux_audio_to_visual",
+        lambda ffmpeg, visual_path, voice_path, out_path: out_path.write_bytes(b"muxed")
+        or out_path,
+    )
+    monkeypatch.setattr(
+        rw_render,
+        "mux_audio_to_visual",
+        lambda ffmpeg, visual_path, voice_path, out_path: out_path.write_bytes(b"muxed")
+        or out_path,
+    )
+    monkeypatch.setattr(
+        run_workflow,
+        "apply_scene_grade",
+        lambda ffmpeg, input_path, out_path, scene: out_path.write_bytes(b"graded") or out_path,
+    )
+    monkeypatch.setattr(
+        rw_render,
+        "apply_scene_grade",
+        lambda ffmpeg, input_path, out_path, scene: out_path.write_bytes(b"graded") or out_path,
+    )
     monkeypatch.setattr(
         run_workflow,
         "build_scene_beats",
@@ -326,7 +377,9 @@ def test_generation_meta_error_redacts_authorization_bearer_and_query_values():
         fallback_used=True,
     )
 
-    meta = generation_meta_from_result(result, requested_provider="seedance", fallback_mode="report")
+    meta = generation_meta_from_result(
+        result, requested_provider="seedance", fallback_mode="report"
+    )
     serialized = json.dumps(meta, ensure_ascii=False)
 
     assert "https://api.example.test/render?" not in meta["error"]
@@ -478,7 +531,13 @@ def test_generation_meta_from_shot_outputs_aggregates_counts_and_sanitizes():
             fallback_used=True,
             error="provider failed token=shot-secret",
         ),
-        {"shot_id": "scene_001_shot_003", "index": 3, "status": "failed", "attempts": 2, "error": "api_key=failed-secret"},
+        {
+            "shot_id": "scene_001_shot_003",
+            "index": 3,
+            "status": "failed",
+            "attempts": 2,
+            "error": "api_key=failed-secret",
+        },
     ]
 
     meta = generation_meta_from_shot_outputs(
@@ -555,16 +614,24 @@ def test_video_render_granularity_resolves_precedence(monkeypatch):
     monkeypatch.setenv("VIDEO_RENDER_GRANULARITY", "shot")
 
     assert video_render_granularity() == "shot"
-    assert video_render_granularity(project_settings={"video_render_granularity": "scene"}) == "scene"
-    assert video_render_granularity(
-        request_value="shot",
-        project_settings={"video_render_granularity": "scene"},
-    ) == "shot"
-    assert video_render_granularity(
-        cli_value="scene",
-        request_value="shot",
-        project_settings={"video_render_granularity": "shot"},
-    ) == "scene"
+    assert (
+        video_render_granularity(project_settings={"video_render_granularity": "scene"}) == "scene"
+    )
+    assert (
+        video_render_granularity(
+            request_value="shot",
+            project_settings={"video_render_granularity": "scene"},
+        )
+        == "shot"
+    )
+    assert (
+        video_render_granularity(
+            cli_value="scene",
+            request_value="shot",
+            project_settings={"video_render_granularity": "shot"},
+        )
+        == "scene"
+    )
     assert video_render_granularity(cli_value="bad-value") == "scene"
 
 
@@ -620,7 +687,9 @@ def test_estimate_shot_render_quota_counts_calls_seconds_and_cache_reuse():
         )
     ]
 
-    no_reuse = estimate_shot_render_quota(shot_plan, existing_shot_outputs=existing, reuse_cache=False)
+    no_reuse = estimate_shot_render_quota(
+        shot_plan, existing_shot_outputs=existing, reuse_cache=False
+    )
     assert no_reuse["shot_count"] == 3
     assert no_reuse["provider_call_count"] == 3
     assert no_reuse["generated_seconds"] == 4.0
@@ -685,10 +754,17 @@ def test_build_shot_provider_request_inputs_preserves_shot_context_and_video_mod
             "current_scene": {
                 "location": "ticket booth",
                 "active_characters": [
-                    {"name": "Lead", "appearance_core": "blue coat", "clothing_style": "wet sleeves"}
+                    {
+                        "name": "Lead",
+                        "appearance_core": "blue coat",
+                        "clothing_style": "wet sleeves",
+                    }
                 ],
             },
-            "rules": {"preserve_character_identity": True, "keep_lighting_continuous_within_scene": True},
+            "rules": {
+                "preserve_character_identity": True,
+                "keep_lighting_continuous_within_scene": True,
+            },
         },
     }
     shot_plan = {
@@ -834,7 +910,10 @@ def test_render_shot_with_provider_policy_returns_real_video_output(tmp_path, mo
 
     request = build_shot_provider_request_inputs(
         {"scene_id": "scene_001", "order": 1, "title": "Shot Render", "characters": ["Lead"]},
-        {"scene_id": "scene_001", "shots": [{"shot_id": "scene_001_shot_01", "duration_seconds": 1.25}]},
+        {
+            "scene_id": "scene_001",
+            "shots": [{"shot_id": "scene_001_shot_01", "duration_seconds": 1.25}],
+        },
         provider_id="doubao",
     )[0]
     request["provider"]["model"] = "public-video-model"
@@ -849,8 +928,12 @@ def test_render_shot_with_provider_policy_returns_real_video_output(tmp_path, mo
         return remote_request.out_path
 
     monkeypatch.setenv("VIDEO_FALLBACK_MODE", "report")
-    monkeypatch.setattr(video_generation, "render_remote_video_provider", fake_remote_success, raising=False)
-    monkeypatch.setattr("scripts.video_provider_adapters.render_remote_video_provider", fake_remote_success)
+    monkeypatch.setattr(
+        video_generation, "render_remote_video_provider", fake_remote_success, raising=False
+    )
+    monkeypatch.setattr(
+        "scripts.video_provider_adapters.render_remote_video_provider", fake_remote_success
+    )
 
     output = render_shot_with_provider_policy(
         request,
@@ -878,7 +961,10 @@ def test_render_shot_with_provider_policy_report_failure_uses_fallback(tmp_path,
 
     request = build_shot_provider_request_inputs(
         {"scene_id": "scene_001", "order": 1, "title": "Shot Fallback"},
-        {"scene_id": "scene_001", "shots": [{"shot_id": "scene_001_shot_01", "duration_seconds": 2.0}]},
+        {
+            "scene_id": "scene_001",
+            "shots": [{"shot_id": "scene_001_shot_01", "duration_seconds": 2.0}],
+        },
         provider_id="doubao",
     )[0]
     keyframe_path = tmp_path / "keyframe.png"
@@ -896,8 +982,12 @@ def test_render_shot_with_provider_policy_report_failure_uses_fallback(tmp_path,
 
     monkeypatch.setenv("VIDEO_FALLBACK_MODE", "report")
     monkeypatch.setattr(video_generation.time, "sleep", lambda seconds: None)
-    monkeypatch.setattr(video_generation, "render_remote_video_provider", fake_remote_failure, raising=False)
-    monkeypatch.setattr("scripts.video_provider_adapters.render_remote_video_provider", fake_remote_failure)
+    monkeypatch.setattr(
+        video_generation, "render_remote_video_provider", fake_remote_failure, raising=False
+    )
+    monkeypatch.setattr(
+        "scripts.video_provider_adapters.render_remote_video_provider", fake_remote_failure
+    )
 
     output = render_shot_with_provider_policy(
         request,
@@ -925,7 +1015,10 @@ def test_render_shot_with_provider_policy_strict_failure_raises(tmp_path, monkey
 
     request = build_shot_provider_request_inputs(
         {"scene_id": "scene_001", "order": 1, "title": "Strict Shot"},
-        {"scene_id": "scene_001", "shots": [{"shot_id": "scene_001_shot_01", "duration_seconds": 1.0}]},
+        {
+            "scene_id": "scene_001",
+            "shots": [{"shot_id": "scene_001_shot_01", "duration_seconds": 1.0}],
+        },
         provider_id="doubao",
     )[0]
     keyframe_path = tmp_path / "keyframe.png"
@@ -936,8 +1029,12 @@ def test_render_shot_with_provider_policy_strict_failure_raises(tmp_path, monkey
 
     monkeypatch.setenv("VIDEO_FALLBACK_MODE", "strict")
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
-    monkeypatch.setattr(video_generation, "render_remote_video_provider", fake_remote_failure, raising=False)
-    monkeypatch.setattr("scripts.video_provider_adapters.render_remote_video_provider", fake_remote_failure)
+    monkeypatch.setattr(
+        video_generation, "render_remote_video_provider", fake_remote_failure, raising=False
+    )
+    monkeypatch.setattr(
+        "scripts.video_provider_adapters.render_remote_video_provider", fake_remote_failure
+    )
 
     with pytest.raises(RuntimeError) as exc_info:
         render_shot_with_provider_policy(
@@ -1010,7 +1107,10 @@ def test_assemble_shot_clips_uses_hard_cut_concat_and_writes_manifest(tmp_path):
     assert "failed.mp4" not in concat_text
     assert manifest["render_granularity"] == "shot"
     assert manifest["duration_seconds"] == 3.0
-    assert [child["shot_id"] for child in manifest["children"]] == ["scene_001_shot_01", "scene_001_shot_03"]
+    assert [child["shot_id"] for child in manifest["children"]] == [
+        "scene_001_shot_01",
+        "scene_001_shot_03",
+    ]
     persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert persisted == manifest
 
@@ -1112,7 +1212,10 @@ def test_video_provider_status_reports_blocking_readiness(monkeypatch):
     assert missing_status["readiness"]["ready"] is False
     assert "DOUBAO_API_KEY" in missing_status["readiness"]["blocking_env"]
     assert "DOUBAO_MODEL" in missing_status["readiness"]["blocking_env"]
-    assert "DOUBAO_BASE_URL or DOUBAO_SUBMIT_URL or DOUBAO_SUBMIT_PATH" in missing_status["readiness"]["blocking_env"]
+    assert (
+        "DOUBAO_BASE_URL or DOUBAO_SUBMIT_URL or DOUBAO_SUBMIT_PATH"
+        in missing_status["readiness"]["blocking_env"]
+    )
 
     monkeypatch.setenv("DOUBAO_API_KEY", "secret")
     monkeypatch.setenv("DOUBAO_MODEL", "doubao-video")
@@ -1163,7 +1266,11 @@ def test_canonical_timeline_includes_generation_metadata_and_counts():
                 "title": "Fallback",
                 "duration_seconds": 3.0,
                 "image_path": "scenes/scene_002/keyframe.png",
-                "generation_meta": {"is_real_video": False, "fallback_used": True, "provider_id": "doubao"},
+                "generation_meta": {
+                    "is_real_video": False,
+                    "fallback_used": True,
+                    "provider_id": "doubao",
+                },
             },
             {
                 "scene_id": "scene_003",
@@ -1354,7 +1461,9 @@ def test_project_snapshot_exposes_compact_shot_render_status(provider_project):
     assert picture_item["shot_timeline"][0]["generation"]["cache_key"] == "sha256:snapshot"
 
 
-def test_mock_remote_success_persists_real_video_metadata(provider_project, patched_render_runtime, monkeypatch):
+def test_mock_remote_success_persists_real_video_metadata(
+    provider_project, patched_render_runtime, monkeypatch
+):
     import backend.project_runtime as project_runtime
 
     created = provider_project("remote_success_project", video_provider="doubao")
@@ -1371,6 +1480,7 @@ def test_mock_remote_success_persists_real_video_metadata(provider_project, patc
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_success)
     import scripts.rw_render as rw_render
+
     monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_success)
 
     result = project_runtime.rerender_scene_video(created["project_id"], 1)
@@ -1386,7 +1496,9 @@ def test_mock_remote_success_persists_real_video_metadata(provider_project, patc
     assert scene["shot_plan"]["source"] == "temporal_spec"
 
 
-def test_shot_granularity_rerender_orchestrates_shots_and_persists_metadata(provider_project, monkeypatch):
+def test_shot_granularity_rerender_orchestrates_shots_and_persists_metadata(
+    provider_project, monkeypatch
+):
     import backend.project_runtime as project_runtime
     import backend.scene_renderer as scene_renderer
     import backend.video_generation as video_generation
@@ -1398,25 +1510,38 @@ def test_shot_granularity_rerender_orchestrates_shots_and_persists_metadata(prov
     scene["duration_seconds"] = 4.0
     scene["temporal_spec"] = {
         "shots": [
-            {"shot_id": "scene_001_shot_01", "duration_seconds": 1.5, "camera_movement": "slow_push"},
+            {
+                "shot_id": "scene_001_shot_01",
+                "duration_seconds": 1.5,
+                "camera_movement": "slow_push",
+            },
             {"shot_id": "scene_001_shot_02", "duration_seconds": 2.5, "camera_movement": "static"},
         ]
     }
-    (created["project_root"] / "project.json").write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+    (created["project_root"] / "project.json").write_text(
+        json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     calls: list[str] = []
     commands: list[list[str]] = []
 
     monkeypatch.setattr(scene_renderer, "load_env_file", lambda: None)
     monkeypatch.setattr(scene_renderer, "get_ffmpeg_exe", lambda: "ffmpeg")
     monkeypatch.setattr(scene_renderer, "wav_duration", lambda path: 4.0)
+
     def fake_voice_track(*args, **kwargs):
         path = Path(args[2]) / "voice.wav"
         path.write_bytes(b"voice")
         return path, 4.0
 
     monkeypatch.setattr(scene_renderer, "render_voice_track", fake_voice_track)
-    monkeypatch.setattr(scene_renderer, "_evaluate_and_persist_scene_governance", lambda *args, **kwargs: None)
-    monkeypatch.setattr(scene_renderer, "render_silent_visual_segment", lambda *args, **kwargs: Path(args[3]).write_bytes(b"fallback") or Path(args[3]))
+    monkeypatch.setattr(
+        scene_renderer, "_evaluate_and_persist_scene_governance", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        scene_renderer,
+        "render_silent_visual_segment",
+        lambda *args, **kwargs: Path(args[3]).write_bytes(b"fallback") or Path(args[3]),
+    )
 
     def fake_remote_success(request, provider_spec, **kwargs):
         calls.append(request.out_path.name)
@@ -1450,10 +1575,14 @@ def test_shot_granularity_rerender_orchestrates_shots_and_persists_metadata(prov
     assert meta["total_provider_attempts"] == 2
     assert [output["status"] for output in meta["shot_outputs"]] == ["real_video", "real_video"]
     assert meta["shot_assembly_manifest"]["children"][1]["start_seconds"] == 1.5
-    assert (created["project_root"] / "scenes" / "scene_001" / "shot_assembly_manifest.json").is_file()
+    assert (
+        created["project_root"] / "scenes" / "scene_001" / "shot_assembly_manifest.json"
+    ).is_file()
 
 
-def _prepare_shot_granularity_project(provider_project, monkeypatch, project_id: str, fallback_mode: str = "report"):
+def _prepare_shot_granularity_project(
+    provider_project, monkeypatch, project_id: str, fallback_mode: str = "report"
+):
     import backend.project_runtime as project_runtime
     import backend.scene_renderer as scene_renderer
 
@@ -1464,11 +1593,17 @@ def _prepare_shot_granularity_project(provider_project, monkeypatch, project_id:
     scene["duration_seconds"] = 4.0
     scene["temporal_spec"] = {
         "shots": [
-            {"shot_id": "scene_001_shot_01", "duration_seconds": 1.5, "camera_movement": "slow_push"},
+            {
+                "shot_id": "scene_001_shot_01",
+                "duration_seconds": 1.5,
+                "camera_movement": "slow_push",
+            },
             {"shot_id": "scene_001_shot_02", "duration_seconds": 2.5, "camera_movement": "static"},
         ]
     }
-    (created["project_root"] / "project.json").write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+    (created["project_root"] / "project.json").write_text(
+        json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     monkeypatch.setattr(scene_renderer, "load_env_file", lambda: None)
     monkeypatch.setattr(scene_renderer, "get_ffmpeg_exe", lambda: "ffmpeg")
@@ -1489,7 +1624,9 @@ def _prepare_shot_granularity_project(provider_project, monkeypatch, project_id:
         Path(cmd[-1]).write_bytes(b"assembled")
 
     monkeypatch.setattr(scene_renderer, "render_voice_track", fake_voice_track)
-    monkeypatch.setattr(scene_renderer, "_evaluate_and_persist_scene_governance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scene_renderer, "_evaluate_and_persist_scene_governance", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(scene_renderer, "render_silent_visual_segment", fake_fallback_segment)
     monkeypatch.setattr(scene_renderer, "run_guarded", fake_run_guarded)
     monkeypatch.setenv("VIDEO_FALLBACK_MODE", fallback_mode)
@@ -1502,11 +1639,15 @@ def _prepare_shot_granularity_project(provider_project, monkeypatch, project_id:
     return created
 
 
-def test_shot_granularity_report_mode_assembles_mixed_real_and_fallback(provider_project, monkeypatch):
+def test_shot_granularity_report_mode_assembles_mixed_real_and_fallback(
+    provider_project, monkeypatch
+):
     import backend.project_runtime as project_runtime
     import backend.video_generation as video_generation
 
-    created = _prepare_shot_granularity_project(provider_project, monkeypatch, "shot_report_mixed_project", "report")
+    created = _prepare_shot_granularity_project(
+        provider_project, monkeypatch, "shot_report_mixed_project", "report"
+    )
     attempts: list[str] = []
 
     def fake_remote_mixed(request, provider_spec, **kwargs):
@@ -1536,11 +1677,15 @@ def test_shot_granularity_report_mode_assembles_mixed_real_and_fallback(provider
     assert "mixed-secret" not in json.dumps(meta, ensure_ascii=False)
 
 
-def test_shot_granularity_silent_mode_records_fallback_without_warnings(provider_project, monkeypatch):
+def test_shot_granularity_silent_mode_records_fallback_without_warnings(
+    provider_project, monkeypatch
+):
     import backend.project_runtime as project_runtime
     import backend.video_generation as video_generation
 
-    created = _prepare_shot_granularity_project(provider_project, monkeypatch, "shot_silent_project", "silent")
+    created = _prepare_shot_granularity_project(
+        provider_project, monkeypatch, "shot_silent_project", "silent"
+    )
 
     def fake_remote_failure(request, provider_spec, **kwargs):
         raise RuntimeError("silent shot failure token=silent-shot-secret")
@@ -1558,11 +1703,15 @@ def test_shot_granularity_silent_mode_records_fallback_without_warnings(provider
     assert "silent-shot-secret" not in json.dumps(meta, ensure_ascii=False)
 
 
-def test_targeted_shot_rerender_reuses_unchanged_shots_and_reassembles(provider_project, monkeypatch):
+def test_targeted_shot_rerender_reuses_unchanged_shots_and_reassembles(
+    provider_project, monkeypatch
+):
     import backend.project_runtime as project_runtime
     import backend.video_generation as video_generation
 
-    created = _prepare_shot_granularity_project(provider_project, monkeypatch, "shot_targeted_rerender_project", "report")
+    created = _prepare_shot_granularity_project(
+        provider_project, monkeypatch, "shot_targeted_rerender_project", "report"
+    )
     calls: list[str] = []
 
     def fake_remote_success(request, provider_spec, **kwargs):
@@ -1581,26 +1730,35 @@ def test_targeted_shot_rerender_reuses_unchanged_shots_and_reassembles(provider_
     assert all(key.startswith("sha256:") for key in first_keys.values())
 
     calls.clear()
-    second_result = project_runtime.rerender_scene_shot_video(created["project_id"], 1, "scene_001_shot_02")
+    second_result = project_runtime.rerender_scene_shot_video(
+        created["project_id"], 1, "scene_001_shot_02"
+    )
     second_scene = second_result["scenes"][0]
     second_outputs = second_scene["generation_meta"]["shot_outputs"]
 
     assert calls == ["scene_001_shot_02.mp4"]
-    assert [output["shot_id"] for output in second_outputs] == ["scene_001_shot_01", "scene_001_shot_02"]
+    assert [output["shot_id"] for output in second_outputs] == [
+        "scene_001_shot_01",
+        "scene_001_shot_02",
+    ]
     assert second_outputs[0]["path"] == first_outputs[0]["path"]
     assert second_outputs[0]["cache_key"] == first_keys["scene_001_shot_01"]
     assert second_outputs[1]["cache_key"] == first_keys["scene_001_shot_02"]
     assert second_scene["assets"]["video_path"]
     assert second_scene["generation_meta"]["total_provider_attempts"] == 2
     assert second_scene["history"][0]["action"] == "rerender-shot-video"
-    assert (created["project_root"] / "scenes" / "scene_001" / "shot_assembly_manifest.json").is_file()
+    assert (
+        created["project_root"] / "scenes" / "scene_001" / "shot_assembly_manifest.json"
+    ).is_file()
 
 
 def test_shot_granularity_strict_mode_fails_without_video_asset(provider_project, monkeypatch):
     import backend.project_runtime as project_runtime
     import backend.video_generation as video_generation
 
-    created = _prepare_shot_granularity_project(provider_project, monkeypatch, "shot_strict_project", "strict")
+    created = _prepare_shot_granularity_project(
+        provider_project, monkeypatch, "shot_strict_project", "strict"
+    )
 
     def fake_remote_failure(request, provider_spec, **kwargs):
         raise RuntimeError("strict shot failure token=strict-shot-secret")
@@ -1617,10 +1775,14 @@ def test_shot_granularity_strict_mode_fails_without_video_asset(provider_project
     scene = project["scenes"][0]
     assert scene["assets"]["video_path"] == ""
     assert scene["generation_meta"] == {}
-    assert not (created["project_root"] / "scenes" / "scene_001" / "shot_assembly_manifest.json").exists()
+    assert not (
+        created["project_root"] / "scenes" / "scene_001" / "shot_assembly_manifest.json"
+    ).exists()
 
 
-def test_mock_remote_report_failure_persists_fallback_metadata(provider_project, patched_render_runtime, monkeypatch):
+def test_mock_remote_report_failure_persists_fallback_metadata(
+    provider_project, patched_render_runtime, monkeypatch
+):
     import backend.project_runtime as project_runtime
 
     created = provider_project("report_fallback_project", video_provider="doubao")
@@ -1636,6 +1798,7 @@ def test_mock_remote_report_failure_persists_fallback_metadata(provider_project,
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
     import scripts.rw_render as rw_render
+
     monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     result = project_runtime.rerender_scene_video(created["project_id"], 1)
@@ -1654,7 +1817,9 @@ def test_mock_remote_report_failure_persists_fallback_metadata(provider_project,
     assert meta["warnings"]
 
 
-def test_mock_remote_silent_failure_records_fallback_without_warnings(provider_project, patched_render_runtime, monkeypatch):
+def test_mock_remote_silent_failure_records_fallback_without_warnings(
+    provider_project, patched_render_runtime, monkeypatch
+):
     import backend.project_runtime as project_runtime
 
     created = provider_project("silent_fallback_project", video_provider="doubao")
@@ -1671,6 +1836,7 @@ def test_mock_remote_silent_failure_records_fallback_without_warnings(provider_p
     monkeypatch.delenv("DOUBAO_VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
     import scripts.rw_render as rw_render
+
     monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     result = project_runtime.rerender_scene_video(created["project_id"], 1)
@@ -1689,7 +1855,9 @@ def test_mock_remote_silent_failure_records_fallback_without_warnings(provider_p
     assert "silent-secret" not in meta["error"]
 
 
-def test_video_strict_env_overrides_report_mode_in_renderer(provider_project, patched_render_runtime, monkeypatch):
+def test_video_strict_env_overrides_report_mode_in_renderer(
+    provider_project, patched_render_runtime, monkeypatch
+):
     import backend.project_runtime as project_runtime
 
     created = provider_project("global_strict_failure_project", video_provider="doubao")
@@ -1706,6 +1874,7 @@ def test_video_strict_env_overrides_report_mode_in_renderer(provider_project, pa
     monkeypatch.delenv("DOUBAO_VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
     import scripts.rw_render as rw_render
+
     monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     assert video_fallback_mode("doubao") == "strict"
@@ -1732,7 +1901,9 @@ def test_video_strict_env_overrides_report_mode_in_renderer(provider_project, pa
     assert "strict-secret" not in history[0]["message"]
 
 
-def test_mock_remote_strict_failure_records_failed_history_without_video_asset(provider_project, patched_render_runtime, monkeypatch):
+def test_mock_remote_strict_failure_records_failed_history_without_video_asset(
+    provider_project, patched_render_runtime, monkeypatch
+):
     import backend.project_runtime as project_runtime
 
     created = provider_project("strict_failure_project", video_provider="doubao")
@@ -1748,6 +1919,7 @@ def test_mock_remote_strict_failure_records_failed_history_without_video_asset(p
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_failure)
     import scripts.rw_render as rw_render
+
     monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_failure)
 
     with pytest.raises(RuntimeError, match="strict provider failure"):
@@ -1765,7 +1937,9 @@ def test_mock_remote_strict_failure_records_failed_history_without_video_asset(p
     assert history[0]["status"] == "failed"
 
 
-def test_legacy_project_builds_timeline_and_rerenders_without_real_provider(provider_project, patched_render_runtime, monkeypatch):
+def test_legacy_project_builds_timeline_and_rerenders_without_real_provider(
+    provider_project, patched_render_runtime, monkeypatch
+):
     import backend.project_runtime as project_runtime
 
     created = provider_project("legacy_render_project", video_provider="doubao", legacy=True)
@@ -1780,6 +1954,7 @@ def test_legacy_project_builds_timeline_and_rerenders_without_real_provider(prov
     monkeypatch.delenv("VIDEO_STRICT", raising=False)
     monkeypatch.setattr(patched_render_runtime, "render_remote_video_provider", fake_remote_success)
     import scripts.rw_render as rw_render
+
     monkeypatch.setattr(rw_render, "render_remote_video_provider", fake_remote_success)
 
     loaded = project_runtime.load_project(created["project_id"])
@@ -1795,4 +1970,7 @@ def test_legacy_project_builds_timeline_and_rerenders_without_real_provider(prov
     assert scene["assets"]["video_path"]
     assert scene["generation_meta"]["is_real_video"] is True
     assert timeline_after_render["summary"]["real_video_scene_count"] == 1
-    assert timeline_after_render["tracks"][0]["children"][0]["metadata"]["generation"]["provider_id"] == "doubao"
+    assert (
+        timeline_after_render["tracks"][0]["children"][0]["metadata"]["generation"]["provider_id"]
+        == "doubao"
+    )

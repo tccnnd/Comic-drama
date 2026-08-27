@@ -4,6 +4,7 @@ Covers pure helper functions (URL, size, route, extraction), env helpers,
 auth helpers, and config validation in render_remote_video_provider.
 HTTP-dependent functions are tested via integration in test_video_provider_mainline.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -13,34 +14,34 @@ from pathlib import Path
 import pytest
 
 from scripts.video_provider_adapters import (
-    VideoProviderError,
     VideoProviderConfigError,
+    VideoProviderError,
     VideoRenderRequest,
+    _aspect_ratio,
+    _detect_route,
     _env,
     _env_any,
     _env_float,
-    _join_url,
-    _root_base_url,
-    _aspect_ratio,
-    _openai_size,
-    _detect_route,
     _extract_task_id,
-    _extract_video_url,
     _extract_video_base64,
-    _status,
-    _kling_jwt_token,
+    _extract_video_url,
+    _join_url,
     _kling_auth_headers,
+    _kling_jwt_token,
+    _openai_size,
     _provider_prefix,
+    _root_base_url,
     _send_structured_spec,
+    _status,
     _structured_spec_mode,
     render_remote_video_provider,
 )
 from video_providers import VideoProviderSpec, get_video_provider_spec
 
-
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class TestExceptions:
     def test_video_provider_error_is_runtime_error(self):
@@ -56,6 +57,7 @@ class TestExceptions:
 # ---------------------------------------------------------------------------
 # VideoRenderRequest
 # ---------------------------------------------------------------------------
+
 
 class TestVideoRenderRequest:
     def _make_request(self, **overrides):
@@ -108,18 +110,30 @@ class TestVideoRenderRequest:
 # URL helpers
 # ---------------------------------------------------------------------------
 
+
 class TestUrlHelpers:
     def test_join_url_simple(self):
-        assert _join_url("https://api.example.com", "/v1/submit") == "https://api.example.com/v1/submit"
+        assert (
+            _join_url("https://api.example.com", "/v1/submit")
+            == "https://api.example.com/v1/submit"
+        )
 
     def test_join_url_strips_trailing_slash_from_base(self):
-        assert _join_url("https://api.example.com/", "/v1/submit") == "https://api.example.com/v1/submit"
+        assert (
+            _join_url("https://api.example.com/", "/v1/submit")
+            == "https://api.example.com/v1/submit"
+        )
 
     def test_join_url_strips_leading_slash_from_path(self):
-        assert _join_url("https://api.example.com", "v1/submit") == "https://api.example.com/v1/submit"
+        assert (
+            _join_url("https://api.example.com", "v1/submit") == "https://api.example.com/v1/submit"
+        )
 
     def test_join_url_returns_absolute_path_unchanged(self):
-        assert _join_url("https://api.example.com", "https://other.com/submit") == "https://other.com/submit"
+        assert (
+            _join_url("https://api.example.com", "https://other.com/submit")
+            == "https://other.com/submit"
+        )
 
     def test_root_base_url_strips_trailing_slash(self):
         assert _root_base_url("https://api.example.com/") == "https://api.example.com"
@@ -137,6 +151,7 @@ class TestUrlHelpers:
 # ---------------------------------------------------------------------------
 # Size helpers
 # ---------------------------------------------------------------------------
+
 
 class TestSizeHelpers:
     def test_aspect_ratio_landscape(self):
@@ -167,6 +182,7 @@ class TestSizeHelpers:
 # ---------------------------------------------------------------------------
 # Route detection
 # ---------------------------------------------------------------------------
+
 
 class TestDetectRoute:
     def test_explicit_route_overrides(self, monkeypatch):
@@ -211,6 +227,7 @@ class TestDetectRoute:
 # Response extraction
 # ---------------------------------------------------------------------------
 
+
 class TestExtractTaskId:
     def test_top_level_task_id(self):
         assert _extract_task_id({"task_id": "abc123"}) == "abc123"
@@ -242,16 +259,28 @@ class TestExtractTaskId:
 
 class TestExtractVideoUrl:
     def test_top_level_video_url(self):
-        assert _extract_video_url({"video_url": "https://cdn.example.com/v.mp4"}) == "https://cdn.example.com/v.mp4"
+        assert (
+            _extract_video_url({"video_url": "https://cdn.example.com/v.mp4"})
+            == "https://cdn.example.com/v.mp4"
+        )
 
     def test_top_level_videoUrl(self):
-        assert _extract_video_url({"videoUrl": "https://cdn.example.com/v.mp4"}) == "https://cdn.example.com/v.mp4"
+        assert (
+            _extract_video_url({"videoUrl": "https://cdn.example.com/v.mp4"})
+            == "https://cdn.example.com/v.mp4"
+        )
 
     def test_top_level_output_url(self):
-        assert _extract_video_url({"output_url": "https://cdn.example.com/v.mp4"}) == "https://cdn.example.com/v.mp4"
+        assert (
+            _extract_video_url({"output_url": "https://cdn.example.com/v.mp4"})
+            == "https://cdn.example.com/v.mp4"
+        )
 
     def test_nested_data(self):
-        assert _extract_video_url({"data": {"video_url": "https://cdn.example.com/v.mp4"}}) == "https://cdn.example.com/v.mp4"
+        assert (
+            _extract_video_url({"data": {"video_url": "https://cdn.example.com/v.mp4"}})
+            == "https://cdn.example.com/v.mp4"
+        )
 
     def test_empty_returns_empty_string(self):
         assert _extract_video_url({}) == ""
@@ -291,6 +320,7 @@ class TestStatus:
 # ---------------------------------------------------------------------------
 # Env helpers
 # ---------------------------------------------------------------------------
+
 
 class TestEnvHelpers:
     def test_env_returns_value(self, monkeypatch):
@@ -337,6 +367,7 @@ class TestEnvHelpers:
 # Auth helpers
 # ---------------------------------------------------------------------------
 
+
 class TestKlingAuth:
     def test_jwt_token_has_three_parts(self):
         token = _kling_jwt_token("access_key", "secret_key")
@@ -346,6 +377,7 @@ class TestKlingAuth:
         token = _kling_jwt_token("access_key", "secret_key")
         header_b64, payload_b64, _ = token.split(".")
         import base64
+
         # Add padding for base64 decode
         header = json.loads(base64.urlsafe_b64decode(header_b64 + "==").decode())
         payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "==").decode())
@@ -366,6 +398,7 @@ class TestKlingAuth:
 # Provider prefix
 # ---------------------------------------------------------------------------
 
+
 class TestProviderPrefix:
     def test_local_prefix(self):
         assert _provider_prefix(get_video_provider_spec("local")) == "LOCAL"
@@ -383,6 +416,7 @@ class TestProviderPrefix:
 # ---------------------------------------------------------------------------
 # Structured spec helpers
 # ---------------------------------------------------------------------------
+
 
 class TestStructuredSpec:
     def test_send_structured_spec_default_false(self, monkeypatch):
@@ -422,6 +456,7 @@ class TestStructuredSpec:
 # render_remote_video_provider config validation
 # ---------------------------------------------------------------------------
 
+
 class TestRenderRemoteVideoProviderConfig:
     def _make_request(self, tmp_path):
         return VideoRenderRequest(
@@ -444,14 +479,18 @@ class TestRenderRemoteVideoProviderConfig:
         monkeypatch.setenv("DOUBAO_MODEL", "doubao-test")
         monkeypatch.setenv("DOUBAO_BASE_URL", "https://api.example.com")
         with pytest.raises(VideoProviderConfigError, match="API_KEY"):
-            render_remote_video_provider(self._make_request(tmp_path), get_video_provider_spec("doubao"))
+            render_remote_video_provider(
+                self._make_request(tmp_path), get_video_provider_spec("doubao")
+            )
 
     def test_raises_config_error_without_model(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DOUBAO_API_KEY", "test-key")
         monkeypatch.delenv("DOUBAO_MODEL", raising=False)
         monkeypatch.setenv("DOUBAO_BASE_URL", "https://api.example.com")
         with pytest.raises(VideoProviderConfigError, match="MODEL"):
-            render_remote_video_provider(self._make_request(tmp_path), get_video_provider_spec("doubao"))
+            render_remote_video_provider(
+                self._make_request(tmp_path), get_video_provider_spec("doubao")
+            )
 
     def test_raises_config_error_without_base_url(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DOUBAO_API_KEY", "test-key")
@@ -459,4 +498,6 @@ class TestRenderRemoteVideoProviderConfig:
         for var in ("DOUBAO_BASE_URL", "DOUBAO_SUBMIT_URL"):
             monkeypatch.delenv(var, raising=False)
         with pytest.raises(VideoProviderConfigError, match="BASE_URL"):
-            render_remote_video_provider(self._make_request(tmp_path), get_video_provider_spec("doubao"))
+            render_remote_video_provider(
+                self._make_request(tmp_path), get_video_provider_spec("doubao")
+            )

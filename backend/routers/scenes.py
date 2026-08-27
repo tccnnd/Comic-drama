@@ -66,10 +66,13 @@ def select_scene_candidate(project_id: str, scene_order: int, kind: str, candida
         project = load_project(project_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
-    scene = next((s for s in project.get("scenes", []) if int(s.get("order", 0)) == scene_order), None)
+    scene = next(
+        (s for s in project.get("scenes", []) if int(s.get("order", 0)) == scene_order), None
+    )
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
     from backend.candidate_manager import get_scene_candidates, select_candidate
+
     candidates = get_scene_candidates(scene, kind)
     if not candidates:
         raise HTTPException(status_code=404, detail="No candidates found")

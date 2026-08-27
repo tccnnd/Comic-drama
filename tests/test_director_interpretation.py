@@ -6,8 +6,7 @@ from scripts.director_classifier import (
     build_director_plan,
     build_shot_visual_content,
 )
-from scripts.run_workflow import build_shot_plan
-from scripts.run_workflow import build_scene_video_prompts, StoryScene
+from scripts.run_workflow import StoryScene, build_scene_video_prompts, build_shot_plan
 
 
 def _assert_visual_content_core_fields(visual_content):
@@ -131,7 +130,11 @@ def test_build_shot_plan_attaches_visual_content_to_each_shot():
         "camera_movement": "dramatic_push",
         "temporal_spec": {
             "shots": [
-                {"duration_seconds": 1.5, "beat_type": "detail", "camera_movement": "dramatic_push"},
+                {
+                    "duration_seconds": 1.5,
+                    "beat_type": "detail",
+                    "camera_movement": "dramatic_push",
+                },
                 {"duration_seconds": 2.5, "beat_type": "reaction", "camera_movement": "static"},
             ]
         },
@@ -209,7 +212,10 @@ def test_load_project_and_snapshot_normalize_legacy_director_interpretation(tmp_
     assert scene["shot_plan"]["shots"][0]["visual_prototype"]["id"] == "isolation_single_wide"
     _assert_visual_content_core_fields(scene["shot_plan"]["shots"][0]["visual_content"])
     assert scene["shot_plan"]["shots"][0]["visual_content"]["_source"] == "legacy"
-    assert scene["shot_plan"]["shots"][0]["visual_content"]["shot_description"] == "legacy wide gate description"
+    assert (
+        scene["shot_plan"]["shots"][0]["visual_content"]["shot_description"]
+        == "legacy wide gate description"
+    )
 
     snapshot = project_runtime.project_snapshot(loaded)
     snapshot_scene = snapshot["scenes"][0]
@@ -261,7 +267,7 @@ def test_build_scene_video_prompts_uses_visual_content_as_primary_source(tmp_pat
                     },
                     "source": "test",
                 },
-                    "visual_content": {
+                "visual_content": {
                     "_source": "prototype",
                     "shot_description": "extreme close-up of a red detonator light",
                     "foreground": "thumb hovering over the trigger",
@@ -283,7 +289,10 @@ def test_build_scene_video_prompts_uses_visual_content_as_primary_source(tmp_pat
     assert "prototype_id:" in positive
     assert "prototype_constraints_hard MUST PRESERVE: object_dominates_frame" in positive
     assert "prototype_constraints_soft SHOULD PRESERVE: no_environment_pan" in positive
-    assert "prototype_constraints_guidelines GUIDE: color_contrast_between_object_and_background" in positive
+    assert (
+        "prototype_constraints_guidelines GUIDE: color_contrast_between_object_and_background"
+        in positive
+    )
     assert "hard_constraints:" not in positive
     assert "foreground: thumb hovering over the trigger" in positive
     assert "background: panicked crowd blurred into color streaks" in positive

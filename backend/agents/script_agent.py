@@ -12,6 +12,7 @@ Usage:
     response = agent.run("第三场太长了，拆成两场")  # Refinement
     scenes = agent.get_scenes()  # Get finalized scenes
 """
+
 from __future__ import annotations
 
 import json
@@ -95,7 +96,7 @@ class ScriptAgent(BaseAgent):
             json_start = response.find("```json")
             json_end = response.find("```", json_start + 7)
             if json_start >= 0 and json_end > json_start:
-                json_str = response[json_start + 7:json_end].strip()
+                json_str = response[json_start + 7 : json_end].strip()
                 data = json.loads(json_str)
                 if isinstance(data, dict) and "scenes" in data:
                     self.state.context["scenes"] = data["scenes"]
@@ -104,7 +105,8 @@ class ScriptAgent(BaseAgent):
                     self.state.status = "done"
                     logger.info(
                         "[script-agent] Extracted %d scenes, %d characters",
-                        len(data["scenes"]), len(data.get("characters", [])),
+                        len(data["scenes"]),
+                        len(data.get("characters", [])),
                     )
         except (json.JSONDecodeError, ValueError) as exc:
             logger.debug("[script-agent] No valid JSON in response: %s", exc)

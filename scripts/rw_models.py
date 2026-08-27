@@ -5,7 +5,6 @@ from typing import Any
 
 from scripts.rw_config import DEFAULT_CROP_BOX
 
-
 # ---------------------------------------------------------------------------
 # Grouped view dataclasses (read-only snapshots of related StoryScene fields)
 # ---------------------------------------------------------------------------
@@ -275,13 +274,9 @@ class StoryScene:
         if not 0.0 <= self.voice_rate:
             raise ValueError(f"voice_rate must be >= 0.0, got {self.voice_rate}")
         if self.voice_intensity_out_of_range():
-            raise ValueError(
-                f"voice_volume must be >= 0.0, got {self.voice_volume}"
-            )
+            raise ValueError(f"voice_volume must be >= 0.0, got {self.voice_volume}")
         if self.episode_phase_total < 1:
-            raise ValueError(
-                f"episode_phase_total must be >= 1, got {self.episode_phase_total}"
-            )
+            raise ValueError(f"episode_phase_total must be >= 1, got {self.episode_phase_total}")
         if not 1 <= self.episode_phase_index <= self.episode_phase_total:
             raise ValueError(
                 f"episode_phase_index {self.episode_phase_index} out of range "

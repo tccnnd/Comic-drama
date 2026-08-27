@@ -1,4 +1,5 @@
 """Tests for backend.asset_retention — version retention and cleanup logic."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,11 +7,10 @@ from pathlib import Path
 import pytest
 
 from backend.asset_retention import (
+    _extract_version,
     _retained_versions,
     cleanup_scene_versions,
-    _extract_version,
 )
-
 
 # ─── _retained_versions ──────────────────────────────────────────────────────
 

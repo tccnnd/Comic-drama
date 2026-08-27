@@ -41,7 +41,9 @@ class CreateTaskRequest(BaseModel):
     keyframe_provider: Literal["auto", "local", "comfyui"] = "auto"
     video_provider: str = "auto"
     video_render_granularity: Literal["scene", "shot"] = "scene"
-    voice_provider: Literal["auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"] = "auto"
+    voice_provider: Literal[
+        "auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"
+    ] = "auto"
 
 
 class CreateTaskResponse(BaseModel):
@@ -179,7 +181,9 @@ def create_task(payload: CreateTaskRequest) -> CreateTaskResponse:
         planner=payload.planner,
         keyframe_provider=payload.keyframe_provider,
         video_provider=payload.video_provider,
-        video_render_granularity=normalize_video_render_granularity(payload.video_render_granularity),
+        video_render_granularity=normalize_video_render_granularity(
+            payload.video_render_granularity
+        ),
         voice_provider=payload.voice_provider,
         scene_count=payload.scene_count,
         output_dir=str(task_output_dir(task_id)),

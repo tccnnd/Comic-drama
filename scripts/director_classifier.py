@@ -4,7 +4,6 @@ import json
 import time
 from typing import Any, Callable
 
-
 VALID_CAMERA_MOVEMENT = {
     "dramatic_push",
     "melancholy_pan",
@@ -235,7 +234,11 @@ def _build_scene_input(scene: Any, index: int) -> dict[str, Any]:
         "dialogue": str(_scene_get(scene, "dialogue", "")),
         "emotion": str(_scene_get(scene, "emotion", "")),
         "speaker": str(_scene_get(scene, "speaker", "")),
-        "characters": list(_scene_get(scene, "characters", [])) if isinstance(_scene_get(scene, "characters", []), list) else [],
+        "characters": (
+            list(_scene_get(scene, "characters", []))
+            if isinstance(_scene_get(scene, "characters", []), list)
+            else []
+        ),
         "camera": str(_scene_get(scene, "camera", "")),
         "sfx_type": str(_scene_get(scene, "sfx_type", "")),
         "duration": _scene_get(scene, "duration", None),
@@ -288,7 +291,9 @@ def apply_llm_classification(scene: Any, classification: dict[str, Any], model_n
     )
 
 
-def apply_rules_classification(scene: Any, apply_director_fn: Callable[[Any], None], reason: str = "") -> None:
+def apply_rules_classification(
+    scene: Any, apply_director_fn: Callable[[Any], None], reason: str = ""
+) -> None:
     apply_director_fn(scene)
     _scene_set(
         scene,
@@ -345,7 +350,9 @@ def _parse_llm_response(raw: str) -> list[dict[str, Any]]:
     if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list):
         parsed = parsed["scenes"]
     if not isinstance(parsed, list):
-        raise DirectorClassificationError(f"LLM output must be a JSON array, got {type(parsed).__name__}")
+        raise DirectorClassificationError(
+            f"LLM output must be a JSON array, got {type(parsed).__name__}"
+        )
     return parsed
 
 
@@ -357,7 +364,9 @@ def _align_by_index(
 
     for item in classifications:
         if not isinstance(item, dict):
-            raise DirectorClassificationError(f"Classification item must be an object, got {type(item).__name__}")
+            raise DirectorClassificationError(
+                f"Classification item must be an object, got {type(item).__name__}"
+            )
         idx = item.get("scene_index")
         if idx is None:
             raise DirectorClassificationError(f"Missing scene_index in classification item: {item}")
@@ -366,14 +375,18 @@ def _align_by_index(
         except (TypeError, ValueError) as exc:
             raise DirectorClassificationError(f"scene_index must be an integer: {idx!r}") from exc
         if idx < 0 or idx >= expected_count:
-            raise DirectorClassificationError(f"scene_index={idx} out of range (expected 0-{expected_count - 1})")
+            raise DirectorClassificationError(
+                f"scene_index={idx} out of range (expected 0-{expected_count - 1})"
+            )
         if idx in index_map:
             raise DirectorClassificationError(f"scene_index={idx} appears more than once")
         index_map[idx] = item
 
     missing = [i for i in range(expected_count) if i not in index_map]
     if missing:
-        raise DirectorClassificationError(f"Missing classifications for scene_index values: {missing}")
+        raise DirectorClassificationError(
+            f"Missing classifications for scene_index values: {missing}"
+        )
 
     return [index_map[i] for i in range(expected_count)]
 
@@ -396,7 +409,9 @@ def build_director_plan(scene: Any) -> dict[str, Any]:
     scene_intent = _validated_scene_value(scene, "scene_intent", VALID_SCENE_INTENT, "dialogue")
     emotion_tone = _validated_scene_value(scene, "emotion_tone", VALID_EMOTION_TONE, "neutral")
     pacing = _validated_scene_value(scene, "pacing", VALID_PACING, "medium")
-    subject_focus = _validated_scene_value(scene, "subject_focus", VALID_SUBJECT_FOCUS, "single_character")
+    subject_focus = _validated_scene_value(
+        scene, "subject_focus", VALID_SUBJECT_FOCUS, "single_character"
+    )
     title = _first_text(
         _scene_get(scene, "title", ""),
         _scene_get(scene, "scene_title", ""),
@@ -450,7 +465,9 @@ def build_shot_visual_content(scene: Any, shot: Any | None = None) -> dict[str, 
     """Build deterministic visual-content fields for one shot."""
     shot = shot or {}
     plan = build_director_plan(scene)
-    subject_focus = _validated_scene_value(scene, "subject_focus", VALID_SUBJECT_FOCUS, "single_character")
+    subject_focus = _validated_scene_value(
+        scene, "subject_focus", VALID_SUBJECT_FOCUS, "single_character"
+    )
     scene_intent = _validated_scene_value(scene, "scene_intent", VALID_SCENE_INTENT, "dialogue")
     emotion_tone = _validated_scene_value(scene, "emotion_tone", VALID_EMOTION_TONE, "neutral")
     camera_movement = _validated_shot_or_scene_value(
@@ -531,7 +548,9 @@ def build_visual_prototype(
 ) -> dict[str, Any]:
     """Select and parameterize a shot prototype, or record a freeform gap."""
     plan = plan if isinstance(plan, dict) else build_director_plan(scene)
-    selected_id = _select_shot_archetype(plan, shot, visual_basis, scene_intent, emotion_tone, subject_focus)
+    selected_id = _select_shot_archetype(
+        plan, shot, visual_basis, scene_intent, emotion_tone, subject_focus
+    )
     params = {
         "object": _focus_object(scene, shot, visual_basis),
         "environment": _environment(scene, shot, visual_basis),
@@ -551,7 +570,9 @@ def build_visual_prototype(
             "source": "director_plan",
         }
 
-    gap_reason = _prototype_gap_reason(scene_intent, emotion_tone, subject_focus, visual_basis, pacing)
+    gap_reason = _prototype_gap_reason(
+        scene_intent, emotion_tone, subject_focus, visual_basis, pacing
+    )
     return {
         "version": VISUAL_PROTOTYPE_VERSION,
         "mode": "freeform",
@@ -623,7 +644,12 @@ def _director_shot_archetypes(
     elif scene_intent == "action":
         if _contains_any(visual_basis, DANGER_OBJECT_TERMS):
             prototypes.append(("danger_intro_extreme_closeup", "danger_object_reveal"))
-        prototypes.append(("pursuit_forward_push" if pacing == "fast" else "impact_action_wide", "action_readability"))
+        prototypes.append(
+            (
+                "pursuit_forward_push" if pacing == "fast" else "impact_action_wide",
+                "action_readability",
+            )
+        )
     elif scene_intent == "transition":
         if dramatic_weight >= 0.5 or _contains_any(visual_basis, ENVIRONMENT_TERMS):
             prototypes.append(("transition_environment_insert", "location_reset"))
@@ -663,17 +689,30 @@ def _select_shot_archetype(
     beat_type = str(_shot_get(shot, "beat_type", "") or _shot_get(shot, "label", "")).lower()
     if "reaction" in beat_type and "reaction_hold_closeup" in candidates:
         return "reaction_hold_closeup"
-    if any(token in beat_type for token in ("detail", "insert", "object")) and "danger_intro_extreme_closeup" in candidates:
+    if (
+        any(token in beat_type for token in ("detail", "insert", "object"))
+        and "danger_intro_extreme_closeup" in candidates
+    ):
         return "danger_intro_extreme_closeup"
     if "dialogue" in beat_type and "dialogue_pressure_two_shot" in candidates:
         return "dialogue_pressure_two_shot"
-    if _contains_any(visual_basis, DANGER_OBJECT_TERMS) and "danger_intro_extreme_closeup" in candidates:
+    if (
+        _contains_any(visual_basis, DANGER_OBJECT_TERMS)
+        and "danger_intro_extreme_closeup" in candidates
+    ):
         return "danger_intro_extreme_closeup"
     if scene_intent == "reaction" and "reaction_hold_closeup" in candidates:
         return "reaction_hold_closeup"
-    if scene_intent == "dialogue" and subject_focus == "two_shot" and "dialogue_pressure_two_shot" in candidates:
+    if (
+        scene_intent == "dialogue"
+        and subject_focus == "two_shot"
+        and "dialogue_pressure_two_shot" in candidates
+    ):
         return "dialogue_pressure_two_shot"
-    if emotion_tone in {"tension", "fear", "sadness", "anger"} and "emotional_push_in" in candidates:
+    if (
+        emotion_tone in {"tension", "fear", "sadness", "anger"}
+        and "emotional_push_in" in candidates
+    ):
         return "emotional_push_in"
     return candidates[0]
 
@@ -692,7 +731,9 @@ def _prototype_gap_reason(
 ) -> str:
     if scene_intent == "transition" and pacing != "fast":
         return "low dramatic weight transition can remain freeform"
-    if not _contains_any(visual_basis, (*DANGER_OBJECT_TERMS, *ENVIRONMENT_TERMS)) and emotion_tone in {"calm", "neutral", "joy"}:
+    if not _contains_any(
+        visual_basis, (*DANGER_OBJECT_TERMS, *ENVIRONMENT_TERMS)
+    ) and emotion_tone in {"calm", "neutral", "joy"}:
         return "no prototype trigger matched calm low-risk scene"
     return f"no prototype matched {scene_intent}/{emotion_tone}/{subject_focus}"
 
@@ -755,7 +796,9 @@ def _prototype_visual_content(
     camera_language: dict[str, str],
 ) -> dict[str, str]:
     prototype_id = str(visual_prototype.get("id") or "")
-    params = visual_prototype.get("params") if isinstance(visual_prototype.get("params"), dict) else {}
+    params = (
+        visual_prototype.get("params") if isinstance(visual_prototype.get("params"), dict) else {}
+    )
     focus_object = str(params.get("object") or "the decisive visual subject")
     environment = str(params.get("environment") or "the surrounding location")
     subject = str(params.get("subject") or "the primary character")
@@ -1006,8 +1049,16 @@ def _camera_language(camera_movement: str, shot_size: str, emotion_tone: str) ->
         "wide": "wide lens for spatial readability",
         "extreme_wide": "wide lens emphasizing geography and scale",
     }[shot_size]
-    depth = "shallow depth of field" if shot_size in {"extreme_close_up", "close_up"} else "deep readable focus"
-    if emotion_tone in {"tension", "fear", "sadness"} and shot_size in {"medium", "wide", "extreme_wide"}:
+    depth = (
+        "shallow depth of field"
+        if shot_size in {"extreme_close_up", "close_up"}
+        else "deep readable focus"
+    )
+    if emotion_tone in {"tension", "fear", "sadness"} and shot_size in {
+        "medium",
+        "wide",
+        "extreme_wide",
+    }:
         depth = "selective focus with controlled background separation"
     return {
         "movement": movement,

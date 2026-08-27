@@ -1,4 +1,5 @@
 """Export and build logic for final video assembly."""
+
 from __future__ import annotations
 
 import shutil
@@ -6,15 +7,6 @@ import subprocess
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
-
-from scripts.run_workflow import (
-    generate_keyframe,
-    load_env_file,
-    render_clip,
-    render_voice_track,
-    stitch_scene_subtitles,
-    wav_duration,
-)
 
 from backend.project_models import (
     ExportAssetReadinessError,
@@ -30,9 +22,17 @@ from backend.scene_renderer import (
     fallback_scene_clip_path,
     scene_asset_file_exists,
     scene_latest_path,
+    sync_scene_duration,
     update_scene_asset,
     update_scene_consistency_meta,
-    sync_scene_duration,
+)
+from scripts.run_workflow import (
+    generate_keyframe,
+    load_env_file,
+    render_clip,
+    render_voice_track,
+    stitch_scene_subtitles,
+    wav_duration,
 )
 
 
@@ -76,7 +76,10 @@ def validate_export_assets(project_id: str, scenes: list[dict[str, Any]]) -> Non
             clip_path = scene_latest_path(project_id, scene, "video")
         except ValueError:
             clip_path = None
-        has_video = bool(clip_path and clip_path.is_file()) or fallback_scene_clip_path(project_id, scene).is_file()
+        has_video = (
+            bool(clip_path and clip_path.is_file())
+            or fallback_scene_clip_path(project_id, scene).is_file()
+        )
         if not has_video:
             missing.append("video")
         if str(scene.get("dialogue") or "").strip():
@@ -103,8 +106,15 @@ def export_project(project_id: str) -> dict[str, Any]:
     load_env_file()
     ffmpeg = get_ffmpeg_exe()
     with project_lock(project_id):
-        from backend.project_runtime import load_project, project_subtitle_style, _set_runtime, _save_project_with_project_event, project_snapshot
         from backend.character_manager import scene_with_character_context
+        from backend.project_runtime import (
+            _save_project_with_project_event,
+            _set_runtime,
+            load_project,
+            project_snapshot,
+            project_subtitle_style,
+        )
+
         project = load_project(project_id)
         scenes = list(project.get("scenes", []))
         subtitle_style = project_subtitle_style(project)
@@ -134,9 +144,16 @@ def export_project(project_id: str) -> dict[str, Any]:
             audio_path = scene_latest_path(project_id, scene, "audio")
         except ValueError:
             audio_path = None
-        audio_duration = wav_duration(audio_path) if audio_path and audio_path.exists() else float(scene.get("duration_seconds") or 0.0)
+        audio_duration = (
+            wav_duration(audio_path)
+            if audio_path and audio_path.exists()
+            else float(scene.get("duration_seconds") or 0.0)
+        )
         clip_durations.append(max(float(scene.get("duration_seconds") or 0.0), audio_duration))
-        subtitle_files.append(scene_dir(project_id, scene["scene_id"]) / f"scene_{int(scene.get('order') or 1):02d}_dialogue.srt")
+        subtitle_files.append(
+            scene_dir(project_id, scene["scene_id"])
+            / f"scene_{int(scene.get('order') or 1):02d}_dialogue.srt"
+        )
 
     output_dir = project_dir(project_id) / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -164,24 +181,36 @@ def export_project(project_id: str) -> dict[str, Any]:
         "copy",
         str(final_video),
     ]
-    result = subprocess.run(cmd, cwd=output_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(
+        cmd, cwd=output_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg failed while concatenating clips:\n{result.stderr}")
     stitch_scene_subtitles(
         subtitle_files,
         clip_durations,
         final_subtitles,
-        fallback_scenes=[_scene_from_payload(scene_with_character_context(project, scene)) for scene in scenes],
+        fallback_scenes=[
+            _scene_from_payload(scene_with_character_context(project, scene)) for scene in scenes
+        ],
         ass_path=final_subtitles_ass,
         subtitle_style=subtitle_style,
     )
     with project_lock(project_id):
         project = load_project(project_id)
-        project["output"]["final_video_path"] = str(final_video.relative_to(project_dir(project_id))).replace("\\", "/")
-        project["output"]["subtitles_path"] = str(final_subtitles.relative_to(project_dir(project_id))).replace("\\", "/")
-        project["output"]["subtitles_ass_path"] = str(final_subtitles_ass.relative_to(project_dir(project_id))).replace("\\", "/")
+        project["output"]["final_video_path"] = str(
+            final_video.relative_to(project_dir(project_id))
+        ).replace("\\", "/")
+        project["output"]["subtitles_path"] = str(
+            final_subtitles.relative_to(project_dir(project_id))
+        ).replace("\\", "/")
+        project["output"]["subtitles_ass_path"] = str(
+            final_subtitles_ass.relative_to(project_dir(project_id))
+        ).replace("\\", "/")
         project["output"]["status"] = "completed"
-        _set_runtime(project, status="ready", progress=100, stage="done", message="Export completed")
+        _set_runtime(
+            project, status="ready", progress=100, stage="done", message="Export completed"
+        )
         _save_project_with_project_event(project)
         return project_snapshot(project)
 
@@ -192,9 +221,20 @@ def build_project(project_id: str) -> dict[str, Any]:
     current_scene_order: int | None = None
     try:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _set_runtime, _save_project_with_project_event, _append_scene_history, _save_project_with_scene_event, apply_project_episode_pacing, project_subtitle_style, project_audio_style, project_snapshot
             from backend.character_manager import scene_with_character_context
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_project_event,
+                _save_project_with_scene_event,
+                _set_runtime,
+                apply_project_episode_pacing,
+                load_project,
+                project_audio_style,
+                project_snapshot,
+                project_subtitle_style,
+            )
             from backend.scene_renderer import _ensure_scene_renderable
+
             project = load_project(project_id)
             settings = project.get("settings", {})
             keyframe_provider = str(settings.get("keyframe_provider") or "auto")
@@ -206,8 +246,17 @@ def build_project(project_id: str) -> dict[str, Any]:
             scene_payloads = [deepcopy(scene) for scene in project.get("scenes", [])]
             for payload in scene_payloads:
                 _ensure_scene_renderable(payload, int(payload.get("order") or 0))
-            scenes = [_scene_from_payload(scene_with_character_context(project, scene)) for scene in scene_payloads]
-            _set_runtime(project, status="running", progress=5, stage="rendering", message="Rendering calibrated scenes")
+            scenes = [
+                _scene_from_payload(scene_with_character_context(project, scene))
+                for scene in scene_payloads
+            ]
+            _set_runtime(
+                project,
+                status="running",
+                progress=5,
+                stage="rendering",
+                message="Rendering calibrated scenes",
+            )
             _save_project_with_project_event(project)
 
         if not scenes:
@@ -220,7 +269,12 @@ def build_project(project_id: str) -> dict[str, Any]:
         for index, scene_obj in enumerate(scenes, start=1):
             current_scene_order = index
             with project_lock(project_id):
-                from backend.project_runtime import load_project, _set_runtime, _save_project_with_project_event
+                from backend.project_runtime import (
+                    _save_project_with_project_event,
+                    _set_runtime,
+                    load_project,
+                )
+
                 project = load_project(project_id)
                 _set_runtime(
                     project,
@@ -235,7 +289,12 @@ def build_project(project_id: str) -> dict[str, Any]:
             scene_dir_path.mkdir(parents=True, exist_ok=True)
             image_path = generate_keyframe(scene_obj, scene_dir_path, keyframe_provider)
             if getattr(scene_obj, "consistency_meta", None):
-                update_scene_consistency_meta(project_id, current_scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    current_scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             voice_path, voice_duration = render_voice_track(
                 ffmpeg,
                 scene_obj,
@@ -269,9 +328,16 @@ def build_project(project_id: str) -> dict[str, Any]:
             subtitle_files.append(subtitle_path)
             clip_durations.append(clip_duration)
             with project_lock(project_id):
-                from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+                from backend.project_runtime import (
+                    _append_scene_history,
+                    _save_project_with_scene_event,
+                    load_project,
+                )
+
                 project = load_project(project_id)
-                _append_scene_history(project, current_scene_order, "build", "done", f"整集生成完成：{index}/{total}")
+                _append_scene_history(
+                    project, current_scene_order, "build", "done", f"整集生成完成：{index}/{total}"
+                )
                 _save_project_with_scene_event(project, current_scene_order)
             built_clips.append(clip_path)
 
@@ -301,7 +367,9 @@ def build_project(project_id: str) -> dict[str, Any]:
             "copy",
             str(final_video),
         ]
-        result = subprocess.run(cmd, cwd=output_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            cmd, cwd=output_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg failed while concatenating clips:\n{result.stderr}")
         stitch_scene_subtitles(
@@ -314,26 +382,57 @@ def build_project(project_id: str) -> dict[str, Any]:
         )
 
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _set_runtime, _save_project_with_project_event, project_snapshot
+            from backend.project_runtime import (
+                _save_project_with_project_event,
+                _set_runtime,
+                load_project,
+                project_snapshot,
+            )
+
             project = load_project(project_id)
-            project["output"]["final_video_path"] = str(final_video.relative_to(project_dir(project_id))).replace("\\", "/")
-            project["output"]["subtitles_path"] = str(final_subtitles.relative_to(project_dir(project_id))).replace("\\", "/")
-            project["output"]["subtitles_ass_path"] = str(final_subtitles_ass.relative_to(project_dir(project_id))).replace("\\", "/")
+            project["output"]["final_video_path"] = str(
+                final_video.relative_to(project_dir(project_id))
+            ).replace("\\", "/")
+            project["output"]["subtitles_path"] = str(
+                final_subtitles.relative_to(project_dir(project_id))
+            ).replace("\\", "/")
+            project["output"]["subtitles_ass_path"] = str(
+                final_subtitles_ass.relative_to(project_dir(project_id))
+            ).replace("\\", "/")
             project["output"]["status"] = "completed"
             _set_runtime(project, status="ready", progress=100, stage="done", message="Completed")
             _save_project_with_project_event(project)
             return project_snapshot(project)
     except Exception as exc:
-        if current_scene_order is not None and "scene_obj" in locals() and getattr(scene_obj, "consistency_meta", None):
+        if (
+            current_scene_order is not None
+            and "scene_obj" in locals()
+            and getattr(scene_obj, "consistency_meta", None)
+        ):
             try:
-                update_scene_consistency_meta(project_id, current_scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    current_scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             except Exception as meta_exc:
-                print(f"[consistency] failed to persist scene meta for {project_id}#{current_scene_order}: {meta_exc}")
+                print(
+                    f"[consistency] failed to persist scene meta for {project_id}#{current_scene_order}: {meta_exc}"
+                )
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _set_runtime, _append_scene_history, _save_project_with_project_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_project_event,
+                _set_runtime,
+                load_project,
+            )
+
             project = load_project(project_id)
             _set_runtime(project, status="failed", stage="failed", message="Build failed")
             if current_scene_order is not None:
-                _append_scene_history(project, current_scene_order, "build", "failed", f"整集生成失败：{exc}")
+                _append_scene_history(
+                    project, current_scene_order, "build", "failed", f"整集生成失败：{exc}"
+                )
             _save_project_with_project_event(project)
         raise

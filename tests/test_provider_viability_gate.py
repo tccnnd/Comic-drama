@@ -58,8 +58,7 @@ def test_pass_kling_returns_pass_with_no_fails() -> None:
     assert isinstance(decision, ViabilityDecision)
     assert decision.provider_id == "kling"
     assert decision.status == expected["status"], (
-        f"expected {expected['status']}, got {decision.status}"
-        f" (fails={decision.fail_reasons})"
+        f"expected {expected['status']}, got {decision.status}" f" (fails={decision.fail_reasons})"
     )
     assert decision.fail_reasons == expected["fail_reasons"]
     assert decision.total_score == expected["total_score"]
@@ -87,9 +86,9 @@ def test_domestic_fail_runway_rejected_by_f3() -> None:
     assert decision.status == "reject"
     assert decision.sample_pass_rate == 1.0  # quality was perfect
     fail_codes = _fail_codes_from_reasons(decision.fail_reasons)
-    assert fail_codes == set(expected["fail_codes"]), (
-        f"expected fail codes {expected['fail_codes']}, got {fail_codes}"
-    )
+    assert fail_codes == set(
+        expected["fail_codes"]
+    ), f"expected fail codes {expected['fail_codes']}, got {fail_codes}"
     # Verify the F3 message is exactly the rubric text
     assert FAIL_REASONS["F3"] in decision.fail_reasons
 
@@ -171,8 +170,14 @@ def test_dim_keys_match_rubric_six_dimensions() -> None:
 def test_evaluate_rejects_out_of_range_dim_scores() -> None:
     bad = {
         "provider_id": "bogus",
-        "scores": {"api_stability": 7, "doc_quality": 3, "domestic_access": 5,
-                   "cost": 3, "output_quality": 3, "comic_fit": 3},
+        "scores": {
+            "api_stability": 7,
+            "doc_quality": 3,
+            "domestic_access": 5,
+            "cost": 3,
+            "output_quality": 3,
+            "comic_fit": 3,
+        },
         "samples": [],
     }
     with pytest.raises(ValueError, match="must be in"):
@@ -194,8 +199,14 @@ def test_empty_samples_yields_zero_stats_but_still_evaluates_dims() -> None:
     alone — useful for the desktop-research theoretical pass."""
     scorecard = {
         "provider_id": "theoretical_only",
-        "scores": {"api_stability": 4, "doc_quality": 4, "domestic_access": 5,
-                   "cost": 3, "output_quality": 4, "comic_fit": 5},
+        "scores": {
+            "api_stability": 4,
+            "doc_quality": 4,
+            "domestic_access": 5,
+            "cost": 3,
+            "output_quality": 4,
+            "comic_fit": 5,
+        },
         "samples": [],
     }
     decision = evaluate_provider_scorecard(scorecard)
@@ -211,8 +222,14 @@ def test_total_score_under_15_is_rejected_even_without_fails() -> None:
     """Score 14 with no fails → still reject (below smoke_only threshold)."""
     scorecard = {
         "provider_id": "marginal",
-        "scores": {"api_stability": 2, "doc_quality": 2, "domestic_access": 3,
-                   "cost": 3, "output_quality": 2, "comic_fit": 2},
+        "scores": {
+            "api_stability": 2,
+            "doc_quality": 2,
+            "domestic_access": 3,
+            "cost": 3,
+            "output_quality": 2,
+            "comic_fit": 2,
+        },
         "samples": [],
     }
     decision = evaluate_provider_scorecard(scorecard)
@@ -224,8 +241,14 @@ def test_total_score_under_15_is_rejected_even_without_fails() -> None:
 def test_smoke_only_bucket_for_15_to_24_with_no_fails() -> None:
     scorecard = {
         "provider_id": "backup",
-        "scores": {"api_stability": 4, "doc_quality": 3, "domestic_access": 5,
-                   "cost": 4, "output_quality": 3, "comic_fit": 3},
+        "scores": {
+            "api_stability": 4,
+            "doc_quality": 3,
+            "domestic_access": 5,
+            "cost": 4,
+            "output_quality": 3,
+            "comic_fit": 3,
+        },
         "samples": [],
     }
     decision = evaluate_provider_scorecard(scorecard)

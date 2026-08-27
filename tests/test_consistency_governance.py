@@ -1,4 +1,5 @@
 """Tests for continuity validator additions and governance aggregation."""
+
 from __future__ import annotations
 
 import json
@@ -7,13 +8,12 @@ from pathlib import Path
 import pytest
 
 import backend.consistency_governance as governance
-from backend.video_generation import VideoGenerationResult
 from backend.consistency_validator import (
     ValidationCheck,
     evaluate_camera_continuity,
     validate_prop_continuity,
 )
-
+from backend.video_generation import VideoGenerationResult
 
 Image = pytest.importorskip("PIL.Image")
 ImageDraw = pytest.importorskip("PIL.ImageDraw")
@@ -118,7 +118,9 @@ def _write_runtime_project(workspace: Path, project_id: str, payload: dict) -> P
     (project_root / "characters").mkdir(parents=True, exist_ok=True)
     scene_root.mkdir(parents=True, exist_ok=True)
     (project_root / "output").mkdir(parents=True, exist_ok=True)
-    (project_root / "project.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (project_root / "project.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return project_root
 
 
@@ -126,7 +128,9 @@ def test_validate_prop_continuity_passes_matching_reference(tmp_path):
     ref = _write_image(tmp_path / "ref.png", pattern="prop_ref")
     current = _write_image(tmp_path / "current.png", pattern="prop_ref")
 
-    result = validate_prop_continuity(current, {"prop_id": "jade", "reference_image_path": str(ref)})
+    result = validate_prop_continuity(
+        current, {"prop_id": "jade", "reference_image_path": str(ref)}
+    )
 
     assert result.name == "prop_continuity:jade"
     assert result.passed is True
@@ -138,7 +142,9 @@ def test_validate_prop_continuity_warns_on_mismatch(tmp_path):
     ref = _write_image(tmp_path / "ref.png", pattern="prop_ref")
     current = _write_image(tmp_path / "current.png", pattern="prop_mismatch")
 
-    result = validate_prop_continuity(current, {"prop_id": "jade", "reference_image_path": str(ref)})
+    result = validate_prop_continuity(
+        current, {"prop_id": "jade", "reference_image_path": str(ref)}
+    )
 
     assert result.passed is False
     assert result.severity == "warning"
@@ -225,13 +231,33 @@ def test_evaluate_scene_governance_aggregates_all_five_dimensions(monkeypatch, t
     }
     scene = {"scene_id": "scene_001", "order": 1, "characters": ["Lin"], "props": ["jade"]}
 
-    monkeypatch.setattr(governance, "validate_character_identity", lambda *args, **kwargs: _check("character", True, 0.9))
-    monkeypatch.setattr(governance, "validate_style_consistency", lambda *args, **kwargs: _check("environment", True, 0.8))
-    monkeypatch.setattr(governance, "validate_lighting_continuity", lambda *args, **kwargs: _check("lighting", True, 0.7))
-    monkeypatch.setattr(governance, "validate_prop_continuity", lambda *args, **kwargs: _check("prop", True, 0.95))
-    monkeypatch.setattr(governance, "evaluate_camera_continuity", lambda *args, **kwargs: _check("camera", True, 0.85))
+    monkeypatch.setattr(
+        governance,
+        "validate_character_identity",
+        lambda *args, **kwargs: _check("character", True, 0.9),
+    )
+    monkeypatch.setattr(
+        governance,
+        "validate_style_consistency",
+        lambda *args, **kwargs: _check("environment", True, 0.8),
+    )
+    monkeypatch.setattr(
+        governance,
+        "validate_lighting_continuity",
+        lambda *args, **kwargs: _check("lighting", True, 0.7),
+    )
+    monkeypatch.setattr(
+        governance, "validate_prop_continuity", lambda *args, **kwargs: _check("prop", True, 0.95)
+    )
+    monkeypatch.setattr(
+        governance,
+        "evaluate_camera_continuity",
+        lambda *args, **kwargs: _check("camera", True, 0.85),
+    )
 
-    verdict = governance.evaluate_scene_governance(project, scene, images={"current_image": current})
+    verdict = governance.evaluate_scene_governance(
+        project, scene, images={"current_image": current}
+    )
 
     assert verdict["status"] == "pass"
     assert verdict["deliverable"] is True
@@ -244,12 +270,30 @@ def test_evaluate_scene_governance_uses_fail_warn_pass_precedence(monkeypatch, t
     project = {"characters": [{"name": "Lin", "reference_image_path": str(current)}]}
     scene = {"scene_id": "scene_001", "order": 1, "characters": ["Lin"]}
 
-    monkeypatch.setattr(governance, "validate_character_identity", lambda *args, **kwargs: _check("character", False, 0.2, "error"))
-    monkeypatch.setattr(governance, "validate_style_consistency", lambda *args, **kwargs: _check("environment", False, 0.4))
-    monkeypatch.setattr(governance, "validate_lighting_continuity", lambda *args, **kwargs: _check("lighting", True, 0.9))
-    monkeypatch.setattr(governance, "evaluate_camera_continuity", lambda *args, **kwargs: _check("camera", True, 1.0, "info"))
+    monkeypatch.setattr(
+        governance,
+        "validate_character_identity",
+        lambda *args, **kwargs: _check("character", False, 0.2, "error"),
+    )
+    monkeypatch.setattr(
+        governance,
+        "validate_style_consistency",
+        lambda *args, **kwargs: _check("environment", False, 0.4),
+    )
+    monkeypatch.setattr(
+        governance,
+        "validate_lighting_continuity",
+        lambda *args, **kwargs: _check("lighting", True, 0.9),
+    )
+    monkeypatch.setattr(
+        governance,
+        "evaluate_camera_continuity",
+        lambda *args, **kwargs: _check("camera", True, 1.0, "info"),
+    )
 
-    verdict = governance.evaluate_scene_governance(project, scene, images={"current_image": current})
+    verdict = governance.evaluate_scene_governance(
+        project, scene, images={"current_image": current}
+    )
 
     assert verdict["status"] == "fail"
     assert verdict["dimensions"]["character"]["status"] == "fail"
@@ -262,9 +306,21 @@ def test_info_dimensions_do_not_worsen_passing_verdict(monkeypatch, tmp_path):
     current = _write_image(tmp_path / "current.png", pattern="prop_ref")
     scene = {"scene_id": "scene_001", "order": 1, "characters": []}
 
-    monkeypatch.setattr(governance, "validate_style_consistency", lambda *args, **kwargs: _check("environment", True, 0.8))
-    monkeypatch.setattr(governance, "validate_lighting_continuity", lambda *args, **kwargs: _check("lighting", True, 0.8))
-    monkeypatch.setattr(governance, "evaluate_camera_continuity", lambda *args, **kwargs: _check("camera", True, 1.0, "info"))
+    monkeypatch.setattr(
+        governance,
+        "validate_style_consistency",
+        lambda *args, **kwargs: _check("environment", True, 0.8),
+    )
+    monkeypatch.setattr(
+        governance,
+        "validate_lighting_continuity",
+        lambda *args, **kwargs: _check("lighting", True, 0.8),
+    )
+    monkeypatch.setattr(
+        governance,
+        "evaluate_camera_continuity",
+        lambda *args, **kwargs: _check("camera", True, 1.0, "info"),
+    )
 
     verdict = governance.evaluate_scene_governance({}, scene, images={"current_image": current})
 
@@ -348,8 +404,18 @@ def test_build_continuity_ledger_counts_statuses_pass_rates_and_offenders(monkey
     assert ledger["dimension_pass_rates"]["character"] == pytest.approx(2 / 3, abs=0.001)
     assert ledger["dimension_pass_rates"]["prop"] == 1.0
     assert ledger["offending_scenes"] == [
-        {"scene_id": "scene_002", "scene_order": 2, "status": "warn", "offending_dimensions": ["camera"]},
-        {"scene_id": "scene_003", "scene_order": 3, "status": "fail", "offending_dimensions": ["character"]},
+        {
+            "scene_id": "scene_002",
+            "scene_order": 2,
+            "status": "warn",
+            "offending_dimensions": ["camera"],
+        },
+        {
+            "scene_id": "scene_003",
+            "scene_order": 3,
+            "status": "fail",
+            "offending_dimensions": ["character"],
+        },
     ]
     assert ledger["policy_mode"] == "block"
 
@@ -365,7 +431,9 @@ def test_update_scene_governance_persists_verdict(runtime_workspace):
         "scene_order": 1,
         "status": "warn",
         "evaluated_at": "2026-06-06T12:00:00Z",
-        "dimensions": {"camera": {"status": "warn", "score": 0.4, "threshold": 0.6, "reason": "jump"}},
+        "dimensions": {
+            "camera": {"status": "warn", "score": 0.4, "threshold": 0.6, "reason": "jump"}
+        },
         "offending_dimensions": ["camera"],
         "policy": {"mode": "report", "action": "recorded"},
         "deliverable": True,
@@ -424,8 +492,8 @@ def test_export_readiness_blocks_undeliverable_governance(runtime_workspace):
 
 
 def test_rerender_scene_video_persists_governance_verdict(runtime_workspace, monkeypatch):
-    import backend.scene_renderer as scene_renderer
     import backend.project_runtime as project_runtime
+    import backend.scene_renderer as scene_renderer
 
     project_id = "render_governance"
     project_root = _write_runtime_project(
@@ -467,6 +535,12 @@ def test_rerender_scene_video_persists_governance_verdict(runtime_workspace, mon
     scene = result["scenes"][0]
 
     assert scene["governance"]["status"] == "pass"
-    assert set(scene["governance"]["dimensions"]) == {"character", "lighting", "environment", "prop", "camera"}
+    assert set(scene["governance"]["dimensions"]) == {
+        "character",
+        "lighting",
+        "environment",
+        "prop",
+        "camera",
+    }
     snapshot = project_runtime.project_snapshot(project_runtime.load_project(project_id))
     assert snapshot["continuity_ledger"]["status_counts"]["pass"] == 1

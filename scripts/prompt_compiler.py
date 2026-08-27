@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
 def _clean_prompt(text: str) -> str:
     raw = " ".join(str(text or "").split())
-    return raw.strip(" ,\uFF0C;\uFF1B")
+    return raw.strip(" ,\uff0c;\uff1b")
 
 
 def _normalized_name(value: object) -> str:
@@ -79,7 +79,9 @@ class PromptCompiler:
         )
         return int(zh_chars * 1.5) + en_words
 
-    def compile(self, scene_visual: str, characters: list[str], speaker: str | None = None) -> CompiledPrompt:
+    def compile(
+        self, scene_visual: str, characters: list[str], speaker: str | None = None
+    ) -> CompiledPrompt:
         parts: list[str] = []
 
         core = _clean_prompt(scene_visual)

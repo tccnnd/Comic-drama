@@ -77,3 +77,11 @@
   - `npm run format:check` → All matched files use Prettier code style（exit=0）；
   - `index.html` 仍引用 `/frontend/app.js`、`/frontend/styles.css`，静态访问路径不受影响。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T1.6 格式化（black/isort）
+
+- **配置**：`pyproject.toml` 新增 `[tool.black]`（line-length=100、target py311、extend-exclude 正则串 `_external|\.venv|\.tmp|workspace|outputs|data|node_modules`）与 `[tool.isort]`（profile=black、line_length=100、同 extend_skip 列表）。⚠️ black 的 `extend-exclude` 只接受正则字符串，list 会报 `Config key extend-exclude must be a string`。
+- **依赖**：black==26.5.1、isort==9.0.0 加入 `requirements-dev.in` 并重新 pip-compile（已入锁）。isort 9.0 无 `python -m isort` 入口，用 `Scripts/isort.exe`。
+- **执行**：scope=`backend scripts tests video_providers.py`（按计划收窄，不扫 `.`）。首次 black 88 个文件需 reformat（实际写入 81 个）、isort 修复一批 imports；写入后 `--check` 全部回填通过（black 100 文件 unchanged、isort exit=0）。
+- **验收**：全量 **511 passed / 10 warnings / exit=0**（格式化无语义变化）。
+- **commit**：本地提交，未推 GitHub。

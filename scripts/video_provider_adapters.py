@@ -130,7 +130,9 @@ def _root_base_url(base_url: str) -> str:
     return base_url.rstrip("/").removesuffix("/v1").removesuffix("/v2")
 
 
-def _json_request(url: str, payload: dict[str, Any] | None, headers: dict[str, str], timeout: float) -> dict[str, Any]:
+def _json_request(
+    url: str, payload: dict[str, Any] | None, headers: dict[str, str], timeout: float
+) -> dict[str, Any]:
     data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = Request(url, data=data, headers=headers, method="GET" if payload is None else "POST")
     with urlopen(req, timeout=timeout) as response:
@@ -143,7 +145,13 @@ def _json_request(url: str, payload: dict[str, Any] | None, headers: dict[str, s
     return parsed
 
 
-def _multipart_request(url: str, fields: dict[str, str], files: dict[str, Path], headers: dict[str, str], timeout: float) -> dict[str, Any]:
+def _multipart_request(
+    url: str,
+    fields: dict[str, str],
+    files: dict[str, Path],
+    headers: dict[str, str],
+    timeout: float,
+) -> dict[str, Any]:
     boundary = f"----comicdrama-{uuid.uuid4().hex}"
     body = bytearray()
     for name, value in fields.items():
@@ -155,7 +163,9 @@ def _multipart_request(url: str, fields: dict[str, str], files: dict[str, Path],
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         body.extend(f"--{boundary}\r\n".encode("utf-8"))
         body.extend(
-            f'Content-Disposition: form-data; name="{name}"; filename="{path.name}"\r\n'.encode("utf-8")
+            f'Content-Disposition: form-data; name="{name}"; filename="{path.name}"\r\n'.encode(
+                "utf-8"
+            )
         )
         body.extend(f"Content-Type: {mime}\r\n\r\n".encode("utf-8"))
         body.extend(path.read_bytes())
@@ -261,7 +271,9 @@ def _first_frame_url(request: VideoRenderRequest, prefix: str, headers: dict[str
     mode = (_env(prefix, "IMAGE_UPLOAD_MODE", "json") or "json").lower()
     if mode == "multipart":
         field = _env(prefix, "IMAGE_UPLOAD_FIELD", "file")
-        response = _multipart_request(upload_url, {}, {field: request.keyframe_path}, headers, timeout=120)
+        response = _multipart_request(
+            upload_url, {}, {field: request.keyframe_path}, headers, timeout=120
+        )
     else:
         image_b64 = base64.b64encode(request.keyframe_path.read_bytes()).decode("ascii")
         payload = {
@@ -314,7 +326,11 @@ def _detect_route(prefix: str, spec: VideoProviderSpec, model: str) -> str:
         return "dashscope"
     # Auto-detect dashscope from submit path
     submit_path = _env(prefix, "SUBMIT_PATH")
-    if submit_path and ("aigc/video-generation" in submit_path or "alibailian" in submit_path or "dashscope" in submit_path):
+    if submit_path and (
+        "aigc/video-generation" in submit_path
+        or "alibailian" in submit_path
+        or "dashscope" in submit_path
+    ):
         return "dashscope"
     return "unified"
 
@@ -350,12 +366,16 @@ def _write_debug(run_dir: Path, scene: int, name: str, payload: object) -> None:
 
 
 def _send_structured_spec(prefix: str) -> bool:
-    raw = os.environ.get(f"{prefix}_SEND_STRUCTURED_SPEC", os.environ.get("VIDEO_SEND_STRUCTURED_SPEC", "0"))
+    raw = os.environ.get(
+        f"{prefix}_SEND_STRUCTURED_SPEC", os.environ.get("VIDEO_SEND_STRUCTURED_SPEC", "0")
+    )
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _structured_spec_mode(prefix: str, route: str) -> str:
-    raw = os.environ.get(f"{prefix}_STRUCTURED_SPEC_MODE", os.environ.get("VIDEO_STRUCTURED_SPEC_MODE", "auto"))
+    raw = os.environ.get(
+        f"{prefix}_STRUCTURED_SPEC_MODE", os.environ.get("VIDEO_STRUCTURED_SPEC_MODE", "auto")
+    )
     mode = raw.strip().lower()
     if mode in {"none", "off", "0", "false", "no"}:
         return "none"
@@ -393,14 +413,22 @@ def _structured_json_text(payload: dict[str, Any], limit: int) -> str:
     return raw[: max(0, limit - 32)] + "...<truncated>"
 
 
-def _prompt_with_structured_spec(prompt: str, request: VideoRenderRequest, prefix: str, route: str) -> str:
+def _prompt_with_structured_spec(
+    prompt: str, request: VideoRenderRequest, prefix: str, route: str
+) -> str:
     mode = _structured_spec_mode(prefix, route)
     if mode not in {"prompt", "both"}:
         return prompt
     metadata = _structured_metadata(request)
     if not metadata:
         return prompt
-    limit = int(_env_float(prefix, "STRUCTURED_SPEC_PROMPT_LIMIT", float(os.environ.get("VIDEO_STRUCTURED_SPEC_PROMPT_LIMIT", "6000") or 6000)))
+    limit = int(
+        _env_float(
+            prefix,
+            "STRUCTURED_SPEC_PROMPT_LIMIT",
+            float(os.environ.get("VIDEO_STRUCTURED_SPEC_PROMPT_LIMIT", "6000") or 6000),
+        )
+    )
     block = _structured_json_text(metadata, max(1000, limit))
     return (
         f"{prompt}\n\n"
@@ -409,7 +437,9 @@ def _prompt_with_structured_spec(prompt: str, request: VideoRenderRequest, prefi
     )
 
 
-def _attach_structured_fields(body: dict[str, Any], request: VideoRenderRequest, prefix: str, route: str) -> None:
+def _attach_structured_fields(
+    body: dict[str, Any], request: VideoRenderRequest, prefix: str, route: str
+) -> None:
     mode = _structured_spec_mode(prefix, route)
     if mode not in {"fields", "both"}:
         return
@@ -486,7 +516,9 @@ def _poll_task(
         if status in {"completed", "complete", "success", "succeeded", "done", "succeed"}:
             return result
         if status in {"failed", "failure", "error", "cancelled", "canceled", "expired"}:
-            raise VideoProviderError(f"{spec.label} task {task_id} failed: {json.dumps(result, ensure_ascii=False)}")
+            raise VideoProviderError(
+                f"{spec.label} task {task_id} failed: {json.dumps(result, ensure_ascii=False)}"
+            )
         if _extract_video_url(result) or _extract_video_base64(result):
             return result
         time.sleep(poll_interval)
@@ -510,11 +542,17 @@ def _finish_video_result(
         _decode_base64_video(video_b64, source_path)
     elif video_url:
         suffix = Path(urlparse(video_url).path).suffix.lower()
-        download_path = request.out_path if suffix in {"", ".mp4"} else request.out_path.with_name(f"{request.out_path.stem}_source{suffix}")
+        download_path = (
+            request.out_path
+            if suffix in {"", ".mp4"}
+            else request.out_path.with_name(f"{request.out_path.stem}_source{suffix}")
+        )
         _download_video(video_url, download_path, headers, timeout=max(120, timeout_s))
         source_path = download_path
     else:
-        raise VideoProviderError(f"{spec.label} response did not include video_url or video_base64.")
+        raise VideoProviderError(
+            f"{spec.label} response did not include video_url or video_base64."
+        )
 
     if source_path.suffix.lower() != ".mp4" or source_path != request.out_path:
         _transcode_to_mp4(
@@ -560,14 +598,30 @@ def _render_openai_official(
         "seconds": str(int(round(float(request.duration)))),
     }
     upload_field = _env(prefix, "REFERENCE_FIELD", "input_reference")
-    response = _multipart_request(endpoint, fields, {upload_field: request.keyframe_path}, {"Authorization": f"Bearer {api_key}"}, timeout=120)
+    response = _multipart_request(
+        endpoint,
+        fields,
+        {upload_field: request.keyframe_path},
+        {"Authorization": f"Bearer {api_key}"},
+        timeout=120,
+    )
     _write_debug(request.run_dir, request.scene, f"{spec.id}_submit_response", response)
 
     task_id = _extract_task_id(response)
     if not task_id:
-        return _finish_video_result(request, spec, response, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+        return _finish_video_result(
+            request,
+            spec,
+            response,
+            headers,
+            ffmpeg=ffmpeg,
+            run_guarded=run_guarded,
+            timeout_s=timeout_s,
+        )
 
-    poll_url = poll_url_template or _join_url(base_url, _env(prefix, "POLL_PATH", f"videos/{task_id}").replace("{task_id}", task_id))
+    poll_url = poll_url_template or _join_url(
+        base_url, _env(prefix, "POLL_PATH", f"videos/{task_id}").replace("{task_id}", task_id)
+    )
     result = _poll_task(
         request=request,
         spec=spec,
@@ -578,9 +632,14 @@ def _render_openai_official(
         timeout_s=timeout_s,
     )
     if not (_extract_video_url(result) or _extract_video_base64(result)):
-        content_url = content_url_template or _join_url(base_url, _env(prefix, "CONTENT_PATH", f"videos/{task_id}/content").replace("{task_id}", task_id))
+        content_url = content_url_template or _join_url(
+            base_url,
+            _env(prefix, "CONTENT_PATH", f"videos/{task_id}/content").replace("{task_id}", task_id),
+        )
         result = {"video_url": content_url, "status": "completed"}
-    return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+    return _finish_video_result(
+        request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s
+    )
 
 
 def _render_dashscope(
@@ -609,6 +668,7 @@ def _render_dashscope(
     if not first_frame_url:
         img_data = request.keyframe_path.read_bytes()
         import base64 as _b64
+
         suffix = request.keyframe_path.suffix.lower()
         mime = "image/png" if suffix == ".png" else "image/jpeg"
         first_frame_url = f"data:{mime};base64,{_b64.b64encode(img_data).decode('ascii')}"
@@ -631,7 +691,8 @@ def _render_dashscope(
         "parameters": {
             "resolution": resolution,
             "duration": duration,
-            "prompt_extend": _env(prefix, "PROMPT_EXTEND", "true").lower() in {"1", "true", "yes", "on"},
+            "prompt_extend": _env(prefix, "PROMPT_EXTEND", "true").lower()
+            in {"1", "true", "yes", "on"},
             "watermark": _env(prefix, "WATERMARK", "false").lower() in {"1", "true", "yes", "on"},
         },
     }
@@ -647,7 +708,9 @@ def _render_dashscope(
     submit_headers["Content-Type"] = "application/json"
 
     root = base_url.rstrip("/")
-    submit_endpoint = submit_url or _env(prefix, "SUBMIT_PATH", "/api/v1/services/aigc/video-generation/video-synthesis")
+    submit_endpoint = submit_url or _env(
+        prefix, "SUBMIT_PATH", "/api/v1/services/aigc/video-generation/video-synthesis"
+    )
     response = _json_request(
         _join_url(root, submit_endpoint),
         body,
@@ -664,7 +727,9 @@ def _render_dashscope(
     if not task_id:
         task_id = _extract_task_id(response)
     if not task_id:
-        raise VideoProviderError(f"{spec.label} DashScope submit did not return a task_id: {json.dumps(response, ensure_ascii=False)}")
+        raise VideoProviderError(
+            f"{spec.label} DashScope submit did not return a task_id: {json.dumps(response, ensure_ascii=False)}"
+        )
 
     task_status = str(output.get("task_status") or "").upper() if isinstance(output, dict) else ""
     if task_status == "FAILED":
@@ -701,11 +766,23 @@ def _render_dashscope(
                 result["video_url"] = video_url
             elif isinstance(poll_output, dict) and poll_output.get("video_url"):
                 result["video_url"] = poll_output["video_url"]
-            return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+            return _finish_video_result(
+                request,
+                spec,
+                result,
+                headers,
+                ffmpeg=ffmpeg,
+                run_guarded=run_guarded,
+                timeout_s=timeout_s,
+            )
 
         if status in {"FAILED", "CANCELED"}:
-            code = result.get("code", poll_output.get("code", "") if isinstance(poll_output, dict) else "")
-            message = result.get("message", poll_output.get("message", "") if isinstance(poll_output, dict) else "")
+            code = result.get(
+                "code", poll_output.get("code", "") if isinstance(poll_output, dict) else ""
+            )
+            message = result.get(
+                "message", poll_output.get("message", "") if isinstance(poll_output, dict) else ""
+            )
             raise VideoProviderError(
                 f"{spec.label} task {task_id} failed: status={status}, code={code}, message={message}"
             )
@@ -828,7 +905,11 @@ def _render_unified(
     poll_url_template: str = "",
 ) -> Path:
     first_frame_url = _first_frame_url(request, prefix, headers)
-    if not first_frame_url and _env(prefix, "REQUIRE_IMAGE_URL", "1").lower() not in {"0", "false", "no"}:
+    if not first_frame_url and _env(prefix, "REQUIRE_IMAGE_URL", "1").lower() not in {
+        "0",
+        "false",
+        "no",
+    }:
         raise VideoProviderConfigError(
             f"{prefix}_IMAGE_UPLOAD_URL or {prefix}_REFERENCE_IMAGE_URL is required for unified video providers."
         )
@@ -856,7 +937,15 @@ def _render_unified(
     _write_debug(request.run_dir, request.scene, f"{spec.id}_submit_response", response)
     task_id = _extract_task_id(response)
     if not task_id:
-        return _finish_video_result(request, spec, response, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+        return _finish_video_result(
+            request,
+            spec,
+            response,
+            headers,
+            ffmpeg=ffmpeg,
+            run_guarded=run_guarded,
+            timeout_s=timeout_s,
+        )
 
     result = _poll_task(
         request=request,
@@ -867,7 +956,9 @@ def _render_unified(
         poll_interval=max(1.0, _env_float(prefix, "POLL_INTERVAL_SECONDS", 5.0)),
         timeout_s=timeout_s,
     )
-    return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+    return _finish_video_result(
+        request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s
+    )
 
 
 def _render_volc(
@@ -886,7 +977,9 @@ def _render_volc(
 ) -> Path:
     first_frame_url = _first_frame_url(request, prefix, headers)
     if not first_frame_url:
-        raise VideoProviderConfigError(f"{prefix}_IMAGE_UPLOAD_URL or {prefix}_REFERENCE_IMAGE_URL is required for Volc/Seedance.")
+        raise VideoProviderConfigError(
+            f"{prefix}_IMAGE_UPLOAD_URL or {prefix}_REFERENCE_IMAGE_URL is required for Volc/Seedance."
+        )
 
     text = _prompt_with_structured_spec(request.prompt, request, prefix, "volc")
     text += f" --rs {_env(prefix, 'RESOLUTION', '720p')}"
@@ -904,7 +997,8 @@ def _render_volc(
 
     root = _root_base_url(base_url)
     response = _json_request(
-        submit_url or _join_url(root, _env(prefix, "SUBMIT_PATH", "/volc/v1/contents/generations/tasks")),
+        submit_url
+        or _join_url(root, _env(prefix, "SUBMIT_PATH", "/volc/v1/contents/generations/tasks")),
         body,
         headers,
         timeout=120,
@@ -912,7 +1006,15 @@ def _render_volc(
     _write_debug(request.run_dir, request.scene, f"{spec.id}_submit_response", response)
     task_id = _extract_task_id(response)
     if not task_id:
-        return _finish_video_result(request, spec, response, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+        return _finish_video_result(
+            request,
+            spec,
+            response,
+            headers,
+            ffmpeg=ffmpeg,
+            run_guarded=run_guarded,
+            timeout_s=timeout_s,
+        )
 
     poll_path = _env(prefix, "POLL_PATH", "/volc/v1/contents/generations/tasks/{task_id}")
     result = _poll_task(
@@ -924,7 +1026,9 @@ def _render_volc(
         poll_interval=max(1.0, _env_float(prefix, "POLL_INTERVAL_SECONDS", 5.0)),
         timeout_s=timeout_s,
     )
-    return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+    return _finish_video_result(
+        request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s
+    )
 
 
 def _render_kling(
@@ -961,7 +1065,15 @@ def _render_kling(
     _write_debug(request.run_dir, request.scene, f"{spec.id}_submit_response", response)
     task_id = _extract_task_id(response)
     if not task_id:
-        return _finish_video_result(request, spec, response, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+        return _finish_video_result(
+            request,
+            spec,
+            response,
+            headers,
+            ffmpeg=ffmpeg,
+            run_guarded=run_guarded,
+            timeout_s=timeout_s,
+        )
 
     poll_path = _env(prefix, "POLL_PATH", f"/kling/v1/videos/{endpoint_type}/{{task_id}}")
     result = _poll_task(
@@ -973,7 +1085,9 @@ def _render_kling(
         poll_interval=max(1.0, _env_float(prefix, "POLL_INTERVAL_SECONDS", 5.0)),
         timeout_s=timeout_s,
     )
-    return _finish_video_result(request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s)
+    return _finish_video_result(
+        request, spec, result, headers, ffmpeg=ffmpeg, run_guarded=run_guarded, timeout_s=timeout_s
+    )
 
 
 def render_remote_video_provider(
@@ -986,7 +1100,9 @@ def render_remote_video_provider(
 ) -> Path:
     prefix = _provider_prefix(spec)
     api_key = _env_any(prefix, ("API_KEY", "OPENAI_API_KEY"))
-    model = _env_any(prefix, ("MODEL", "OPENAI_VIDEO_MODEL"), default="sora-2" if spec.id == "sora" else "")
+    model = _env_any(
+        prefix, ("MODEL", "OPENAI_VIDEO_MODEL"), default="sora-2" if spec.id == "sora" else ""
+    )
     base_url = _env_any(
         prefix,
         ("BASE_URL", "OPENAI_BASE_URL"),
@@ -998,9 +1114,13 @@ def render_remote_video_provider(
     provider_timeout = int(_env_float(prefix, "TIMEOUT_SECONDS", float(timeout_s)))
 
     if not api_key:
-        raise VideoProviderConfigError(f"{prefix}_API_KEY is required for video provider '{spec.id}'.")
+        raise VideoProviderConfigError(
+            f"{prefix}_API_KEY is required for video provider '{spec.id}'."
+        )
     if not model:
-        raise VideoProviderConfigError(f"{prefix}_MODEL is required for video provider '{spec.id}'.")
+        raise VideoProviderConfigError(
+            f"{prefix}_MODEL is required for video provider '{spec.id}'."
+        )
     if not base_url and not _env(prefix, "SUBMIT_URL"):
         raise VideoProviderConfigError(
             f"{prefix}_BASE_URL is required for video provider '{spec.id}'."
@@ -1030,7 +1150,8 @@ def render_remote_video_provider(
             "fps": request.fps,
             "structured_spec_available": bool(_structured_metadata(request)),
             "structured_spec_mode": _structured_spec_mode(prefix, route),
-            "structured_spec_sent": _structured_spec_mode(prefix, route) in {"fields", "both"} and route == "unified",
+            "structured_spec_sent": _structured_spec_mode(prefix, route) in {"fields", "both"}
+            and route == "unified",
         },
     )
     metadata = _structured_metadata(request)

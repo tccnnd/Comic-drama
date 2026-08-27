@@ -11,6 +11,7 @@ Provider tiers:
   - standard: balanced (e.g., Happy Horse standard, Kling std)
   - premium: highest quality, slower, more expensive (e.g., Kling pro, Sora)
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from video_providers import get_video_provider_spec, list_video_provider_specs, VideoProviderSpec
+from video_providers import VideoProviderSpec, get_video_provider_spec, list_video_provider_specs
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProviderCost:
     """Cost model for a provider."""
+
     provider_id: str
     cost_per_second: float = 0.0  # CNY per second of video
     cost_per_image: float = 0.0  # CNY per image
@@ -99,6 +101,7 @@ DEFAULT_COSTS: dict[str, ProviderCost] = {
 @dataclass
 class RouteRequest:
     """Request for provider routing."""
+
     kind: str = "video"  # "video" or "image"
     duration: float = 5.0
     quality_min: float = 0.5  # Minimum acceptable quality
@@ -111,6 +114,7 @@ class RouteRequest:
 @dataclass
 class RouteResult:
     """Result of provider routing."""
+
     provider_id: str
     provider_spec: VideoProviderSpec | None
     reason: str
@@ -179,7 +183,11 @@ def route_provider(request: RouteRequest) -> RouteResult:
         if cost.avg_latency_seconds > request.deadline_seconds:
             continue
         # Skip if over budget
-        estimated_cost = cost.cost_per_second * request.duration if request.kind == "video" else cost.cost_per_image
+        estimated_cost = (
+            cost.cost_per_second * request.duration
+            if request.kind == "video"
+            else cost.cost_per_image
+        )
         if estimated_cost > request.budget_max:
             continue
         # Skip if duration exceeds provider max
@@ -209,7 +217,11 @@ def route_provider(request: RouteRequest) -> RouteResult:
 
     candidates.sort(key=sort_key)
     best_id, best_cost = candidates[0]
-    estimated_cost = best_cost.cost_per_second * request.duration if request.kind == "video" else best_cost.cost_per_image
+    estimated_cost = (
+        best_cost.cost_per_second * request.duration
+        if request.kind == "video"
+        else best_cost.cost_per_image
+    )
 
     # Build fallback chain
     fallback_chain = [pid for pid, _ in candidates[1:3]] + ["local"]
@@ -234,7 +246,9 @@ def estimate_project_cost(project: dict[str, Any], provider_id: str = "") -> dic
     if not provider_id:
         provider_id = os.environ.get("VIDEO_PROVIDER", "xl").strip().lower()
 
-    cost_model = costs.get(provider_id, DEFAULT_COSTS.get("xl", ProviderCost(provider_id="unknown")))
+    cost_model = costs.get(
+        provider_id, DEFAULT_COSTS.get("xl", ProviderCost(provider_id="unknown"))
+    )
 
     total_duration = sum(float(s.get("duration_seconds") or 5.0) for s in scenes)
     video_cost = cost_model.cost_per_second * total_duration

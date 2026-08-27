@@ -4,6 +4,7 @@ The scorecard is intentionally offline: it reads project snapshots and emits a
 stable JSON template that humans or later automation can score without spending
 provider quota.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.prototype_gap_report import discover_project_files
-
 
 SCORE_FIELDS = [
     "composition_intent",
@@ -50,7 +50,10 @@ def _text(value: Any) -> str:
 
 
 def _scene_identifier(scene: dict[str, Any], fallback_order: int) -> str:
-    return _text(scene.get("scene_id") or scene.get("id") or scene.get("scene")) or f"scene_{fallback_order:03d}"
+    return (
+        _text(scene.get("scene_id") or scene.get("id") or scene.get("scene"))
+        or f"scene_{fallback_order:03d}"
+    )
 
 
 def _shot_identifier(scene_id: str, shot: dict[str, Any], fallback_order: int) -> str:
@@ -79,12 +82,25 @@ def _review_template() -> dict[str, Any]:
     }
 
 
-def _output_evidence(scene: dict[str, Any], assets: dict[str, Any], generation_meta: dict[str, Any]) -> dict[str, str]:
+def _output_evidence(
+    scene: dict[str, Any], assets: dict[str, Any], generation_meta: dict[str, Any]
+) -> dict[str, str]:
     return {
-        "image_url": _text(assets.get("image_url") or scene.get("image_url") or scene.get("keyframe_url")),
-        "image_path": _text(assets.get("image_path") or scene.get("image_path") or scene.get("keyframe")),
-        "video_url": _text(assets.get("video_url") or scene.get("video_url") or scene.get("final_video_url")),
-        "video_path": _text(assets.get("video_path") or scene.get("video_path") or scene.get("video") or scene.get("final_video_path")),
+        "image_url": _text(
+            assets.get("image_url") or scene.get("image_url") or scene.get("keyframe_url")
+        ),
+        "image_path": _text(
+            assets.get("image_path") or scene.get("image_path") or scene.get("keyframe")
+        ),
+        "video_url": _text(
+            assets.get("video_url") or scene.get("video_url") or scene.get("final_video_url")
+        ),
+        "video_path": _text(
+            assets.get("video_path")
+            or scene.get("video_path")
+            or scene.get("video")
+            or scene.get("final_video_path")
+        ),
         "final_video_path": _text(assets.get("final_video_path") or scene.get("final_video_path")),
         "provider_output_path": _text(
             generation_meta.get("output_path")
@@ -96,7 +112,17 @@ def _output_evidence(scene: dict[str, Any], assets: dict[str, Any], generation_m
 
 def _has_visual_evidence(entry: dict[str, Any]) -> bool:
     output = _as_dict(entry.get("output"))
-    return any(_text(output.get(key)) for key in ("image_url", "image_path", "video_url", "video_path", "final_video_path", "provider_output_path"))
+    return any(
+        _text(output.get(key))
+        for key in (
+            "image_url",
+            "image_path",
+            "video_url",
+            "video_path",
+            "final_video_path",
+            "provider_output_path",
+        )
+    )
 
 
 def _score_values(entry: dict[str, Any]) -> list[float]:
@@ -116,7 +142,9 @@ def entry_score_average(entry: dict[str, Any]) -> float | None:
     return round(sum(values) / len(values), 3)
 
 
-def build_project_entries(project: dict[str, Any], source_path: str | None = None) -> list[dict[str, Any]]:
+def build_project_entries(
+    project: dict[str, Any], source_path: str | None = None
+) -> list[dict[str, Any]]:
     """Extract scoreable shot entries from one project snapshot."""
     project_id = _text(project.get("project_id"))
     entries: list[dict[str, Any]] = []
@@ -138,7 +166,9 @@ def build_project_entries(project: dict[str, Any], source_path: str | None = Non
             visual_prototype = _as_dict(shot.get("visual_prototype"))
             visual_content = _as_dict(shot.get("visual_content"))
             prototype_id = _text(visual_prototype.get("id"))
-            mode = _text(visual_prototype.get("mode")) or ("prototype_lock" if prototype_id else "unknown")
+            mode = _text(visual_prototype.get("mode")) or (
+                "prototype_lock" if prototype_id else "unknown"
+            )
             gap = _as_dict(visual_prototype.get("gap"))
             entry_id = ":".join(
                 [
@@ -217,7 +247,11 @@ def summarize_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
             by_prototype.setdefault(prototype_id, []).append(average)
 
     def _averages(source: dict[str, list[float]]) -> dict[str, float]:
-        return {key: round(sum(values) / len(values), 3) for key, values in sorted(source.items()) if values}
+        return {
+            key: round(sum(values) / len(values), 3)
+            for key, values in sorted(source.items())
+            if values
+        }
 
     return {
         "total_entries": len(entries),
@@ -258,17 +292,26 @@ def summarize_scorecard(path: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build or summarize a visual prototype quality scorecard.")
-    parser.add_argument("path", type=Path, help="project.json, project directory, workspace directory, or scorecard JSON with --summary")
-    parser.add_argument("--summary", action="store_true", help="summarize a previously filled scorecard JSON")
+    parser = argparse.ArgumentParser(
+        description="Build or summarize a visual prototype quality scorecard."
+    )
+    parser.add_argument(
+        "path",
+        type=Path,
+        help="project.json, project directory, workspace directory, or scorecard JSON with --summary",
+    )
+    parser.add_argument(
+        "--summary", action="store_true", help="summarize a previously filled scorecard JSON"
+    )
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     args = parser.parse_args(argv)
 
     payload = summarize_scorecard(args.path) if args.summary else build_scorecard(args.path)
-    print(json.dumps(payload, ensure_ascii=False, indent=2 if args.pretty else None, sort_keys=True))
+    print(
+        json.dumps(payload, ensure_ascii=False, indent=2 if args.pretty else None, sort_keys=True)
+    )
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -3,16 +3,18 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from scripts.rw_models import StoryScene
-from scripts.director_classifier import VISUAL_CONTENT_FIELDS, build_shot_visual_content
 from backend.video_generation import normalize_generation_meta
+from scripts.director_classifier import VISUAL_CONTENT_FIELDS, build_shot_visual_content
+from scripts.rw_image import emotion_stamp, split_text_chunks
+from scripts.rw_models import StoryScene
 from scripts.rw_styles import normalize_episode_phase
 from scripts.rw_utils import clamp
-from scripts.rw_image import split_text_chunks, emotion_stamp
 from scripts.rw_voice import split_dialogue_speaker
 
 
-def build_scene_beats(scene: StoryScene, total_duration: float, spoken_text: str) -> list[dict[str, object]]:
+def build_scene_beats(
+    scene: StoryScene, total_duration: float, spoken_text: str
+) -> list[dict[str, object]]:
     speaker = scene.speaker or split_dialogue_speaker(scene.dialogue)[0] or "narrator"
     visual_chunks = split_text_chunks(scene.visual, 2)
     dialogue_chunks = split_text_chunks(spoken_text or scene.dialogue, 3)
@@ -28,9 +30,19 @@ def build_scene_beats(scene: StoryScene, total_duration: float, spoken_text: str
     }
     weights = list(phase_weights.get(phase, phase_weights["setup"]))
     if episode_rhythm == "fast_hook" or rhythm == "fast":
-        weights = [weights[0] + 0.06, max(0.12, weights[1] - 0.05), weights[2] + 0.04, max(0.12, weights[3] - 0.05)]
+        weights = [
+            weights[0] + 0.06,
+            max(0.12, weights[1] - 0.05),
+            weights[2] + 0.04,
+            max(0.12, weights[3] - 0.05),
+        ]
     elif episode_rhythm == "slow_burn" or rhythm == "slow":
-        weights = [max(0.12, weights[0] - 0.04), weights[1] + 0.08, max(0.12, weights[2] - 0.02), max(0.12, weights[3] - 0.02)]
+        weights = [
+            max(0.12, weights[0] - 0.04),
+            weights[1] + 0.08,
+            max(0.12, weights[2] - 0.02),
+            max(0.12, weights[3] - 0.02),
+        ]
     elif rhythm == "dialogue":
         weights = [0.14, 0.54, 0.18, 0.14]
     elif rhythm == "suspense":
@@ -172,7 +184,9 @@ def build_scene_graph(scene: StoryScene) -> dict[str, object]:
                 "hold_out_ratio": float(beat.get("hold_out_ratio") or 0.0),
                 "center_x": float(beat.get("center_x") or 0.5),
                 "center_y": float(beat.get("center_y") or 0.5),
-                "speaker": str(scene.speaker or split_dialogue_speaker(scene.dialogue)[0] or "").strip(),
+                "speaker": str(
+                    scene.speaker or split_dialogue_speaker(scene.dialogue)[0] or ""
+                ).strip(),
                 "dialogue": spoken_text.strip(),
                 "emotion": str(scene.emotion_tone or scene.emotion or "").strip(),
                 "scene_intent": str(scene.scene_intent or "").strip(),
@@ -183,7 +197,9 @@ def build_scene_graph(scene: StoryScene) -> dict[str, object]:
     return {"camera_track": camera_track, "shots": shots}
 
 
-def build_scene_temporal_spec(scene: StoryScene, duration: float, *, width: int = 1080, height: int = 1920, fps: int = 24) -> dict[str, Any]:
+def build_scene_temporal_spec(
+    scene: StoryScene, duration: float, *, width: int = 1080, height: int = 1920, fps: int = 24
+) -> dict[str, Any]:
     graph = deepcopy(build_scene_graph(scene))
     shots: list[dict[str, Any]] = []
     for raw in graph.get("shots", []) or []:
@@ -238,7 +254,11 @@ def _timeline_scene_field(scene: dict[str, Any], key: str, default: Any = "") ->
         value = scene.get(key)
         if value not in (None, ""):
             return value
-    assets = scene.get("assets") if isinstance(scene, dict) and isinstance(scene.get("assets"), dict) else {}
+    assets = (
+        scene.get("assets")
+        if isinstance(scene, dict) and isinstance(scene.get("assets"), dict)
+        else {}
+    )
     if isinstance(assets, dict) and key in assets:
         value = assets.get(key)
         if value not in (None, ""):
@@ -248,29 +268,65 @@ def _timeline_scene_field(scene: dict[str, Any], key: str, default: Any = "") ->
 
 def _scene_media_reference(scene: dict[str, Any], kind: str) -> dict[str, str]:
     if kind == "image":
-        path = str(_timeline_scene_field(scene, "keyframe", "") or _timeline_scene_field(scene, "image_path", "") or _timeline_scene_field(scene, "primary_reference_image_path", "")).strip()
-        url = str(_timeline_scene_field(scene, "keyframe_url", "") or _timeline_scene_field(scene, "image_url", "") or _timeline_scene_field(scene, "primary_reference_image_url", "")).strip()
+        path = str(
+            _timeline_scene_field(scene, "keyframe", "")
+            or _timeline_scene_field(scene, "image_path", "")
+            or _timeline_scene_field(scene, "primary_reference_image_path", "")
+        ).strip()
+        url = str(
+            _timeline_scene_field(scene, "keyframe_url", "")
+            or _timeline_scene_field(scene, "image_url", "")
+            or _timeline_scene_field(scene, "primary_reference_image_url", "")
+        ).strip()
     elif kind == "audio":
-        path = str(_timeline_scene_field(scene, "voice", "") or _timeline_scene_field(scene, "audio_path", "") or _timeline_scene_field(scene, "reference_audio_path", "")).strip()
-        url = str(_timeline_scene_field(scene, "voice_url", "") or _timeline_scene_field(scene, "audio_url", "") or _timeline_scene_field(scene, "reference_audio_url", "")).strip()
+        path = str(
+            _timeline_scene_field(scene, "voice", "")
+            or _timeline_scene_field(scene, "audio_path", "")
+            or _timeline_scene_field(scene, "reference_audio_path", "")
+        ).strip()
+        url = str(
+            _timeline_scene_field(scene, "voice_url", "")
+            or _timeline_scene_field(scene, "audio_url", "")
+            or _timeline_scene_field(scene, "reference_audio_url", "")
+        ).strip()
     elif kind == "video":
-        path = str(_timeline_scene_field(scene, "video", "") or _timeline_scene_field(scene, "video_path", "") or _timeline_scene_field(scene, "final_video_path", "")).strip()
-        url = str(_timeline_scene_field(scene, "video_url", "") or _timeline_scene_field(scene, "final_video_url", "")).strip()
+        path = str(
+            _timeline_scene_field(scene, "video", "")
+            or _timeline_scene_field(scene, "video_path", "")
+            or _timeline_scene_field(scene, "final_video_path", "")
+        ).strip()
+        url = str(
+            _timeline_scene_field(scene, "video_url", "")
+            or _timeline_scene_field(scene, "final_video_url", "")
+        ).strip()
     else:
-        path = str(_timeline_scene_field(scene, "subtitle_path", "") or _timeline_scene_field(scene, "subtitles_path", "")).strip()
-        url = str(_timeline_scene_field(scene, "subtitle_url", "") or _timeline_scene_field(scene, "subtitles_url", "")).strip()
+        path = str(
+            _timeline_scene_field(scene, "subtitle_path", "")
+            or _timeline_scene_field(scene, "subtitles_path", "")
+        ).strip()
+        url = str(
+            _timeline_scene_field(scene, "subtitle_url", "")
+            or _timeline_scene_field(scene, "subtitles_url", "")
+        ).strip()
     return {"path": path, "url": url}
 
 
 def _scene_duration_seconds(scene: dict[str, Any]) -> float:
-    duration = scene.get("duration_seconds") or scene.get("clip_duration") or scene.get("voice_duration") or 0.0
+    duration = (
+        scene.get("duration_seconds")
+        or scene.get("clip_duration")
+        or scene.get("voice_duration")
+        or 0.0
+    )
     try:
         return round(max(0.25, float(duration)), 3)
     except (TypeError, ValueError):
         return 4.0
 
 
-def normalize_shot_plan_visual_content(scene: dict[str, Any], shot_plan: dict[str, Any]) -> dict[str, Any]:
+def normalize_shot_plan_visual_content(
+    scene: dict[str, Any], shot_plan: dict[str, Any]
+) -> dict[str, Any]:
     """Ensure each shot carries the additive director-interpretation fields."""
     if not isinstance(scene, dict):
         scene = {}
@@ -293,7 +349,9 @@ def normalize_shot_plan_visual_content(scene: dict[str, Any], shot_plan: dict[st
         visual_prototype = shot.get("visual_prototype")
         if not isinstance(visual_prototype, dict):
             visual_prototype = {}
-        shot["visual_prototype"] = _merge_default_dict(generated["visual_prototype"], visual_prototype)
+        shot["visual_prototype"] = _merge_default_dict(
+            generated["visual_prototype"], visual_prototype
+        )
 
         camera_language = shot.get("camera_language")
         if not isinstance(camera_language, dict):
@@ -303,7 +361,9 @@ def normalize_shot_plan_visual_content(scene: dict[str, Any], shot_plan: dict[st
         visual_content = shot.get("visual_content")
         if not isinstance(visual_content, dict):
             visual_content = {}
-        elif "_source" not in visual_content and any(str(visual_content.get(key) or "").strip() for key in VISUAL_CONTENT_FIELDS):
+        elif "_source" not in visual_content and any(
+            str(visual_content.get(key) or "").strip() for key in VISUAL_CONTENT_FIELDS
+        ):
             visual_content = {**visual_content, "_source": "legacy"}
         shot["visual_content"] = _merge_default_dict(generated["visual_content"], visual_content)
 
@@ -328,7 +388,9 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
     order = int(scene.get("order") or scene.get("scene") or 1)
     scene_id = str(scene.get("scene_id") or f"scene_{order:03d}").strip()
     duration = _scene_duration_seconds(scene)
-    temporal_spec = scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
+    temporal_spec = (
+        scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
+    )
     shots_source = temporal_spec.get("shots") if isinstance(temporal_spec, dict) else None
     if not isinstance(shots_source, list) or not shots_source:
         shots_source = []
@@ -340,7 +402,9 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(raw_shot, dict):
             continue
         try:
-            raw_duration = float(raw_shot.get("duration_seconds") or raw_shot.get("duration") or 0.0)
+            raw_duration = float(
+                raw_shot.get("duration_seconds") or raw_shot.get("duration") or 0.0
+            )
         except (TypeError, ValueError):
             raw_duration = 0.0
         shot_duration = max(0.25, raw_duration)
@@ -350,13 +414,22 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
             {
                 "shot_id": str(raw_shot.get("shot_id") or f"{scene_id}_shot_{shot_index:02d}"),
                 "shot_order": int(raw_shot.get("shot_order") or shot_index),
-                "label": str(raw_shot.get("label") or raw_shot.get("beat_type") or f"SHOT {shot_index}").strip(),
+                "label": str(
+                    raw_shot.get("label") or raw_shot.get("beat_type") or f"SHOT {shot_index}"
+                ).strip(),
                 "beat_type": str(raw_shot.get("beat_type") or "").strip(),
                 "start_seconds": shot_start,
                 "duration_seconds": round(shot_duration, 3),
                 "end_seconds": shot_end,
-                "camera_movement": str(raw_shot.get("camera_movement") or scene.get("camera_movement") or scene.get("camera") or "").strip(),
-                "camera_speed": float(raw_shot.get("camera_speed") or scene.get("camera_speed") or 1.0),
+                "camera_movement": str(
+                    raw_shot.get("camera_movement")
+                    or scene.get("camera_movement")
+                    or scene.get("camera")
+                    or ""
+                ).strip(),
+                "camera_speed": float(
+                    raw_shot.get("camera_speed") or scene.get("camera_speed") or 1.0
+                ),
                 "zoom": float(raw_shot.get("zoom") or 1.0),
                 "hold_in_ratio": float(raw_shot.get("hold_in_ratio") or 0.0),
                 "hold_out_ratio": float(raw_shot.get("hold_out_ratio") or 0.0),
@@ -364,15 +437,26 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
                 "center_y": float(raw_shot.get("center_y") or 0.5),
                 "speaker": str(raw_shot.get("speaker") or scene.get("speaker") or "").strip(),
                 "dialogue": str(raw_shot.get("dialogue") or scene.get("dialogue") or "").strip(),
-                "emotion": str(raw_shot.get("emotion") or scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
-                "scene_intent": str(raw_shot.get("scene_intent") or scene.get("scene_intent") or "").strip(),
-                "subject_focus": str(raw_shot.get("subject_focus") or scene.get("subject_focus") or "").strip(),
+                "emotion": str(
+                    raw_shot.get("emotion")
+                    or scene.get("emotion_tone")
+                    or scene.get("emotion")
+                    or ""
+                ).strip(),
+                "scene_intent": str(
+                    raw_shot.get("scene_intent") or scene.get("scene_intent") or ""
+                ).strip(),
+                "subject_focus": str(
+                    raw_shot.get("subject_focus") or scene.get("subject_focus") or ""
+                ).strip(),
             }
         )
         cursor += shot_duration
 
     if shot_timeline:
-        total_shot_duration = sum(float(shot.get("duration_seconds") or 0.0) for shot in shot_timeline)
+        total_shot_duration = sum(
+            float(shot.get("duration_seconds") or 0.0) for shot in shot_timeline
+        )
         if total_shot_duration > 0.0 and abs(total_shot_duration - duration) > 0.001:
             scale = duration / total_shot_duration
             cursor = 0.0
@@ -381,7 +465,9 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
                 if shot_index == len(shot_timeline) - 1:
                     shot_duration = max(0.001, round(duration - cursor, 3))
                 else:
-                    shot_duration = max(0.001, round(float(shot.get("duration_seconds") or 0.0) * scale, 3))
+                    shot_duration = max(
+                        0.001, round(float(shot.get("duration_seconds") or 0.0) * scale, 3)
+                    )
                 shot["start_seconds"] = shot_start
                 shot["duration_seconds"] = shot_duration
                 shot["end_seconds"] = round(shot_start + shot_duration, 3)
@@ -397,7 +483,9 @@ def build_shot_plan(scene: dict[str, Any]) -> dict[str, Any]:
                 "start_seconds": 0.0,
                 "duration_seconds": duration,
                 "end_seconds": duration,
-                "camera_movement": str(scene.get("camera_movement") or scene.get("camera") or "").strip(),
+                "camera_movement": str(
+                    scene.get("camera_movement") or scene.get("camera") or ""
+                ).strip(),
                 "camera_speed": float(scene.get("camera_speed") or 1.0),
                 "zoom": 1.0,
                 "hold_in_ratio": 0.0,
@@ -449,7 +537,9 @@ def _compact_shot_generation(output: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in compact.items() if value not in ("", [], {}, None)}
 
 
-def _shot_timeline_with_generation(shot_timeline: list[dict[str, Any]], generation_meta: dict[str, Any]) -> list[dict[str, Any]]:
+def _shot_timeline_with_generation(
+    shot_timeline: list[dict[str, Any]], generation_meta: dict[str, Any]
+) -> list[dict[str, Any]]:
     shot_outputs = generation_meta.get("shot_outputs") if isinstance(generation_meta, dict) else []
     if not isinstance(shot_outputs, list) or not shot_outputs:
         return shot_timeline
@@ -486,7 +576,11 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
 
     project_id = str(project.get("project_id") or "").strip() if isinstance(project, dict) else ""
     title = str(project.get("title") or "").strip() if isinstance(project, dict) else ""
-    settings = project.get("settings") if isinstance(project, dict) and isinstance(project.get("settings"), dict) else {}
+    settings = (
+        project.get("settings")
+        if isinstance(project, dict) and isinstance(project.get("settings"), dict)
+        else {}
+    )
     size = {"width": 1080, "height": 1920, "fps": 24}
     total_duration = 0.0
     picture_items: list[dict[str, Any]] = []
@@ -504,13 +598,17 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
         start_seconds = round(total_duration, 3)
         end_seconds = round(start_seconds + duration, 3)
         total_duration = end_seconds
-        temporal_spec = scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
+        temporal_spec = (
+            scene.get("temporal_spec") if isinstance(scene.get("temporal_spec"), dict) else {}
+        )
         shot_plan = build_shot_plan(scene)
         video_ref = _scene_media_reference(scene, "video")
         image_ref = _scene_media_reference(scene, "image")
         picture_ref = video_ref if video_ref.get("path") or video_ref.get("url") else image_ref
         generation_meta = normalize_generation_meta(scene.get("generation_meta"))
-        shot_timeline = _shot_timeline_with_generation(deepcopy(shot_plan.get("shots") or []), generation_meta)
+        shot_timeline = _shot_timeline_with_generation(
+            deepcopy(shot_plan.get("shots") or []), generation_meta
+        )
         if generation_meta.get("is_real_video") is True:
             real_video_scene_count += 1
         if generation_meta.get("fallback_used") is True:
@@ -527,12 +625,20 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
             "source_range": {"start_seconds": 0.0, "duration_seconds": duration},
             "media_reference": picture_ref,
             "metadata": {
-                "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "emotion_tone": str(
+                    scene.get("emotion_tone") or scene.get("emotion") or ""
+                ).strip(),
                 "pacing": str(scene.get("pacing") or "").strip(),
-                "camera_movement": str(scene.get("camera_movement") or scene.get("camera") or "").strip(),
+                "camera_movement": str(
+                    scene.get("camera_movement") or scene.get("camera") or ""
+                ).strip(),
                 "scene_intent": str(scene.get("scene_intent") or "").strip(),
                 "subject_focus": str(scene.get("subject_focus") or "").strip(),
-                "production_bible": deepcopy(scene.get("production_bible") or {}) if isinstance(scene.get("production_bible"), dict) else {},
+                "production_bible": (
+                    deepcopy(scene.get("production_bible") or {})
+                    if isinstance(scene.get("production_bible"), dict)
+                    else {}
+                ),
                 "temporal_spec": deepcopy(temporal_spec) if isinstance(temporal_spec, dict) else {},
                 "shot_plan_source": str(shot_plan.get("source") or "").strip(),
                 "generation": generation_meta,
@@ -555,7 +661,9 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
                 "voice_profile": str(scene.get("voice_profile") or "").strip(),
                 "voice_engine": str(scene.get("voice_engine") or "").strip(),
                 "voice_id": str(scene.get("voice_id") or "").strip(),
-                "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "emotion_tone": str(
+                    scene.get("emotion_tone") or scene.get("emotion") or ""
+                ).strip(),
             },
         }
         picture_items.append(picture_item)
@@ -577,8 +685,14 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
             next_order = int(next_scene.get("order") or index + 1)
             next_scene_id = str(next_scene.get("scene_id") or f"scene_{next_order:03d}").strip()
             from scripts.run_workflow import _scene_transition
-            transition_kind = _scene_transition(scene.get("emotion_tone") or scene.get("emotion") or "", next_scene.get("emotion_tone") or next_scene.get("emotion") or "")
-            transition_duration = 0.0 if transition_kind == "cut" else 0.2 if transition_kind == "xfade" else 0.3
+
+            transition_kind = _scene_transition(
+                scene.get("emotion_tone") or scene.get("emotion") or "",
+                next_scene.get("emotion_tone") or next_scene.get("emotion") or "",
+            )
+            transition_duration = (
+                0.0 if transition_kind == "cut" else 0.2 if transition_kind == "xfade" else 0.3
+            )
             transitions.append(
                 {
                     "transition_id": f"{scene_id}_to_{next_scene_id}",
@@ -612,9 +726,19 @@ def build_canonical_timeline(project: dict[str, Any]) -> dict[str, Any]:
         "metadata": {
             "project_id": project_id,
             "title": title,
-            "style_id": str(project.get("style_id") or "").strip() if isinstance(project, dict) else "",
-            "episode_pacing": deepcopy(settings.get("episode_pacing")) if isinstance(settings.get("episode_pacing"), dict) else {},
-            "production_bible": deepcopy(project.get("production_bible") or {}) if isinstance(project, dict) and isinstance(project.get("production_bible"), dict) else {},
+            "style_id": (
+                str(project.get("style_id") or "").strip() if isinstance(project, dict) else ""
+            ),
+            "episode_pacing": (
+                deepcopy(settings.get("episode_pacing"))
+                if isinstance(settings.get("episode_pacing"), dict)
+                else {}
+            ),
+            "production_bible": (
+                deepcopy(project.get("production_bible") or {})
+                if isinstance(project, dict) and isinstance(project.get("production_bible"), dict)
+                else {}
+            ),
         },
         "tracks": [
             {

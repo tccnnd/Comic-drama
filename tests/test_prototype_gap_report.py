@@ -20,7 +20,11 @@ def _project_payload(project_id: str = "proj_001") -> dict:
                                 "mode": "prototype_lock",
                                 "id": "dialogue_pressure_two_shot",
                                 "params": {},
-                                "constraints": {"hard": ["two_subjects_visible"], "soft": [], "guidelines": []},
+                                "constraints": {
+                                    "hard": ["two_subjects_visible"],
+                                    "soft": [],
+                                    "guidelines": [],
+                                },
                             },
                         },
                         {

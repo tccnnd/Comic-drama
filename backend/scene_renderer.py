@@ -1,4 +1,5 @@
 """Scene rendering and asset generation: image, audio, video rerender and asset management."""
+
 from __future__ import annotations
 
 import logging
@@ -6,25 +7,6 @@ import shutil
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
-
-from scripts.run_workflow import (
-    build_shot_plan,
-    generate_keyframe,
-    load_env_file,
-    render_silent_visual_segment,
-    render_clip_with_meta,
-    render_voice_track,
-    run_guarded,
-    wav_duration,
-)
-from backend.video_generation import (
-    generation_meta_from_result,
-    normalize_generation_meta,
-    render_scene_shots_with_provider_policy,
-    sanitize_generation_error,
-    video_fallback_mode,
-    video_render_granularity,
-)
 
 from backend.project_models import (
     _scene_from_payload,
@@ -37,6 +19,24 @@ from backend.project_models import (
     scene_dir,
     utc_iso,
     workspace_url,
+)
+from backend.video_generation import (
+    generation_meta_from_result,
+    normalize_generation_meta,
+    render_scene_shots_with_provider_policy,
+    sanitize_generation_error,
+    video_fallback_mode,
+    video_render_granularity,
+)
+from scripts.run_workflow import (
+    build_shot_plan,
+    generate_keyframe,
+    load_env_file,
+    render_clip_with_meta,
+    render_silent_visual_segment,
+    render_voice_track,
+    run_guarded,
+    wav_duration,
 )
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,12 @@ def _scene_uses_character(scene: dict[str, Any], *names: object) -> bool:
     return bool(wanted & scene_names)
 
 
-def _invalidate_character_scenes(project: dict[str, Any], character: dict[str, Any], changed_fields: list[str], *extra_names: object) -> None:
+def _invalidate_character_scenes(
+    project: dict[str, Any],
+    character: dict[str, Any],
+    changed_fields: list[str],
+    *extra_names: object,
+) -> None:
     names = [character.get("name"), *extra_names]
     changed_any = False
     for scene in project.get("scenes", []):
@@ -173,16 +178,33 @@ def _invalidate_character_scenes(project: dict[str, Any], character: dict[str, A
 
 def _mark_output_stale(project: dict[str, Any]) -> None:
     output = project.setdefault("output", {})
-    for key in {"final_video_path", "final_video_url", "subtitles_path", "subtitles_url", "subtitles_ass_path", "subtitles_ass_url"}:
+    for key in {
+        "final_video_path",
+        "final_video_url",
+        "subtitles_path",
+        "subtitles_url",
+        "subtitles_ass_path",
+        "subtitles_ass_url",
+    }:
         output[key] = ""
     output["status"] = "stale"
 
 
-def update_scene_asset(project_id: str, scene_order: int, kind: str, source_path: Path) -> dict[str, Any]:
+def update_scene_asset(
+    project_id: str, scene_order: int, kind: str, source_path: Path
+) -> dict[str, Any]:
     with project_lock(project_id):
-        from backend.project_runtime import load_project, _save_project_with_scene_event
+        from backend.project_runtime import _save_project_with_scene_event, load_project
+
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
 
@@ -200,7 +222,9 @@ def update_scene_asset(project_id: str, scene_order: int, kind: str, source_path
         if isinstance(versions, dict):
             versions[kind] = int(versions.get(kind, 0)) + 1
         has_dialogue = bool(str(scene.get("dialogue") or "").strip())
-        has_required_audio = (not has_dialogue) or scene_asset_file_exists(project_id, scene, "audio")
+        has_required_audio = (not has_dialogue) or scene_asset_file_exists(
+            project_id, scene, "audio"
+        )
         assets["status"] = (
             "completed"
             if scene_asset_file_exists(project_id, scene, "image")
@@ -218,12 +242,22 @@ def update_scene_consistency_meta(
     primary_reference_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     with project_lock(project_id):
-        from backend.project_runtime import load_project, _save_project_with_scene_event
+        from backend.project_runtime import _save_project_with_scene_event, load_project
+
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
-        scene["consistency_meta"] = deepcopy(consistency_meta) if isinstance(consistency_meta, dict) else {}
+        scene["consistency_meta"] = (
+            deepcopy(consistency_meta) if isinstance(consistency_meta, dict) else {}
+        )
         if isinstance(primary_reference_meta, dict):
             scene["primary_reference_meta"] = deepcopy(primary_reference_meta)
         return _save_project_with_scene_event(project, scene_order)
@@ -235,14 +269,23 @@ def update_scene_governance(
     governance: dict[str, Any] | None,
 ) -> dict[str, Any]:
     with project_lock(project_id):
-        from backend.project_runtime import load_project, _save_project_with_scene_event
         from backend.consistency_governance import _normalized_governance
+        from backend.project_runtime import _save_project_with_scene_event, load_project
 
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
-        scene["governance"] = deepcopy(governance) if isinstance(governance, dict) else _normalized_governance(scene)
+        scene["governance"] = (
+            deepcopy(governance) if isinstance(governance, dict) else _normalized_governance(scene)
+        )
         return _save_project_with_scene_event(project, scene_order)
 
 
@@ -253,24 +296,46 @@ def update_scene_generation_meta(
     shot_plan: dict[str, Any] | None,
 ) -> dict[str, Any]:
     with project_lock(project_id):
-        from backend.project_runtime import load_project, _save_project_with_scene_event
+        from backend.project_runtime import _save_project_with_scene_event, load_project
+
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
         scene["generation_meta"] = normalize_generation_meta(generation_meta)
-        current_shot_plan = scene.get("shot_plan") if isinstance(scene.get("shot_plan"), dict) else {}
-        next_shot_plan = deepcopy(shot_plan) if isinstance(shot_plan, dict) else build_shot_plan(scene)
+        current_shot_plan = (
+            scene.get("shot_plan") if isinstance(scene.get("shot_plan"), dict) else {}
+        )
+        next_shot_plan = (
+            deepcopy(shot_plan) if isinstance(shot_plan, dict) else build_shot_plan(scene)
+        )
         if current_shot_plan != next_shot_plan:
             scene["shot_plan"] = next_shot_plan
         return _save_project_with_scene_event(project, scene_order)
 
 
-def sync_scene_duration(project_id: str, scene_order: int, duration_seconds: float) -> dict[str, Any]:
+def sync_scene_duration(
+    project_id: str, scene_order: int, duration_seconds: float
+) -> dict[str, Any]:
     with project_lock(project_id):
-        from backend.project_runtime import load_project, _save_project_with_scene_event
+        from backend.project_runtime import _save_project_with_scene_event, load_project
+
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
         normalized = max(0.25, round(float(duration_seconds), 1))
@@ -282,13 +347,22 @@ def sync_scene_duration(project_id: str, scene_order: int, duration_seconds: flo
         return _save_project_with_scene_event(project, scene_order)
 
 
-def _evaluate_and_persist_scene_governance(project_id: str, scene_order: int, image_path: Path | None) -> dict[str, Any] | None:
+def _evaluate_and_persist_scene_governance(
+    project_id: str, scene_order: int, image_path: Path | None
+) -> dict[str, Any] | None:
     try:
         with project_lock(project_id):
             from backend.project_runtime import load_project
 
             project = load_project(project_id)
-            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if int(item.get("order", 0)) == scene_order
+                ),
+                None,
+            )
             if scene is None:
                 raise KeyError(f"Scene {scene_order} not found")
             prev_scene = next(
@@ -323,7 +397,9 @@ def _evaluate_and_persist_scene_governance(project_id: str, scene_order: int, im
         return None
 
 
-def _strict_video_context_error(scene: dict[str, Any] | None, scene_order: int, video_provider: str, exc: Exception) -> RuntimeError:
+def _strict_video_context_error(
+    scene: dict[str, Any] | None, scene_order: int, video_provider: str, exc: Exception
+) -> RuntimeError:
     scene_id = str((scene or {}).get("scene_id") or f"scene_{scene_order:03d}")
     provider = str(video_provider or "auto").strip() or "auto"
     error = sanitize_generation_error(exc, limit=240) or exc.__class__.__name__
@@ -363,7 +439,11 @@ def _render_shot_level_scene_clip(
                 scene_for_plan[key] = deepcopy(shot_plan_source[key])
     shot_plan = _scene_shot_plan(scene_for_plan)
     generation_meta = normalize_generation_meta(scene.get("generation_meta"))
-    existing_outputs = generation_meta.get("shot_outputs") if isinstance(generation_meta.get("shot_outputs"), list) else []
+    existing_outputs = (
+        generation_meta.get("shot_outputs")
+        if isinstance(generation_meta.get("shot_outputs"), list)
+        else []
+    )
 
     def fallback_renderer(shot_request: dict[str, Any], fallback_output_path: Path) -> Path:
         camera = shot_request.get("camera") if isinstance(shot_request.get("camera"), dict) else {}
@@ -408,10 +488,24 @@ def rerender_scene_image(project_id: str, scene_order: int) -> dict[str, Any]:
     load_env_file()
     try:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event, _capture_scene_snapshot_locked, apply_project_episode_pacing
             from backend.character_manager import scene_with_character_context
+            from backend.project_runtime import (
+                _append_scene_history,
+                _capture_scene_snapshot_locked,
+                _save_project_with_scene_event,
+                apply_project_episode_pacing,
+                load_project,
+            )
+
             project = load_project(project_id)
-            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if int(item.get("order", 0)) == scene_order
+                ),
+                None,
+            )
             if scene is None:
                 raise KeyError(f"Scene {scene_order} not found")
             _ensure_scene_renderable(scene, scene_order)
@@ -426,7 +520,12 @@ def rerender_scene_image(project_id: str, scene_order: int) -> dict[str, Any]:
             _save_project_with_scene_event(project, scene_order)
         image_path = generate_keyframe(scene_obj, directory, keyframe_provider)
         if getattr(scene_obj, "consistency_meta", None):
-            update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+            update_scene_consistency_meta(
+                project_id,
+                scene_order,
+                scene_obj.consistency_meta,
+                scene_obj.primary_reference_meta,
+            )
         result = update_scene_asset(project_id, scene_order, "image", image_path)
         with project_lock(project_id):
             project = load_project(project_id)
@@ -436,13 +535,27 @@ def rerender_scene_image(project_id: str, scene_order: int) -> dict[str, Any]:
     except Exception as exc:
         if "scene_obj" in locals() and getattr(scene_obj, "consistency_meta", None):
             try:
-                update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             except Exception as meta_exc:
-                print(f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}")
+                print(
+                    f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}"
+                )
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
-            _append_scene_history(project, scene_order, "rerender-image", "failed", f"重绘图失败：{exc}")
+            _append_scene_history(
+                project, scene_order, "rerender-image", "failed", f"重绘图失败：{exc}"
+            )
             _save_project_with_scene_event(project, scene_order)
         raise
 
@@ -452,10 +565,26 @@ def rerender_scene_audio(project_id: str, scene_order: int) -> dict[str, Any]:
     ffmpeg = get_ffmpeg_exe()
     try:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event, _capture_scene_snapshot_locked, apply_project_episode_pacing, project_subtitle_style, project_audio_style
             from backend.character_manager import scene_with_character_context
+            from backend.project_runtime import (
+                _append_scene_history,
+                _capture_scene_snapshot_locked,
+                _save_project_with_scene_event,
+                apply_project_episode_pacing,
+                load_project,
+                project_audio_style,
+                project_subtitle_style,
+            )
+
             project = load_project(project_id)
-            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if int(item.get("order", 0)) == scene_order
+                ),
+                None,
+            )
             if scene is None:
                 raise KeyError(f"Scene {scene_order} not found")
             _ensure_scene_renderable(scene, scene_order)
@@ -480,16 +609,28 @@ def rerender_scene_audio(project_id: str, scene_order: int) -> dict[str, Any]:
         )
         result = update_scene_asset(project_id, scene_order, "audio", voice_path)
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
             _append_scene_history(project, scene_order, "rerender-audio", "done", "重配音完成")
             _save_project_with_scene_event(project, scene_order)
         return result
     except Exception as exc:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
-            _append_scene_history(project, scene_order, "rerender-audio", "failed", f"重配音失败：{exc}")
+            _append_scene_history(
+                project, scene_order, "rerender-audio", "failed", f"重配音失败：{exc}"
+            )
             _save_project_with_scene_event(project, scene_order)
         raise
 
@@ -499,10 +640,26 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
     ffmpeg = get_ffmpeg_exe()
     try:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event, _capture_scene_snapshot_locked, apply_project_episode_pacing, project_subtitle_style, project_audio_style
             from backend.character_manager import scene_with_character_context
+            from backend.project_runtime import (
+                _append_scene_history,
+                _capture_scene_snapshot_locked,
+                _save_project_with_scene_event,
+                apply_project_episode_pacing,
+                load_project,
+                project_audio_style,
+                project_subtitle_style,
+            )
+
             project = load_project(project_id)
-            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if int(item.get("order", 0)) == scene_order
+                ),
+                None,
+            )
             if scene is None:
                 raise KeyError(f"Scene {scene_order} not found")
             _ensure_scene_renderable(scene, scene_order)
@@ -524,7 +681,12 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
         if image_path is None or not image_path.exists():
             image_path = generate_keyframe(scene_obj, directory, keyframe_provider)
             if getattr(scene_obj, "consistency_meta", None):
-                update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             update_scene_asset(project_id, scene_order, "image", image_path)
         audio_path, _ = render_voice_track(
             ffmpeg,
@@ -535,10 +697,15 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
             audio_style=audio_style,
         )
         update_scene_asset(project_id, scene_order, "audio", audio_path)
-        synced_duration = max(0.25, round(wav_duration(audio_path) if audio_path.exists() else scene_obj.duration, 1))
+        synced_duration = max(
+            0.25, round(wav_duration(audio_path) if audio_path.exists() else scene_obj.duration, 1)
+        )
         sync_scene_duration(project_id, scene_order, synced_duration)
         scene_obj.duration = synced_duration
-        clip_duration = max(scene_obj.duration, wav_duration(audio_path) if audio_path.exists() else scene_obj.duration)
+        clip_duration = max(
+            scene_obj.duration,
+            wav_duration(audio_path) if audio_path.exists() else scene_obj.duration,
+        )
         if video_render_granularity(project_settings=settings) == "shot":
             try:
                 result = _render_shot_level_scene_clip(
@@ -556,7 +723,9 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
                 )
             except Exception as exc:
                 if video_fallback_mode(video_provider) == "strict":
-                    raise _strict_video_context_error(scene, scene_order, video_provider, exc) from exc
+                    raise _strict_video_context_error(
+                        scene, scene_order, video_provider, exc
+                    ) from exc
                 raise
         else:
             try:
@@ -576,15 +745,28 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
                 )
             except Exception as exc:
                 if video_fallback_mode(video_provider) == "strict":
-                    raise _strict_video_context_error(scene, scene_order, video_provider, exc) from exc
+                    raise _strict_video_context_error(
+                        scene, scene_order, video_provider, exc
+                    ) from exc
                 raise
             update_scene_asset(project_id, scene_order, "video", clip_path)
             scene_for_plan = {**scene, "duration_seconds": clip_duration}
-            generation_meta = generation_meta_from_result(render_result, requested_provider=video_provider, fallback_mode=video_fallback_mode(video_provider))
-            result = update_scene_generation_meta(project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan))
+            generation_meta = generation_meta_from_result(
+                render_result,
+                requested_provider=video_provider,
+                fallback_mode=video_fallback_mode(video_provider),
+            )
+            result = update_scene_generation_meta(
+                project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan)
+            )
         _evaluate_and_persist_scene_governance(project_id, scene_order, image_path)
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
             _append_scene_history(project, scene_order, "rerender-video", "done", "重合成完成")
             result = _save_project_with_scene_event(project, scene_order)
@@ -592,13 +774,27 @@ def rerender_scene_video(project_id: str, scene_order: int) -> dict[str, Any]:
     except Exception as exc:
         if "scene_obj" in locals() and getattr(scene_obj, "consistency_meta", None):
             try:
-                update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             except Exception as meta_exc:
-                print(f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}")
+                print(
+                    f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}"
+                )
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
-            _append_scene_history(project, scene_order, "rerender-video", "failed", f"Video generation failed: {exc}")
+            _append_scene_history(
+                project, scene_order, "rerender-video", "failed", f"Video generation failed: {exc}"
+            )
         _save_project_with_scene_event(project, scene_order)
         raise
 
@@ -612,10 +808,26 @@ def rerender_scene_shot_video(project_id: str, scene_order: int, shot_id: str) -
     ffmpeg = get_ffmpeg_exe()
     try:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event, _capture_scene_snapshot_locked, apply_project_episode_pacing, project_subtitle_style, project_audio_style
             from backend.character_manager import scene_with_character_context
+            from backend.project_runtime import (
+                _append_scene_history,
+                _capture_scene_snapshot_locked,
+                _save_project_with_scene_event,
+                apply_project_episode_pacing,
+                load_project,
+                project_audio_style,
+                project_subtitle_style,
+            )
+
             project = load_project(project_id)
-            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if int(item.get("order", 0)) == scene_order
+                ),
+                None,
+            )
             if scene is None:
                 raise KeyError(f"Scene {scene_order} not found")
             _ensure_scene_renderable(scene, scene_order)
@@ -633,18 +845,33 @@ def rerender_scene_shot_video(project_id: str, scene_order: int, shot_id: str) -
             directory = scene_dir(project_id, scene["scene_id"])
             directory.mkdir(parents=True, exist_ok=True)
             shot_plan = _scene_shot_plan(render_scene_plan_source)
-            known_shot_ids = {str(shot.get("shot_id") or "").strip() for shot in shot_plan.get("shots", []) if isinstance(shot, dict)}
+            known_shot_ids = {
+                str(shot.get("shot_id") or "").strip()
+                for shot in shot_plan.get("shots", [])
+                if isinstance(shot, dict)
+            }
             if normalized_shot_id not in known_shot_ids:
                 raise KeyError(f"Shot {normalized_shot_id} not found")
             _capture_scene_snapshot_locked(project_id, scene_order, "rerender-shot-video", project)
-            _append_scene_history(project, scene_order, "rerender-shot-video", "running", f"开始重合成镜头 {normalized_shot_id}")
+            _append_scene_history(
+                project,
+                scene_order,
+                "rerender-shot-video",
+                "running",
+                f"开始重合成镜头 {normalized_shot_id}",
+            )
             _save_project_with_scene_event(project, scene_order)
 
         image_path = scene_latest_path(project_id, scene, "image")
         if image_path is None or not image_path.exists():
             image_path = generate_keyframe(scene_obj, directory, keyframe_provider)
             if getattr(scene_obj, "consistency_meta", None):
-                update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             update_scene_asset(project_id, scene_order, "image", image_path)
 
         audio_path = scene_latest_path(project_id, scene, "audio")
@@ -689,21 +916,50 @@ def rerender_scene_shot_video(project_id: str, scene_order: int, shot_id: str) -
             raise
         _evaluate_and_persist_scene_governance(project_id, scene_order, image_path)
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
-            _append_scene_history(project, scene_order, "rerender-shot-video", "done", f"镜头 {normalized_shot_id} 重合成完成")
+            _append_scene_history(
+                project,
+                scene_order,
+                "rerender-shot-video",
+                "done",
+                f"镜头 {normalized_shot_id} 重合成完成",
+            )
             result = _save_project_with_scene_event(project, scene_order)
         return result
     except Exception as exc:
         if "scene_obj" in locals() and getattr(scene_obj, "consistency_meta", None):
             try:
-                update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             except Exception as meta_exc:
-                print(f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}")
+                print(
+                    f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}"
+                )
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
-            _append_scene_history(project, scene_order, "rerender-shot-video", "failed", f"Shot video generation failed: {exc}")
+            _append_scene_history(
+                project,
+                scene_order,
+                "rerender-shot-video",
+                "failed",
+                f"Shot video generation failed: {exc}",
+            )
             _save_project_with_scene_event(project, scene_order)
         raise
 
@@ -713,10 +969,26 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
     ffmpeg = get_ffmpeg_exe()
     try:
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event, _capture_scene_snapshot_locked, apply_project_episode_pacing, project_subtitle_style, project_audio_style
             from backend.character_manager import scene_with_character_context
+            from backend.project_runtime import (
+                _append_scene_history,
+                _capture_scene_snapshot_locked,
+                _save_project_with_scene_event,
+                apply_project_episode_pacing,
+                load_project,
+                project_audio_style,
+                project_subtitle_style,
+            )
+
             project = load_project(project_id)
-            scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+            scene = next(
+                (
+                    item
+                    for item in project.get("scenes", [])
+                    if int(item.get("order", 0)) == scene_order
+                ),
+                None,
+            )
             if scene is None:
                 raise KeyError(f"Scene {scene_order} not found")
             _ensure_scene_renderable(scene, scene_order)
@@ -737,7 +1009,12 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
 
         image_path = generate_keyframe(scene_obj, directory, keyframe_provider)
         if getattr(scene_obj, "consistency_meta", None):
-            update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+            update_scene_consistency_meta(
+                project_id,
+                scene_order,
+                scene_obj.consistency_meta,
+                scene_obj.primary_reference_meta,
+            )
         update_scene_asset(project_id, scene_order, "image", image_path)
 
         voice_path, voice_duration = render_voice_track(
@@ -768,7 +1045,9 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
                 )
             except Exception as exc:
                 if video_fallback_mode(video_provider) == "strict":
-                    raise _strict_video_context_error(scene, scene_order, video_provider, exc) from exc
+                    raise _strict_video_context_error(
+                        scene, scene_order, video_provider, exc
+                    ) from exc
                 raise
         else:
             try:
@@ -788,30 +1067,58 @@ def generate_scene_assets(project_id: str, scene_order: int) -> dict[str, Any]:
                 )
             except Exception as exc:
                 if video_fallback_mode(video_provider) == "strict":
-                    raise _strict_video_context_error(scene, scene_order, video_provider, exc) from exc
+                    raise _strict_video_context_error(
+                        scene, scene_order, video_provider, exc
+                    ) from exc
                 raise
             update_scene_asset(project_id, scene_order, "video", clip_path)
             scene_for_plan = {**scene, "duration_seconds": clip_duration}
-            generation_meta = generation_meta_from_result(render_result, requested_provider=video_provider, fallback_mode=video_fallback_mode(video_provider))
-            update_scene_generation_meta(project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan))
+            generation_meta = generation_meta_from_result(
+                render_result,
+                requested_provider=video_provider,
+                fallback_mode=video_fallback_mode(video_provider),
+            )
+            update_scene_generation_meta(
+                project_id, scene_order, generation_meta, build_shot_plan(scene_for_plan)
+            )
         _evaluate_and_persist_scene_governance(project_id, scene_order, image_path)
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
             _append_scene_history(project, scene_order, "rebuild", "done", "整格重跑完成")
             _save_project_with_scene_event(project, scene_order)
         from backend.project_runtime import load_project
+
         return load_project(project_id)
     except Exception as exc:
         if "scene_obj" in locals() and getattr(scene_obj, "consistency_meta", None):
             try:
-                update_scene_consistency_meta(project_id, scene_order, scene_obj.consistency_meta, scene_obj.primary_reference_meta)
+                update_scene_consistency_meta(
+                    project_id,
+                    scene_order,
+                    scene_obj.consistency_meta,
+                    scene_obj.primary_reference_meta,
+                )
             except Exception as meta_exc:
-                print(f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}")
+                print(
+                    f"[consistency] failed to persist scene meta for {project_id}#{scene_order}: {meta_exc}"
+                )
         with project_lock(project_id):
-            from backend.project_runtime import load_project, _append_scene_history, _save_project_with_scene_event
+            from backend.project_runtime import (
+                _append_scene_history,
+                _save_project_with_scene_event,
+                load_project,
+            )
+
             project = load_project(project_id)
-            _append_scene_history(project, scene_order, "rebuild", "failed", f"Video generation failed: {exc}")
+            _append_scene_history(
+                project, scene_order, "rebuild", "failed", f"Video generation failed: {exc}"
+            )
             _save_project_with_scene_event(project, scene_order)
         raise
 

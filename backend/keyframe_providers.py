@@ -6,6 +6,7 @@ Supports:
 
 This allows keyframe generation without a GPU server.
 """
+
 from __future__ import annotations
 
 import base64
@@ -41,8 +42,12 @@ def generate_keyframe_dashscope(
     Uses the same Moyin relay as video generation, or direct DashScope endpoint.
     Returns the output path on success, None on failure.
     """
-    api_key = api_key or _env("KEYFRAME_T2I_API_KEY") or _env("XL_API_KEY") or _env("DASHSCOPE_API_KEY")
-    base_url = base_url or _env("KEYFRAME_T2I_BASE_URL") or _env("XL_BASE_URL") or "https://memefast.top"
+    api_key = (
+        api_key or _env("KEYFRAME_T2I_API_KEY") or _env("XL_API_KEY") or _env("DASHSCOPE_API_KEY")
+    )
+    base_url = (
+        base_url or _env("KEYFRAME_T2I_BASE_URL") or _env("XL_BASE_URL") or "https://memefast.top"
+    )
     model = model or _env("KEYFRAME_T2I_MODEL") or "wanx2.1-t2i-turbo"
 
     if not api_key:
@@ -50,7 +55,10 @@ def generate_keyframe_dashscope(
         return None
 
     # DashScope text-to-image endpoint
-    submit_path = _env("KEYFRAME_T2I_SUBMIT_PATH") or "/alibailian/api/v1/services/aigc/text2image/image-synthesis"
+    submit_path = (
+        _env("KEYFRAME_T2I_SUBMIT_PATH")
+        or "/alibailian/api/v1/services/aigc/text2image/image-synthesis"
+    )
     poll_path = _env("KEYFRAME_T2I_POLL_PATH") or "/alibailian/api/v1/tasks/{task_id}"
     timeout_s = int(_env("KEYFRAME_T2I_TIMEOUT") or "120")
 
@@ -77,7 +85,9 @@ def generate_keyframe_dashscope(
     root = base_url.rstrip("/")
     submit_url = f"{root}{submit_path}"
 
-    logger.info("[keyframe-cloud] Submitting text-to-image: model=%s, size=%dx%d", model, width, height)
+    logger.info(
+        "[keyframe-cloud] Submitting text-to-image: model=%s, size=%dx%d", model, width, height
+    )
 
     try:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -122,7 +132,11 @@ def generate_keyframe_dashscope(
             continue
 
         poll_output = poll_result.get("output", {})
-        status = str(poll_output.get("task_status") or "").upper() if isinstance(poll_output, dict) else ""
+        status = (
+            str(poll_output.get("task_status") or "").upper()
+            if isinstance(poll_output, dict)
+            else ""
+        )
 
         if status == "SUCCEEDED":
             results = poll_output.get("results", []) if isinstance(poll_output, dict) else []
@@ -150,7 +164,11 @@ def _download_image(url: str, output_path: Path | None) -> Path | None:
         with urlopen(url, timeout=60) as resp:
             output_path.write_bytes(resp.read())
         if output_path.exists() and output_path.stat().st_size > 0:
-            logger.info("[keyframe-cloud] Downloaded keyframe: %s (%d KB)", output_path.name, output_path.stat().st_size // 1024)
+            logger.info(
+                "[keyframe-cloud] Downloaded keyframe: %s (%d KB)",
+                output_path.name,
+                output_path.stat().st_size // 1024,
+            )
             return output_path
     except Exception as exc:
         logger.error("[keyframe-cloud] Download failed: %s", exc)

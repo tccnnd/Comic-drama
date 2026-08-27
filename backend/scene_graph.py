@@ -1,19 +1,19 @@
 """Scene graph, timeline, production bible, and director recommendation logic."""
+
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
 
-from scripts.run_workflow import (
-    StoryScene,
-    build_scene_graph,
-    build_canonical_timeline,
-)
-
 from backend.project_models import (
     _scene_from_payload,
     project_relative_file_exists,
     workspace_url,
+)
+from scripts.run_workflow import (
+    StoryScene,
+    build_canonical_timeline,
+    build_scene_graph,
 )
 
 
@@ -21,7 +21,9 @@ def _scene_subtitle_path(scene_order: int, scene_id: str) -> str:
     return f"scenes/{scene_id}/scene_{scene_order:02d}_dialogue.srt"
 
 
-def _scene_audio_ref(scene: StoryScene | dict[str, Any], project_id: str, scene_order: int, scene_id: str) -> dict[str, Any]:
+def _scene_audio_ref(
+    scene: StoryScene | dict[str, Any], project_id: str, scene_order: int, scene_id: str
+) -> dict[str, Any]:
     payload = scene if isinstance(scene, dict) else {}
     assets = payload.get("assets", {}) if isinstance(payload, dict) else {}
     audio_path = ""
@@ -33,7 +35,12 @@ def _scene_audio_ref(scene: StoryScene | dict[str, Any], project_id: str, scene_
         audio_path = str(scene.reference_audio_path or "").strip()
     if not audio_path and isinstance(payload, dict):
         audio_path = str(payload.get("reference_audio_path") or "").strip()
-    if not audio_url and project_id and audio_path and project_relative_file_exists(project_id, audio_path):
+    if (
+        not audio_url
+        and project_id
+        and audio_path
+        and project_relative_file_exists(project_id, audio_path)
+    ):
         audio_url = workspace_url(project_id, audio_path)
     return {
         "kind": "scene_audio",
@@ -41,15 +48,23 @@ def _scene_audio_ref(scene: StoryScene | dict[str, Any], project_id: str, scene_
         "scene_order": scene_order,
         "path": audio_path,
         "url": audio_url,
-        "reference_audio_path": str(getattr(scene, "reference_audio_path", "") or payload.get("reference_audio_path") or "").strip(),
+        "reference_audio_path": str(
+            getattr(scene, "reference_audio_path", "") or payload.get("reference_audio_path") or ""
+        ).strip(),
         "voice_id": str(getattr(scene, "voice_id", "") or payload.get("voice_id") or "").strip(),
-        "voice_profile": str(getattr(scene, "voice_profile", "") or payload.get("voice_profile") or "").strip(),
+        "voice_profile": str(
+            getattr(scene, "voice_profile", "") or payload.get("voice_profile") or ""
+        ).strip(),
     }
 
 
 def _scene_subtitle_ref(project_id: str, scene_order: int, scene_id: str) -> dict[str, Any]:
     path = _scene_subtitle_path(scene_order, scene_id)
-    url = workspace_url(project_id, path) if project_id and project_relative_file_exists(project_id, path) else ""
+    url = (
+        workspace_url(project_id, path)
+        if project_id and project_relative_file_exists(project_id, path)
+        else ""
+    )
     return {
         "kind": "scene_subtitle",
         "scene_id": scene_id,
@@ -176,10 +191,18 @@ def _scene_graph_payload(
     else:
         scene_obj = scene
         payload_scene = {}
-    scene_order = int(payload_scene.get("order") or order) if isinstance(payload_scene, dict) else order
-    scene_id = str(payload_scene.get("scene_id") or f"scene_{scene_order:03d}") if isinstance(payload_scene, dict) else f"scene_{scene_order:03d}"
+    scene_order = (
+        int(payload_scene.get("order") or order) if isinstance(payload_scene, dict) else order
+    )
+    scene_id = (
+        str(payload_scene.get("scene_id") or f"scene_{scene_order:03d}")
+        if isinstance(payload_scene, dict)
+        else f"scene_{scene_order:03d}"
+    )
     graph = deepcopy(build_scene_graph(scene_obj))
-    graph = _apply_shot_overrides_to_graph(graph, payload_scene.get("shot_overrides") if isinstance(payload_scene, dict) else [])
+    graph = _apply_shot_overrides_to_graph(
+        graph, payload_scene.get("shot_overrides") if isinstance(payload_scene, dict) else []
+    )
     audio_ref = _scene_audio_ref(scene_obj, project_id, scene_order, scene_id)
     subtitle_ref = _scene_subtitle_ref(project_id, scene_order, scene_id)
     shots: list[dict[str, Any]] = []
@@ -197,10 +220,21 @@ def _scene_graph_payload(
         "speed": float(scene_obj.camera_speed or 1.0),
         "shot_count": len(shots),
     }
-    graph["production_bible"] = deepcopy(payload_scene.get("production_bible") or {}) if isinstance(payload_scene, dict) else {}
-    graph["temporal_spec"] = deepcopy(payload_scene.get("temporal_spec") or {}) if isinstance(payload_scene, dict) else {}
+    graph["production_bible"] = (
+        deepcopy(payload_scene.get("production_bible") or {})
+        if isinstance(payload_scene, dict)
+        else {}
+    )
+    graph["temporal_spec"] = (
+        deepcopy(payload_scene.get("temporal_spec") or {})
+        if isinstance(payload_scene, dict)
+        else {}
+    )
     if isinstance(payload_scene, dict) and payload_scene.get("shot_overrides"):
-        total_duration = float(graph["camera_track"].get("duration_seconds") or sum(float(shot.get("duration_seconds") or 0.0) for shot in shots))
+        total_duration = float(
+            graph["camera_track"].get("duration_seconds")
+            or sum(float(shot.get("duration_seconds") or 0.0) for shot in shots)
+        )
         payload_scene["duration_seconds"] = round(total_duration, 3)
     return graph
 
@@ -240,12 +274,18 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
             {
                 "name": str(character.get("name") or "").strip(),
                 "char_id": str(character.get("char_id") or "").strip(),
-                "description": str(character.get("description") or character.get("summary") or "").strip(),
+                "description": str(
+                    character.get("description") or character.get("summary") or ""
+                ).strip(),
                 "appearance_core": str(character.get("appearance_core") or "").strip(),
                 "clothing_style": str(character.get("clothing_style") or "").strip(),
                 "negative_constraints": str(character.get("negative_constraints") or "").strip(),
                 "reference_image_path": str(character.get("reference_image_path") or "").strip(),
-                "reference_meta": deepcopy(character.get("reference_meta")) if isinstance(character.get("reference_meta"), dict) else {},
+                "reference_meta": (
+                    deepcopy(character.get("reference_meta"))
+                    if isinstance(character.get("reference_meta"), dict)
+                    else {}
+                ),
             }
         )
     props: list[dict[str, Any]] = []
@@ -257,10 +297,22 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
                 "prop_id": str(prop.get("prop_id") or prop.get("id") or "").strip(),
                 "name": str(prop.get("name") or "").strip(),
                 "description": str(prop.get("description") or prop.get("summary") or "").strip(),
-                "owner_characters": [str(name).strip() for name in prop.get("owner_characters") or [] if str(name).strip()],
-                "scenes": [str(scene_id).strip() for scene_id in prop.get("scenes") or [] if str(scene_id).strip()],
+                "owner_characters": [
+                    str(name).strip()
+                    for name in prop.get("owner_characters") or []
+                    if str(name).strip()
+                ],
+                "scenes": [
+                    str(scene_id).strip()
+                    for scene_id in prop.get("scenes") or []
+                    if str(scene_id).strip()
+                ],
                 "reference_image_path": str(prop.get("reference_image_path") or "").strip(),
-                "reference_meta": deepcopy(prop.get("reference_meta")) if isinstance(prop.get("reference_meta"), dict) else {},
+                "reference_meta": (
+                    deepcopy(prop.get("reference_meta"))
+                    if isinstance(prop.get("reference_meta"), dict)
+                    else {}
+                ),
             }
         )
     scenes: list[dict[str, Any]] = []
@@ -272,12 +324,18 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
                 "scene_id": str(scene.get("scene_id") or "").strip(),
                 "order": int(scene.get("order") or len(scenes) + 1),
                 "title": str(scene.get("title") or "").strip(),
-                "emotion_tone": str(scene.get("emotion_tone") or scene.get("emotion") or "").strip(),
+                "emotion_tone": str(
+                    scene.get("emotion_tone") or scene.get("emotion") or ""
+                ).strip(),
                 "pacing": str(scene.get("pacing") or "").strip(),
                 "scene_intent": str(scene.get("scene_intent") or "").strip(),
                 "subject_focus": str(scene.get("subject_focus") or "").strip(),
-                "characters": [str(name).strip() for name in scene.get("characters") or [] if str(name).strip()],
-                "props": [str(name).strip() for name in scene.get("props") or [] if str(name).strip()],
+                "characters": [
+                    str(name).strip() for name in scene.get("characters") or [] if str(name).strip()
+                ],
+                "props": [
+                    str(name).strip() for name in scene.get("props") or [] if str(name).strip()
+                ],
             }
         )
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
@@ -302,7 +360,9 @@ def build_production_bible(project: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def scene_production_bible(project: dict[str, Any], scene: dict[str, Any], refs: list[dict[str, Any]]) -> dict[str, Any]:
+def scene_production_bible(
+    project: dict[str, Any], scene: dict[str, Any], refs: list[dict[str, Any]]
+) -> dict[str, Any]:
     bible = build_production_bible(project)
     scene_order = int(scene.get("order") or 0)
     bible["current_scene"] = {
@@ -339,6 +399,7 @@ def _director_text(scene: dict[str, Any]) -> str:
 
 def _ensure_audio_manifest(scene: dict[str, Any]) -> dict[str, Any]:
     from backend.project_models import default_drama_config
+
     default_manifest = deepcopy(default_drama_config()["audio_manifest"])
     manifest = scene.get("audio_manifest")
     if not isinstance(manifest, dict):
@@ -354,7 +415,9 @@ def _ensure_audio_manifest(scene: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def apply_director_recommendation(scene: dict[str, Any], *, preserve_explicit: bool = True) -> dict[str, Any]:
+def apply_director_recommendation(
+    scene: dict[str, Any], *, preserve_explicit: bool = True
+) -> dict[str, Any]:
     text = _director_text(scene)
     manifest = _ensure_audio_manifest(scene)
     current_camera = str(scene.get("camera_movement") or "").strip()
@@ -362,19 +425,89 @@ def apply_director_recommendation(scene: dict[str, Any], *, preserve_explicit: b
     trigger = manifest.setdefault("sfx_trigger", {})
 
     impact_tokens = (
-        "巴掌", "耳光", "掌掴", "拍", "拍桌", "办公桌", "巨响", "啪嗒", "掉", "掉落",
-        "落地", "钢笔", "打脸", "打飞", "拳", "踢", "撞", "砸", "雷", "闪电",
-        "惊雷", "爆炸", "刺入", "拔剑", "刀光", "震惊", "怎么可能", "不可能", "杀意", "背叛",
-        "怒吼", "吐血", "跪下", "slap", "hit", "impact", "thunder", "boom",
+        "巴掌",
+        "耳光",
+        "掌掴",
+        "拍",
+        "拍桌",
+        "办公桌",
+        "巨响",
+        "啪嗒",
+        "掉",
+        "掉落",
+        "落地",
+        "钢笔",
+        "打脸",
+        "打飞",
+        "拳",
+        "踢",
+        "撞",
+        "砸",
+        "雷",
+        "闪电",
+        "惊雷",
+        "爆炸",
+        "刺入",
+        "拔剑",
+        "刀光",
+        "震惊",
+        "怎么可能",
+        "不可能",
+        "杀意",
+        "背叛",
+        "怒吼",
+        "吐血",
+        "跪下",
+        "slap",
+        "hit",
+        "impact",
+        "thunder",
+        "boom",
     )
     melancholy_tokens = (
-        "内心", "独白", "回忆", "悲伤", "沉默", "雨夜", "孤独", "低沉", "叹息", "绝望",
-        "落泪", "眼泪", "苦笑", "melancholy", "sad", "memory",
+        "内心",
+        "独白",
+        "回忆",
+        "悲伤",
+        "沉默",
+        "雨夜",
+        "孤独",
+        "低沉",
+        "叹息",
+        "绝望",
+        "落泪",
+        "眼泪",
+        "苦笑",
+        "melancholy",
+        "sad",
+        "memory",
     )
     establishing_tokens = (
-        "全景", "远景", "会议室", "顶层", "宫殿", "大殿", "推开", "木门", "西装", "全场",
-        "董事", "山门", "建筑", "第一次登场", "初次登场", "登场", "全身", "高大", "城门", "华山",
-        "宗门", "山巅", "establishing", "wide shot", "full body",
+        "全景",
+        "远景",
+        "会议室",
+        "顶层",
+        "宫殿",
+        "大殿",
+        "推开",
+        "木门",
+        "西装",
+        "全场",
+        "董事",
+        "山门",
+        "建筑",
+        "第一次登场",
+        "初次登场",
+        "登场",
+        "全身",
+        "高大",
+        "城门",
+        "华山",
+        "宗门",
+        "山巅",
+        "establishing",
+        "wide shot",
+        "full body",
     )
 
     recommendation = ""
@@ -386,8 +519,16 @@ def apply_director_recommendation(scene: dict[str, Any], *, preserve_explicit: b
         recommendation = "establishing_tilt"
 
     auto_cameras = {
-        "", "auto", "static", "slow_push_in", "slow_zoom_out",
-        "pan_left", "pan_right", "tilt_down", "tilt_up", "dramatic_reveal",
+        "",
+        "auto",
+        "static",
+        "slow_push_in",
+        "slow_zoom_out",
+        "pan_left",
+        "pan_right",
+        "tilt_down",
+        "tilt_up",
+        "dramatic_reveal",
     }
     if recommendation and (not preserve_explicit or current_camera in auto_cameras):
         scene["camera_movement"] = recommendation
@@ -403,16 +544,22 @@ def apply_director_recommendation(scene: dict[str, Any], *, preserve_explicit: b
         if not trigger.get("file"):
             if any(token in text for token in ("雷", "闪电", "惊雷", "thunder")):
                 trigger["file"] = "thunder"
-            elif any(token in text for token in ("拍", "拍桌", "办公桌", "巨响", "撞门", "爆炸", "boom")):
+            elif any(
+                token in text for token in ("拍", "拍桌", "办公桌", "巨响", "撞门", "爆炸", "boom")
+            ):
                 trigger["file"] = "boom"
-            elif any(token in text for token in ("巴掌", "耳光", "掌掴", "扇耳光", "扇巴掌", "slap")):
+            elif any(
+                token in text for token in ("巴掌", "耳光", "掌掴", "扇耳光", "扇巴掌", "slap")
+            ):
                 trigger["file"] = "slap"
             elif any(token in text for token in ("啪嗒", "掉", "掉落", "落地", "钢笔", "drop")):
                 trigger["file"] = "drop"
             else:
                 trigger["file"] = "hit"
         if not trigger.get("timestamp_ms"):
-            if any(token in text for token in ("啪嗒", "掉", "掉落", "落地", "钢笔", "推开", "开门")):
+            if any(
+                token in text for token in ("啪嗒", "掉", "掉落", "落地", "钢笔", "推开", "开门")
+            ):
                 trigger["timestamp_ms"] = 350
             else:
                 trigger["timestamp_ms"] = 1200

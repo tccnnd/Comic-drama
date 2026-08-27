@@ -2,7 +2,12 @@
 
 import json
 
-from scripts.prototype_quality_scorecard import build_scorecard, build_project_entries, summarize_entries, summarize_scorecard
+from scripts.prototype_quality_scorecard import (
+    build_project_entries,
+    build_scorecard,
+    summarize_entries,
+    summarize_scorecard,
+)
 
 
 def _project_payload(project_id: str = "project_a") -> dict:
@@ -13,7 +18,12 @@ def _project_payload(project_id: str = "project_a") -> dict:
                 "scene_id": "scene_001",
                 "order": 1,
                 "title": "Pressure dialogue",
-                "assets": {"image_url": "/scene.png", "image_path": "out/scene.png", "video_url": "/scene.mp4", "video_path": "out/scene.mp4"},
+                "assets": {
+                    "image_url": "/scene.png",
+                    "image_path": "out/scene.png",
+                    "video_url": "/scene.mp4",
+                    "video_path": "out/scene.mp4",
+                },
                 "generation_meta": {
                     "provider_id": "doubao",
                     "provider_label": "Doubao",
@@ -55,7 +65,10 @@ def _project_payload(project_id: str = "project_a") -> dict:
                                 "gap": {"reason": "no_matching_prototype"},
                                 "constraints": {"hard": [], "soft": [], "guidelines": []},
                             },
-                            "visual_content": {"_source": "rules", "shot_description": "quiet insert"},
+                            "visual_content": {
+                                "_source": "rules",
+                                "shot_description": "quiet insert",
+                            },
                         },
                     ]
                 },
@@ -76,7 +89,10 @@ def test_build_project_entries_extracts_scorecard_fields():
 
     assert len(entries) == 2
     locked = entries[0]
-    assert locked["entry_id"] == "project_a:scene_001:scene_001_shot_01:prototype_lock:dialogue_pressure_two_shot"
+    assert (
+        locked["entry_id"]
+        == "project_a:scene_001:scene_001_shot_01:prototype_lock:dialogue_pressure_two_shot"
+    )
     assert locked["variant"] == "prototype_lock"
     assert locked["prototype_id"] == "dialogue_pressure_two_shot"
     assert locked["constraints"]["hard"] == ["preserve_eyelines"]
@@ -135,8 +151,6 @@ def test_build_scorecard_reads_workspace_projects(tmp_path):
     }
 
 
-
-
 def test_scorecard_counts_video_path_only_as_scoreable():
     payload = _project_payload()
     assets = payload["scenes"][0]["assets"]
@@ -149,6 +163,7 @@ def test_scorecard_counts_video_path_only_as_scoreable():
     assert entries[0]["output"]["video_path"] == "local/video.mp4"
     assert summary["scoreable_entries"] == 2
     assert summary["missing_visual_evidence"] == 0
+
 
 def test_summarize_scorecard_reads_filled_scorecard(tmp_path):
     entries = build_project_entries(_project_payload())
@@ -167,5 +182,3 @@ def test_legacy_project_without_shot_plan_has_empty_scorecard():
     entries = build_project_entries({"project_id": "legacy", "scenes": [{"order": 1}]})
     assert entries == []
     assert summarize_entries(entries)["total_entries"] == 0
-
-

@@ -5,17 +5,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-import uvicorn
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import tts_engines
-
 
 PROVIDER_VOICE_HINTS = {
     "cosyvoice": "Xiaoxiao",

@@ -9,8 +9,8 @@ import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 try:
     import edge_tts
@@ -23,7 +23,16 @@ except ImportError:  # optional dependency
     pyttsx3 = None
 
 
-SUPPORTED_ENGINES = {"auto", "edge", "local", "silent", "cosyvoice", "gpt_sovits", "fish", "indextts"}
+SUPPORTED_ENGINES = {
+    "auto",
+    "edge",
+    "local",
+    "silent",
+    "cosyvoice",
+    "gpt_sovits",
+    "fish",
+    "indextts",
+}
 EXTERNAL_PROVIDER_ENV = {
     "cosyvoice": "COSYVOICE_TTS_URL",
     "gpt_sovits": "GPT_SOVITS_TTS_URL",
@@ -136,9 +145,7 @@ def provider_url(engine: str) -> str:
 
 def configured_external_providers() -> dict[str, str]:
     return {
-        engine: provider_url(engine)
-        for engine in EXTERNAL_PROVIDER_ENV
-        if provider_url(engine)
+        engine: provider_url(engine) for engine in EXTERNAL_PROVIDER_ENV if provider_url(engine)
     }
 
 
@@ -203,7 +210,9 @@ def synthesize_edge_tts(
     volume: float = 1.0,
     pitch: float = 0.0,
 ) -> None:
-    asyncio.run(synthesize_edge_tts_async(text, out_path, voice, rate=rate, volume=volume, pitch=pitch))
+    asyncio.run(
+        synthesize_edge_tts_async(text, out_path, voice, rate=rate, volume=volume, pitch=pitch)
+    )
 
 
 def local_tts_engine(preferred_voice: str = "", rate_scale: float = 1.0, volume_scale: float = 1.0):
@@ -285,7 +294,13 @@ def synthesize_local_tts(
 
     if os.name != "nt":
         raise RuntimeError("Local TTS failed and no platform fallback is available")
-    synthesize_windows_sapi_tts(text, out_path, preferred_voice=preferred_voice, rate_scale=rate_scale, volume_scale=volume_scale)
+    synthesize_windows_sapi_tts(
+        text,
+        out_path,
+        preferred_voice=preferred_voice,
+        rate_scale=rate_scale,
+        volume_scale=volume_scale,
+    )
     if not valid_audio_file(out_path):
         raise RuntimeError("Windows SAPI produced an empty or unusable audio file")
 
@@ -331,9 +346,13 @@ def synthesize_external_tts(
                     break
         if ref_path.is_file():
             reference_audio_base64 = base64.b64encode(ref_path.read_bytes()).decode("ascii")
-            print(f"[tts] {normalized} reference audio loaded: {ref_path} ({ref_path.stat().st_size // 1024}KB, b64={len(reference_audio_base64)} chars)")
+            print(
+                f"[tts] {normalized} reference audio loaded: {ref_path} ({ref_path.stat().st_size // 1024}KB, b64={len(reference_audio_base64)} chars)"
+            )
         else:
-            print(f"[tts] {normalized} reference audio NOT FOUND: tried {reference_audio_path} → {ref_path}")
+            print(
+                f"[tts] {normalized} reference audio NOT FOUND: tried {reference_audio_path} → {ref_path}"
+            )
     payload = {
         "text": text,
         "voice": voice,
@@ -362,7 +381,9 @@ def synthesize_external_tts(
             body = response.read()
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         if is_local_provider_endpoint(endpoint) and os.name == "nt":
-            print(f"[tts] {normalized} local provider unreachable, using direct SAPI fallback: {exc}")
+            print(
+                f"[tts] {normalized} local provider unreachable, using direct SAPI fallback: {exc}"
+            )
             synthesize_windows_sapi_tts(
                 text,
                 out_path,
@@ -376,7 +397,9 @@ def synthesize_external_tts(
 
     if not body:
         if is_local_provider_endpoint(endpoint) and os.name == "nt":
-            print(f"[tts] {normalized} local provider returned an empty body, using direct SAPI fallback")
+            print(
+                f"[tts] {normalized} local provider returned an empty body, using direct SAPI fallback"
+            )
             synthesize_windows_sapi_tts(
                 text,
                 out_path,
@@ -394,14 +417,18 @@ def synthesize_external_tts(
         try:
             parsed = json.loads(body.decode("utf-8"))
         except Exception as exc:
-            raise RuntimeError(f"{normalized} returned unsupported content type: {content_type or 'unknown'}") from exc
+            raise RuntimeError(
+                f"{normalized} returned unsupported content type: {content_type or 'unknown'}"
+            ) from exc
 
         audio_base64 = str(parsed.get("audio_base64") or parsed.get("audio") or "").strip()
         if audio_base64:
             out_path.write_bytes(base64.b64decode(audio_base64))
         else:
             if is_local_provider_endpoint(endpoint) and os.name == "nt":
-                print(f"[tts] {normalized} local provider returned JSON without audio, using direct SAPI fallback")
+                print(
+                    f"[tts] {normalized} local provider returned JSON without audio, using direct SAPI fallback"
+                )
                 synthesize_windows_sapi_tts(
                     text,
                     out_path,
@@ -418,10 +445,13 @@ def synthesize_external_tts(
 
     # Post-process with ffmpeg: apply pitch shift and volume adjustment
     # OmniVoice doesn't support these natively, so we do it after generation
-    needs_postprocess = (pitch != 0.0 and abs(pitch) > 0.5) or (volume != 1.0 and abs(volume - 1.0) > 0.05)
+    needs_postprocess = (pitch != 0.0 and abs(pitch) > 0.5) or (
+        volume != 1.0 and abs(volume - 1.0) > 0.05
+    )
     if needs_postprocess and valid_audio_file(out_path):
         try:
             from backend.project_models import get_ffmpeg_exe
+
             ffmpeg_exe = get_ffmpeg_exe()
             filters = []
             # Pitch shift using asetrate + aresample (semitones to rate ratio)
@@ -435,12 +465,22 @@ def synthesize_external_tts(
                 filters.append(f"volume={volume}")
             if filters:
                 import subprocess as _sp
+
                 tmp_path = out_path.with_suffix(".tmp.wav")
                 out_path.rename(tmp_path)
                 cmd = [
-                    ffmpeg_exe, "-y", "-i", str(tmp_path),
-                    "-af", ",".join(filters),
-                    "-acodec", "pcm_s16le", "-ar", "24000", "-ac", "1",
+                    ffmpeg_exe,
+                    "-y",
+                    "-i",
+                    str(tmp_path),
+                    "-af",
+                    ",".join(filters),
+                    "-acodec",
+                    "pcm_s16le",
+                    "-ar",
+                    "24000",
+                    "-ac",
+                    "1",
                     str(out_path),
                 ]
                 _sp.run(cmd, capture_output=True, timeout=15)
@@ -501,7 +541,9 @@ def synthesize_preview(
                     pitch=pitch,
                     volume=volume,
                 )
-                return TTSResult(ext_path, candidate, requested, fallback=bool(warnings), warnings=warnings)
+                return TTSResult(
+                    ext_path, candidate, requested, fallback=bool(warnings), warnings=warnings
+                )
             except Exception as exc:
                 warnings.append(f"{candidate}: {exc}")
                 if ext_path.exists():
@@ -511,7 +553,9 @@ def synthesize_preview(
             edge_path = output_dir / f"{stem}.mp3"
             try:
                 synthesize_edge_tts(text, edge_path, voice, rate=rate, volume=volume, pitch=pitch)
-                return TTSResult(edge_path, "edge", requested, fallback=bool(warnings), warnings=warnings)
+                return TTSResult(
+                    edge_path, "edge", requested, fallback=bool(warnings), warnings=warnings
+                )
             except Exception as exc:
                 warnings.append(f"edge: {exc}")
                 if edge_path.exists():
@@ -520,8 +564,12 @@ def synthesize_preview(
         if candidate == "local":
             local_path = output_dir / f"{stem}.wav"
             try:
-                synthesize_local_tts(text, local_path, preferred_voice=voice, rate_scale=rate, volume_scale=volume)
-                return TTSResult(local_path, "local", requested, fallback=bool(warnings), warnings=warnings)
+                synthesize_local_tts(
+                    text, local_path, preferred_voice=voice, rate_scale=rate, volume_scale=volume
+                )
+                return TTSResult(
+                    local_path, "local", requested, fallback=bool(warnings), warnings=warnings
+                )
             except Exception as exc:
                 warnings.append(f"local: {exc}")
                 if local_path.exists():

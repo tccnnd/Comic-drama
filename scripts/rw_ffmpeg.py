@@ -29,7 +29,10 @@ def render_timeout(duration_seconds: float) -> int:
 
 
 def concat_timeout(item_count: int) -> int:
-    return max(DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_concat"], min(900, DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_concat"] + max(0, item_count) * 10))
+    return max(
+        DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_concat"],
+        min(900, DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_concat"] + max(0, item_count) * 10),
+    )
 
 
 def _stderr_excerpt(stderr: str | None, limit: int = 4000) -> str:
@@ -62,7 +65,11 @@ def run_guarded(
         except subprocess.TimeoutExpired:
             proc.kill()
             stdout, stderr = proc.communicate()
-        raise RuntimeError(f"{stage} timed out after {timeout}s: {' '.join(str(item) for item in cmd[:6])}")
+        raise RuntimeError(
+            f"{stage} timed out after {timeout}s: {' '.join(str(item) for item in cmd[:6])}"
+        )
     if proc.returncode != 0:
-        raise RuntimeError(f"{stage} failed with exit code {proc.returncode}:\n{_stderr_excerpt(stderr)}")
+        raise RuntimeError(
+            f"{stage} failed with exit code {proc.returncode}:\n{_stderr_excerpt(stderr)}"
+        )
     return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)

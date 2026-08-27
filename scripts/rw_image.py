@@ -23,7 +23,9 @@ def font_candidates() -> list[Path]:
 def pick_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = font_candidates()
     if bold:
-        candidates = [p for p in candidates if "bd" in p.name.lower()] + [p for p in candidates if "bd" not in p.name.lower()]
+        candidates = [p for p in candidates if "bd" in p.name.lower()] + [
+            p for p in candidates if "bd" not in p.name.lower()
+        ]
     for path in candidates:
         if path.exists():
             try:
@@ -65,7 +67,14 @@ def wrap_for_pixels(text: str, font: ImageFont.ImageFont, max_width: int) -> lis
     return lines
 
 
-def draw_paragraph(draw: ImageDraw.ImageDraw, text: str, box: tuple[int, int, int, int], font, fill, spacing: int = 14) -> None:
+def draw_paragraph(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    box: tuple[int, int, int, int],
+    font,
+    fill,
+    spacing: int = 14,
+) -> None:
     x0, y0, x1, y1 = box
     y = y0
     line_height = None
@@ -82,7 +91,9 @@ def draw_paragraph(draw: ImageDraw.ImageDraw, text: str, box: tuple[int, int, in
         y += spacing // 2
 
 
-def apply_crop_box(image: Image.Image, crop_box: object, target_size: tuple[int, int] = (1080, 1920)) -> Image.Image:
+def apply_crop_box(
+    image: Image.Image, crop_box: object, target_size: tuple[int, int] = (1080, 1920)
+) -> Image.Image:
     width, height = image.size
     if width <= 0 or height <= 0:
         return image.resize(target_size, Image.Resampling.LANCZOS)
@@ -114,7 +125,7 @@ def split_text_chunks(text: str, parts: int = 2) -> list[str]:
             end += 1
         piece = cleaned[start:end].strip()
         if not piece:
-            piece = cleaned[start:min(len(cleaned), start + targets)].strip()
+            piece = cleaned[start : min(len(cleaned), start + targets)].strip()
             end = min(len(cleaned), start + targets)
         chunks.append(piece)
         start = end
@@ -129,7 +140,9 @@ def focal_crop(image: Image.Image, zoom: float, center_x: float, center_y: float
     crop_h = int(height / zoom)
     x0 = int(clamp(center_x * width - crop_w / 2, 0, max(0, width - crop_w)))
     y0 = int(clamp(center_y * height - crop_h / 2, 0, max(0, height - crop_h)))
-    return image.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((width, height), Image.Resampling.LANCZOS)
+    return image.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize(
+        (width, height), Image.Resampling.LANCZOS
+    )
 
 
 def emotion_stamp(emotion: str) -> str:
@@ -192,12 +205,26 @@ def create_keyframe(scene: StoryScene, run_dir: Path) -> Path:
 
     horizon_y = 1210
     draw.rectangle((0, horizon_y, size[0], size[1]), fill=(0, 0, 0, 42))
-    draw.polygon([(0, 1180), (260, 1020), (420, 1110), (720, 980), (1080, 1120), (1080, 1920), (0, 1920)], fill=(8, 10, 18, 122))
+    draw.polygon(
+        [(0, 1180), (260, 1020), (420, 1110), (720, 980), (1080, 1120), (1080, 1920), (0, 1920)],
+        fill=(8, 10, 18, 122),
+    )
 
-    silhouette = [(200, 1460), (250, 1170), (320, 1080), (390, 1160), (420, 1480), (360, 1600), (240, 1600)]
+    silhouette = [
+        (200, 1460),
+        (250, 1170),
+        (320, 1080),
+        (390, 1160),
+        (420, 1480),
+        (360, 1600),
+        (240, 1600),
+    ]
     draw.polygon(silhouette, fill=(8, 8, 12, 210))
     draw.ellipse((318, 1032, 430, 1148), fill=(18, 18, 24, 220))
-    draw.polygon([(630, 1540), (690, 1220), (760, 1120), (840, 1200), (862, 1510), (792, 1640), (650, 1640)], fill=(12, 12, 18, 200))
+    draw.polygon(
+        [(630, 1540), (690, 1220), (760, 1120), (840, 1200), (862, 1510), (792, 1640), (650, 1640)],
+        fill=(12, 12, 18, 200),
+    )
     draw.ellipse((742, 1068, 870, 1184), fill=(24, 24, 30, 220))
 
     title_font = pick_font(64, bold=True)
@@ -206,25 +233,41 @@ def create_keyframe(scene: StoryScene, run_dir: Path) -> Path:
     body_font = pick_font(40, bold=True)
 
     title_box = (60, 70, 430, 216)
-    draw.rounded_rectangle(title_box, radius=24, fill=(6, 8, 14, 190), outline=accent + (180,), width=3)
+    draw.rounded_rectangle(
+        title_box, radius=24, fill=(6, 8, 14, 190), outline=accent + (180,), width=3
+    )
     draw.text((92, 98), scene.title, font=title_font, fill=(255, 255, 255, 255))
     draw.text((92, 166), scene.camera, font=meta_font, fill=accent + (255,))
 
     bottom_box = (74, 1602, 1006, 1838)
-    draw.rounded_rectangle(bottom_box, radius=30, fill=(8, 10, 16, 202), outline=accent + (160,), width=3)
+    draw.rounded_rectangle(
+        bottom_box, radius=30, fill=(8, 10, 16, 202), outline=accent + (160,), width=3
+    )
     draw.text((108, 1640), scene.emotion, font=subtitle_font, fill=accent + (255,))
-    draw_paragraph(draw, scene.dialogue, (108, 1698, 962, 1810), body_font, (245, 245, 245, 255), spacing=10)
+    draw_paragraph(
+        draw, scene.dialogue, (108, 1698, 962, 1810), body_font, (245, 245, 245, 255), spacing=10
+    )
 
     for idx, character in enumerate(scene.characters[:3]):
         chip_x = 600 + idx * 150
-        draw.rounded_rectangle((chip_x, 96, chip_x + 128, 146), radius=18, fill=accent + (34,), outline=accent + (160,), width=2)
+        draw.rounded_rectangle(
+            (chip_x, 96, chip_x + 128, 146),
+            radius=18,
+            fill=accent + (34,),
+            outline=accent + (160,),
+            width=2,
+        )
         draw.text((chip_x + 16, 105), character[:6], font=meta_font, fill=(250, 250, 250, 240))
 
     for _ in range(28):
         x = rng.randint(0, size[0])
         y = rng.randint(0, size[1])
         length = rng.randint(20, 80)
-        draw.line((x, y, x + rng.randint(-16, 16), y + length), fill=(255, 255, 255, rng.randint(18, 42)), width=1)
+        draw.line(
+            (x, y, x + rng.randint(-16, 16), y + length),
+            fill=(255, 255, 255, rng.randint(18, 42)),
+            width=1,
+        )
 
     base = base.filter(ImageFilter.GaussianBlur(0.2))
     base.convert("RGB").save(out, quality=95)
@@ -254,9 +297,23 @@ def compose_comic_frame(
     overlay_draw.rectangle((0, 0, size[0], 132), fill=(6, 8, 14, 72))
     overlay_draw.rectangle((0, size[1] - 250, size[0], size[1]), fill=(6, 8, 14, 140))
     overlay_draw.rectangle((0, size[1] - 266, size[0], size[1] - 256), fill=accent + (180,))
-    overlay_draw.rounded_rectangle((52, 44, 360, 140), radius=22, fill=(10, 12, 20, 168), outline=accent + (160,), width=2)
-    overlay_draw.rounded_rectangle((size[0] - 264, 44, size[0] - 52, 140), radius=22, fill=accent + (34,), outline=accent + (160,), width=2)
-    overlay_draw.rounded_rectangle((64, size[1] - 206, size[0] - 64, size[1] - 72), radius=26, fill=(8, 10, 16, 190), outline=(255, 255, 255, 54), width=2)
+    overlay_draw.rounded_rectangle(
+        (52, 44, 360, 140), radius=22, fill=(10, 12, 20, 168), outline=accent + (160,), width=2
+    )
+    overlay_draw.rounded_rectangle(
+        (size[0] - 264, 44, size[0] - 52, 140),
+        radius=22,
+        fill=accent + (34,),
+        outline=accent + (160,),
+        width=2,
+    )
+    overlay_draw.rounded_rectangle(
+        (64, size[1] - 206, size[0] - 64, size[1] - 72),
+        radius=26,
+        fill=(8, 10, 16, 190),
+        outline=(255, 255, 255, 54),
+        width=2,
+    )
     frame = Image.alpha_composite(frame, overlay)
     draw = ImageDraw.Draw(frame, "RGBA")
 
@@ -267,15 +324,34 @@ def compose_comic_frame(
 
     draw.text((78, 66), scene.title, font=title_font, fill=(255, 255, 255, 255))
     draw.text((78, 104), str(beat["label"])[:18], font=meta_font, fill=accent + (255,))
-    draw.text((size[0] - 236, 66), f"{display_index}/{beat_total}", font=meta_font, fill=(250, 250, 250, 220))
-    draw.text((size[0] - 236, 104), str(beat["caption"])[:10], font=meta_font, fill=(250, 250, 250, 180))
+    draw.text(
+        (size[0] - 236, 66),
+        f"{display_index}/{beat_total}",
+        font=meta_font,
+        fill=(250, 250, 250, 220),
+    )
+    draw.text(
+        (size[0] - 236, 104), str(beat["caption"])[:10], font=meta_font, fill=(250, 250, 250, 180)
+    )
 
     subtitle = str(beat["bubble"]) or scene.dialogue
-    draw_paragraph(draw, subtitle, (92, size[1] - 184, size[0] - 92, size[1] - 88), body_font, (245, 245, 245, 255), spacing=8)
+    draw_paragraph(
+        draw,
+        subtitle,
+        (92, size[1] - 184, size[0] - 92, size[1] - 88),
+        body_font,
+        (245, 245, 245, 255),
+        spacing=8,
+    )
 
     footer = f"{scene.camera}  |  {scene.emotion}"
     footer_bbox = draw.textbbox((0, 0), footer, font=meta_font)
-    draw.text(((size[0] - (footer_bbox[2] - footer_bbox[0])) / 2, size[1] - 54), footer, font=meta_font, fill=(240, 240, 240, 180))
+    draw.text(
+        ((size[0] - (footer_bbox[2] - footer_bbox[0])) / 2, size[1] - 54),
+        footer,
+        font=meta_font,
+        fill=(240, 240, 240, 180),
+    )
 
     out = run_dir / f"scene_{scene_id}_beat_{display_index}.png"
     frame.convert("RGB").save(out, quality=95)

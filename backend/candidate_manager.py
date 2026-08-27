@@ -12,6 +12,7 @@ Data model:
     "video": [...],
   }
 """
+
 from __future__ import annotations
 
 import logging
@@ -65,32 +66,40 @@ def generate_candidates(
                 except Exception as exc:
                     logger.warning("[candidates] Scoring failed for attempt %d: %s", i + 1, exc)
 
-            candidates.append({
-                "id": candidate_id,
-                "path": str(path),
-                "filename": path.name,
-                "score": round(score, 3),
-                "selected": False,
-                "attempt": i + 1,
-                "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "size_bytes": path.stat().st_size,
-            })
+            candidates.append(
+                {
+                    "id": candidate_id,
+                    "path": str(path),
+                    "filename": path.name,
+                    "score": round(score, 3),
+                    "selected": False,
+                    "attempt": i + 1,
+                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "size_bytes": path.stat().st_size,
+                }
+            )
             logger.info(
                 "[candidates] %s attempt %d/%d: score=%.3f, size=%d KB",
-                kind, i + 1, count, score, path.stat().st_size // 1024,
+                kind,
+                i + 1,
+                count,
+                score,
+                path.stat().st_size // 1024,
             )
         except Exception as exc:
             logger.error("[candidates] %s attempt %d/%d failed: %s", kind, i + 1, count, exc)
-            candidates.append({
-                "id": candidate_id,
-                "path": "",
-                "filename": "",
-                "score": 0.0,
-                "selected": False,
-                "attempt": i + 1,
-                "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "error": str(exc),
-            })
+            candidates.append(
+                {
+                    "id": candidate_id,
+                    "path": "",
+                    "filename": "",
+                    "score": 0.0,
+                    "selected": False,
+                    "attempt": i + 1,
+                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "error": str(exc),
+                }
+            )
 
     # Sort by score descending, auto-select best
     valid = [c for c in candidates if c.get("path")]

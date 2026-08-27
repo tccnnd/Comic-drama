@@ -9,13 +9,12 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from scripts.rw_models import StoryScene
 from backend.config_utils import env_bool, env_float
 from backend.llm_hub import llm_client
 from scripts.prompt_compiler import PromptCompiler, find_project_root
+from scripts.rw_models import StoryScene
+from scripts.rw_planning import build_scene_temporal_spec, build_shot_plan
 from scripts.rw_voice import infer_voice_profile
-from scripts.rw_planning import build_shot_plan, build_scene_temporal_spec
-
 
 ANIME_STYLE_SUFFIX = (
     "日系番剧风格，像真正的动画正片而不是解说稿。"
@@ -64,7 +63,14 @@ DIRECTOR_SYSTEM_PROMPT = """
 """.strip()
 
 
-def anime_visual_prompt(base: str, *, title: str = "", characters: list[str] | None = None, camera: str = "", emotion: str = "") -> str:
+def anime_visual_prompt(
+    base: str,
+    *,
+    title: str = "",
+    characters: list[str] | None = None,
+    camera: str = "",
+    emotion: str = "",
+) -> str:
     parts = ["竖屏动漫番剧分镜", base.strip(), ANIME_STYLE_SUFFIX, ANIME_STYLE_SUFFIX_EXTRA]
     if title.strip():
         parts.append(f"场景标题：{title.strip()}")
@@ -116,10 +122,16 @@ def anime_video_prompt(
 
 def infer_character_appearance_hint(scene: "StoryScene") -> str:
     names = " ".join([scene.speaker or "", *(scene.characters or [])])
-    voice_profile = str(scene.voice_profile or infer_voice_profile(scene.speaker, scene.characters)).strip()
-    if voice_profile == "female_lead" or any(token in names for token in {"晚", "女", "她", "姐", "妹", "娘", "妃", "姬"}):
+    voice_profile = str(
+        scene.voice_profile or infer_voice_profile(scene.speaker, scene.characters)
+    ).strip()
+    if voice_profile == "female_lead" or any(
+        token in names for token in {"晚", "女", "她", "姐", "妹", "娘", "妃", "姬"}
+    ):
         return "主要人物为年轻女性，黑色长发，清秀但克制，五官稳定，服装端庄，避免男性化脸型。"
-    if voice_profile in {"male_lead", "antagonist"} or any(token in names for token in {"男", "他", "少爷", "公子", "叔", "父", "总"}):
+    if voice_profile in {"male_lead", "antagonist"} or any(
+        token in names for token in {"男", "他", "少爷", "公子", "叔", "父", "总"}
+    ):
         return "主要人物为成年男性或少年男性，短发或束发，五官稳定，服装端庄，避免女性化脸型。"
     return "主要人物五官稳定、发型和服装在全片保持一致。"
 
@@ -142,7 +154,12 @@ def clean_comfyui_visual_prompt(text: str) -> str:
     raw = re.sub(r"\([^)]*Webtoon[^)]*\)\s*", "", raw)
     raw = re.sub(r"^(竖屏动漫番剧分镜|竖屏动态漫画分镜|番剧分镜)\s*[；;,，]?\s*", "", raw)
     raw = re.sub(r"^分镜\s*\d+\s*[；;,，]?\s*", "", raw)
-    raw = raw.replace("场景标题：", " ").replace("角色：", " ").replace("镜头：", " ").replace("情绪：", " ")
+    raw = (
+        raw.replace("场景标题：", " ")
+        .replace("角色：", " ")
+        .replace("镜头：", " ")
+        .replace("情绪：", " ")
+    )
     raw = raw.replace("音效：", " ").replace("旁白：", " ").replace("台词：", " ")
     # Normalize separators: convert Chinese semicolons/commas to standard commas
     raw = raw.replace("；", ", ").replace("，", ", ").replace("、", ", ")
@@ -166,17 +183,27 @@ def scene_consistency_spec(scene: StoryScene) -> dict[str, Any]:
         "negative_prompt": scene.negative_prompt_compilation,
         "primary_reference": {
             "path": scene.primary_reference_image_path,
-            "meta": deepcopy(scene.primary_reference_meta) if isinstance(scene.primary_reference_meta, dict) else {},
+            "meta": (
+                deepcopy(scene.primary_reference_meta)
+                if isinstance(scene.primary_reference_meta, dict)
+                else {}
+            ),
         },
-        "rules": bible.get("rules") if isinstance(bible.get("rules"), dict) else {
-            "preserve_character_identity": True,
-            "keep_lighting_continuous_within_scene": True,
-            "keep_environment_geometry_stable": True,
-        },
+        "rules": (
+            bible.get("rules")
+            if isinstance(bible.get("rules"), dict)
+            else {
+                "preserve_character_identity": True,
+                "keep_lighting_continuous_within_scene": True,
+                "keep_environment_geometry_stable": True,
+            }
+        ),
     }
 
 
-def temporal_spec_prompt_lines(temporal_spec: dict[str, Any], consistency_spec: dict[str, Any]) -> list[str]:
+def temporal_spec_prompt_lines(
+    temporal_spec: dict[str, Any], consistency_spec: dict[str, Any]
+) -> list[str]:
     lines = [
         "Generate a real continuous video, not a still image with pan/zoom.",
         "Keep motion temporally coherent across the whole shot.",
@@ -251,17 +278,31 @@ def _shot_visual_content_prompt_lines(shot_plan: dict[str, Any]) -> list[str]:
         visual_content = shot.get("visual_content")
         if not isinstance(visual_content, dict) or not visual_content:
             continue
-        visual_prototype = shot.get("visual_prototype") if isinstance(shot.get("visual_prototype"), dict) else {}
-        constraints = visual_prototype.get("constraints") if isinstance(visual_prototype.get("constraints"), dict) else {}
-        camera_language = shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+        visual_prototype = (
+            shot.get("visual_prototype") if isinstance(shot.get("visual_prototype"), dict) else {}
+        )
+        constraints = (
+            visual_prototype.get("constraints")
+            if isinstance(visual_prototype.get("constraints"), dict)
+            else {}
+        )
+        camera_language = (
+            shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+        )
         parts = [
             f"shot {int(shot.get('shot_order') or index)} visual content",
             f"visual_content_source: {visual_content.get('_source')}",
             f"prototype_id: {visual_prototype.get('id')}",
             f"prototype_mode: {visual_prototype.get('mode')}",
-            _prototype_constraint_prompt_line("prototype_constraints_hard", "MUST PRESERVE", constraints.get("hard")),
-            _prototype_constraint_prompt_line("prototype_constraints_soft", "SHOULD PRESERVE", constraints.get("soft")),
-            _prototype_constraint_prompt_line("prototype_constraints_guidelines", "GUIDE", constraints.get("guidelines")),
+            _prototype_constraint_prompt_line(
+                "prototype_constraints_hard", "MUST PRESERVE", constraints.get("hard")
+            ),
+            _prototype_constraint_prompt_line(
+                "prototype_constraints_soft", "SHOULD PRESERVE", constraints.get("soft")
+            ),
+            _prototype_constraint_prompt_line(
+                "prototype_constraints_guidelines", "GUIDE", constraints.get("guidelines")
+            ),
             f"shot_description: {visual_content.get('shot_description')}",
             f"foreground: {visual_content.get('foreground')}",
             f"midground: {visual_content.get('midground')}",
@@ -354,14 +395,18 @@ def build_scene_video_prompts(scene: StoryScene, duration: float, run_dir: Path)
         if scene.character_descriptions:
             prompt_source_parts.append(f"character descriptions: {scene.character_descriptions}")
         if uses_visual_content:
-            prompt_source_parts.append("visual_content is the primary visual source; dialogue is context only")
+            prompt_source_parts.append(
+                "visual_content is the primary visual source; dialogue is context only"
+            )
         compiled = compiler.compile(
             ", ".join(part for part in prompt_source_parts if str(part).strip()),
             list(scene.characters or []),
             speaker=scene.speaker,
         )
         compiled_positive = ", ".join(
-            part for part in [compiled.positive, *temporal_spec_prompt_lines(temporal_spec, consistency)] if str(part).strip()
+            part
+            for part in [compiled.positive, *temporal_spec_prompt_lines(temporal_spec, consistency)]
+            if str(part).strip()
         )
         prompt_text = anime_video_prompt(
             compiled_positive,
@@ -468,7 +513,9 @@ def post_llm_chat_completion(base_url: str, api_key: str, payload: dict, timeout
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         if use_json_mode and exc.code in {400, 422}:
-            print(f"[planner] LLM JSON mode unavailable, retrying without response_format: HTTP {exc.code}: {detail}")
+            print(
+                f"[planner] LLM JSON mode unavailable, retrying without response_format: HTTP {exc.code}: {detail}"
+            )
             try:
                 return _request(payload)
             except HTTPError as retry_exc:
@@ -545,7 +592,9 @@ def script_storyboard_prompt(script: str, max_scenes: int, script_hint: str = ""
 """.strip()
 
 
-def call_llm_script_storyboard(script: str, max_scenes: int, script_hint: str = "") -> list[StoryScene]:
+def call_llm_script_storyboard(
+    script: str, max_scenes: int, script_hint: str = ""
+) -> list[StoryScene]:
     content = llm_client.chat(
         system_prompt=DIRECTOR_SYSTEM_PROMPT,
         user_prompt=script_storyboard_prompt(script, max_scenes, script_hint=script_hint),
@@ -557,4 +606,5 @@ def call_llm_script_storyboard(script: str, max_scenes: int, script_hint: str = 
     if not isinstance(raw_scenes, list) or not raw_scenes:
         raise ValueError("LLM JSON must contain a non-empty scenes array.")
     from scripts.run_workflow import coerce_scene
+
     return [coerce_scene(raw, idx) for idx, raw in enumerate(raw_scenes[:max_scenes], start=1)]

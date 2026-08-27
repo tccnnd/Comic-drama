@@ -1,4 +1,5 @@
 """Data models, constants, and conversion utilities for the project runtime."""
+
 from __future__ import annotations
 
 import json
@@ -19,10 +20,10 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 
 from scripts.run_workflow import (
     StoryScene,
-    normalize_crop_box,
-    normalize_episode_phase,
-    normalize_episode_pacing,
     default_episode_pacing,
+    normalize_crop_box,
+    normalize_episode_pacing,
+    normalize_episode_phase,
 )
 
 
@@ -300,30 +301,58 @@ def _scene_from_payload(scene: dict[str, Any]) -> StoryScene:
         episode_phase_total=_coerce_int_field(scene.get("episode_phase_total"), 1, 1, 100),
         crop_box=normalize_crop_box(scene.get("crop_box")),
         character_descriptions=str(scene.get("character_descriptions") or ""),
-        character_references=scene.get("character_references") if isinstance(scene.get("character_references"), list) else [],
+        character_references=(
+            scene.get("character_references")
+            if isinstance(scene.get("character_references"), list)
+            else []
+        ),
         primary_reference_image_path=str(scene.get("primary_reference_image_path") or ""),
         primary_reference_image_abs_path=str(scene.get("primary_reference_image_abs_path") or ""),
-        primary_reference_meta=deepcopy(scene.get("primary_reference_meta")) if isinstance(scene.get("primary_reference_meta"), dict) else None,
-        consistency_meta=deepcopy(scene.get("consistency_meta")) if isinstance(scene.get("consistency_meta"), dict) else None,
+        primary_reference_meta=(
+            deepcopy(scene.get("primary_reference_meta"))
+            if isinstance(scene.get("primary_reference_meta"), dict)
+            else None
+        ),
+        consistency_meta=(
+            deepcopy(scene.get("consistency_meta"))
+            if isinstance(scene.get("consistency_meta"), dict)
+            else None
+        ),
         camera_movement=str(scene.get("camera_movement") or ""),
         emotion_tone=str(scene.get("emotion_tone") or ""),
         scene_intent=str(scene.get("scene_intent") or ""),
         pacing=str(scene.get("pacing") or ""),
         subject_focus=str(scene.get("subject_focus") or ""),
-        director_meta=deepcopy(scene.get("director_meta")) if isinstance(scene.get("director_meta"), dict) else None,
-        production_bible=deepcopy(scene.get("production_bible")) if isinstance(scene.get("production_bible"), dict) else {},
-        temporal_spec=deepcopy(scene.get("temporal_spec")) if isinstance(scene.get("temporal_spec"), dict) else {},
+        director_meta=(
+            deepcopy(scene.get("director_meta"))
+            if isinstance(scene.get("director_meta"), dict)
+            else None
+        ),
+        production_bible=(
+            deepcopy(scene.get("production_bible"))
+            if isinstance(scene.get("production_bible"), dict)
+            else {}
+        ),
+        temporal_spec=(
+            deepcopy(scene.get("temporal_spec"))
+            if isinstance(scene.get("temporal_spec"), dict)
+            else {}
+        ),
         character_prompt_compilation=str(scene.get("character_prompt_compilation") or ""),
         negative_prompt_compilation=str(scene.get("negative_prompt_compilation") or ""),
         validation_failed=bool(scene.get("validation_failed")),
         error_message=str(scene.get("error_message") or ""),
-        raw_llm_output=deepcopy(scene.get("raw_llm_output")) if isinstance(scene.get("raw_llm_output"), dict) else {},
+        raw_llm_output=(
+            deepcopy(scene.get("raw_llm_output"))
+            if isinstance(scene.get("raw_llm_output"), dict)
+            else {}
+        ),
     )
 
 
 def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
     """Convert a StoryScene to a project scene dict. Imports scene_graph functions lazily."""
-    from backend.scene_graph import _scene_graph_payload, _apply_scene_graph
+    from backend.scene_graph import _apply_scene_graph, _scene_graph_payload
 
     scene_id = f"scene_{order:03d}"
     payload = {
@@ -348,20 +377,30 @@ def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
         "voice_volume": scene.voice_volume,
         "crop_box": normalize_crop_box(scene.crop_box),
         **default_drama_config(),
-        "audio_manifest": deepcopy(scene.audio_manifest) if isinstance(scene.audio_manifest, dict) else {},
+        "audio_manifest": (
+            deepcopy(scene.audio_manifest) if isinstance(scene.audio_manifest, dict) else {}
+        ),
         "camera_speed": float(scene.camera_speed or 1.0),
         "episode_rhythm": scene.episode_rhythm or "",
         "episode_phase": scene.episode_phase or "",
         "episode_phase_index": int(scene.episode_phase_index or order),
         "episode_phase_total": int(scene.episode_phase_total or 0),
-        "primary_reference_meta": deepcopy(scene.primary_reference_meta) if isinstance(scene.primary_reference_meta, dict) else {},
-        "consistency_meta": deepcopy(scene.consistency_meta) if isinstance(scene.consistency_meta, dict) else {},
+        "primary_reference_meta": (
+            deepcopy(scene.primary_reference_meta)
+            if isinstance(scene.primary_reference_meta, dict)
+            else {}
+        ),
+        "consistency_meta": (
+            deepcopy(scene.consistency_meta) if isinstance(scene.consistency_meta, dict) else {}
+        ),
         "camera_movement": scene.camera_movement or "",
         "emotion_tone": scene.emotion_tone or "",
         "scene_intent": scene.scene_intent or "",
         "pacing": scene.pacing or "",
         "subject_focus": scene.subject_focus or "",
-        "director_meta": deepcopy(scene.director_meta) if isinstance(scene.director_meta, dict) else {},
+        "director_meta": (
+            deepcopy(scene.director_meta) if isinstance(scene.director_meta, dict) else {}
+        ),
         "shot_plan": {},
         "generation_meta": {},
         "character_prompt_compilation": scene.character_prompt_compilation or "",
@@ -369,7 +408,11 @@ def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
         "shot_overrides": [],
         "validation_failed": bool(getattr(scene, "validation_failed", False)),
         "error_message": str(getattr(scene, "error_message", "") or ""),
-        "raw_llm_output": deepcopy(getattr(scene, "raw_llm_output", {})) if getattr(scene, "raw_llm_output", {}) else {},
+        "raw_llm_output": (
+            deepcopy(getattr(scene, "raw_llm_output", {}))
+            if getattr(scene, "raw_llm_output", {})
+            else {}
+        ),
         **default_enhancement_config(),
         "history": [],
         "assets": {
@@ -387,6 +430,7 @@ def scene_to_dict(scene: StoryScene, order: int) -> dict[str, Any]:
         payload["assets"]["status"] = "failed"
     if not isinstance(scene.director_meta, dict):
         from backend.scene_graph import apply_director_recommendation
+
         apply_director_recommendation(payload)
     graph = _scene_graph_payload(payload, order)
     _apply_scene_graph(payload, graph)

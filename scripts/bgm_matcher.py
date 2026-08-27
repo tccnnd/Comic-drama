@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg")
 
 BGM_STYLE_PRIORITY: dict[str, list[str]] = {
@@ -66,8 +65,12 @@ def select_bgm_for_scene(
     if explicit_file:
         path = _resolve_path(explicit_file, bgm_root=bgm_root, project_root=project_root)
         if path is not None:
-            return BgmSelection(path=path, style=_style_for_path(path, bgm_root), source="explicit_file")
-        return BgmSelection(path=None, source="none", reason=f"explicit BGM not found: {explicit_file}")
+            return BgmSelection(
+                path=path, style=_style_for_path(path, bgm_root), source="explicit_file"
+            )
+        return BgmSelection(
+            path=None, source="none", reason=f"explicit BGM not found: {explicit_file}"
+        )
 
     explicit_style = _normalize_label(manifest.get("bgm_style"))
     if explicit_style:
@@ -77,7 +80,12 @@ def select_bgm_for_scene(
         path = _pick_for_styles([explicit_style, "neutral", "calm"], scene, bgm_root)
         if path is not None:
             return BgmSelection(path=path, style=explicit_style, source="explicit_style")
-        return BgmSelection(path=None, style=explicit_style, source="none", reason=f"no BGM asset for style: {explicit_style}")
+        return BgmSelection(
+            path=None,
+            style=explicit_style,
+            source="none",
+            reason=f"no BGM asset for style: {explicit_style}",
+        )
 
     styles = infer_bgm_styles(scene)
     path = _pick_for_styles(styles, scene, bgm_root)
@@ -286,7 +294,11 @@ def _dedupe(values: list[str]) -> list[str]:
 
 def _first_known_style(styles: list[str]) -> str:
     for style in styles:
-        if style in BGM_STYLE_PRIORITY or style in SCENE_INTENT_PRIORITY or style in PACING_PRIORITY:
+        if (
+            style in BGM_STYLE_PRIORITY
+            or style in SCENE_INTENT_PRIORITY
+            or style in PACING_PRIORITY
+        ):
             return style
     return styles[0] if styles else ""
 
@@ -305,12 +317,22 @@ def _emotion_from_scene_text(value: Any) -> str:  # override the earlier display
     text = str(value or "").strip()
     if not text:
         return ""
-    if any(token in text for token in ("\u6012", "\u6c14", "\u7206", "\u9707", "\u7d27\u5f20", "\u6050\u60e7")):
+    if any(
+        token in text
+        for token in ("\u6012", "\u6c14", "\u7206", "\u9707", "\u7d27\u5f20", "\u6050\u60e7")
+    ):
         return "tension"
-    if any(token in text for token in ("\u60b2", "\u4f24", "\u5931\u843d", "\u96be\u8fc7", "\u54ed")):
+    if any(
+        token in text for token in ("\u60b2", "\u4f24", "\u5931\u843d", "\u96be\u8fc7", "\u54ed")
+    ):
         return "sadness"
-    if any(token in text for token in ("\u559c", "\u4e50", "\u5f00\u5fc3", "\u8f7b\u677e", "\u751c")):
+    if any(
+        token in text for token in ("\u559c", "\u4e50", "\u5f00\u5fc3", "\u8f7b\u677e", "\u751c")
+    ):
         return "joy"
-    if any(token in text for token in ("\u9759", "\u5e73\u9759", "\u65e5\u5e38", "\u5bf9\u8bdd", "\u56de\u5fc6")):
+    if any(
+        token in text
+        for token in ("\u9759", "\u5e73\u9759", "\u65e5\u5e38", "\u5bf9\u8bdd", "\u56de\u5fc6")
+    ):
         return "calm"
     return _normalize_label(text)

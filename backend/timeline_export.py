@@ -5,6 +5,7 @@ enabling import into DaVinci Resolve, Premiere Pro, and other NLEs.
 
 OTIO schema: https://opentimelineio.readthedocs.io/
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,9 @@ def _rational_time(seconds: float, rate: float = 24.0) -> dict[str, Any]:
     }
 
 
-def _time_range(start_seconds: float, duration_seconds: float, rate: float = 24.0) -> dict[str, Any]:
+def _time_range(
+    start_seconds: float, duration_seconds: float, rate: float = 24.0
+) -> dict[str, Any]:
     """Create an OTIO TimeRange object."""
     return {
         "OTIO_SCHEMA": "TimeRange.1",
@@ -111,44 +114,52 @@ def export_project_to_otio(project: dict[str, Any], project_dir: Path) -> dict[s
         if video_path:
             video_path = str(project_dir / video_path)
 
-        video_children.append(_clip(
-            name=f"#{order} {scene_title}",
-            duration_seconds=duration,
-            media_path=video_path,
-            rate=fps,
-            metadata={
-                "comic_drama": {
-                    "scene_order": order,
-                    "scene_id": scene.get("scene_id", ""),
-                    "title": scene_title,
-                    "emotion": str(scene.get("emotion") or scene.get("emotion_tone") or "").strip(),
-                    "camera": str(scene.get("camera_movement") or "").strip(),
-                    "characters": scene.get("characters", []),
-                }
-            },
-        ))
+        video_children.append(
+            _clip(
+                name=f"#{order} {scene_title}",
+                duration_seconds=duration,
+                media_path=video_path,
+                rate=fps,
+                metadata={
+                    "comic_drama": {
+                        "scene_order": order,
+                        "scene_id": scene.get("scene_id", ""),
+                        "title": scene_title,
+                        "emotion": str(
+                            scene.get("emotion") or scene.get("emotion_tone") or ""
+                        ).strip(),
+                        "camera": str(scene.get("camera_movement") or "").strip(),
+                        "characters": scene.get("characters", []),
+                    }
+                },
+            )
+        )
 
         # Audio clip
         audio_path = str(assets.get("audio_path") or "").strip()
         if audio_path:
             audio_path = str(project_dir / audio_path)
-            audio_children.append(_clip(
-                name=f"#{order} Voice",
-                duration_seconds=duration,
-                media_path=audio_path,
-                rate=fps,
-            ))
+            audio_children.append(
+                _clip(
+                    name=f"#{order} Voice",
+                    duration_seconds=duration,
+                    media_path=audio_path,
+                    rate=fps,
+                )
+            )
         else:
             audio_children.append(_gap(duration, fps))
 
         # Scene boundary marker
-        markers.append({
-            "OTIO_SCHEMA": "Marker.2",
-            "name": f"Scene {order}: {scene_title}",
-            "marked_range": _time_range(cursor, 0, fps),
-            "color": "RED" if scene.get("emotion") in ("anger", "tension") else "GREEN",
-            "metadata": {"scene_order": order},
-        })
+        markers.append(
+            {
+                "OTIO_SCHEMA": "Marker.2",
+                "name": f"Scene {order}: {scene_title}",
+                "marked_range": _time_range(cursor, 0, fps),
+                "color": "RED" if scene.get("emotion") in ("anger", "tension") else "GREEN",
+                "metadata": {"scene_order": order},
+            }
+        )
 
         cursor += duration
 

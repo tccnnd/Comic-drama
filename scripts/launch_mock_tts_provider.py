@@ -8,7 +8,6 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "scripts" / "mock_tts_provider.py"
 OUT_LOG = ROOT / "mock_tts_provider.out.log"

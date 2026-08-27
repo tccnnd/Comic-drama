@@ -1,4 +1,5 @@
 """Tests for backend.styles — style CRUD operations."""
+
 from __future__ import annotations
 
 import json
@@ -8,20 +9,19 @@ from unittest.mock import patch
 import pytest
 
 from backend.styles import (
-    StyleStore,
-    StyleRecord,
     StyleCreateRequest,
-    list_styles,
+    StyleRecord,
+    StyleStore,
+    _default_store,
+    _style_defaults,
     create_style,
     delete_style,
     get_style,
+    list_styles,
     load_style_store,
     save_style_store,
-    _default_store,
-    _style_defaults,
     utc_slug,
 )
-
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,8 +32,10 @@ def styles_dir(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     styles_path = data_dir / "styles.json"
-    with patch("backend.styles.DATA_DIR", data_dir), \
-         patch("backend.styles.STYLES_PATH", styles_path):
+    with (
+        patch("backend.styles.DATA_DIR", data_dir),
+        patch("backend.styles.STYLES_PATH", styles_path),
+    ):
         yield styles_path
 
 

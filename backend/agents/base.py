@@ -1,4 +1,5 @@
 """Base agent framework for multi-turn LLM-driven production tasks."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ class AgentMessage:
 @dataclass
 class AgentState:
     """Persistent state for an agent session."""
+
     agent_id: str
     project_id: str
     messages: list[AgentMessage] = field(default_factory=list)
@@ -92,5 +94,6 @@ class BaseAgent:
     def _default_llm_fn(self, messages: list[dict[str, str]]) -> str:
         """Default LLM call using project's configured LLM."""
         from scripts.run_workflow import load_env_file, post_llm_chat_completion
+
         load_env_file()
         return post_llm_chat_completion(messages)

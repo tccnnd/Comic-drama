@@ -110,7 +110,9 @@ def repair_story_text(project_id: str) -> dict:
             project = load_project(project_id)
             repaired = reconstruct_story_text_from_scenes(project)
             if not repaired:
-                raise HTTPException(status_code=409, detail="No scenes available to rebuild story text")
+                raise HTTPException(
+                    status_code=409, detail="No scenes available to rebuild story text"
+                )
             project["story_text"] = repaired
             save_project(project)
         return project_or_404(project_id)

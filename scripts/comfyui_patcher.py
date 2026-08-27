@@ -56,7 +56,9 @@ def upload_reference_image(comfyui_url: str, image_path: str | Path) -> str:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         body_text = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"ComfyUI image upload failed with HTTP {exc.code}: {body_text}") from exc
+        raise RuntimeError(
+            f"ComfyUI image upload failed with HTTP {exc.code}: {body_text}"
+        ) from exc
     name = str(payload.get("name") or "").strip()
     if not name:
         raise RuntimeError("ComfyUI upload did not return a file name")
@@ -86,6 +88,8 @@ def patch_workflow(
 
     node = find_node(wf, "IPADAPTER_MAIN")
     if node:
-        node.setdefault("inputs", {})["weight"] = float(ipadapter_weight if reference_image_filename else 0.0)
+        node.setdefault("inputs", {})["weight"] = float(
+            ipadapter_weight if reference_image_filename else 0.0
+        )
 
     return wf

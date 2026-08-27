@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from video_providers import get_video_provider_spec
 
+from video_providers import get_video_provider_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = ROOT / "workflows" / "comfyui_keyframe_template.json"
@@ -44,7 +44,9 @@ def _comfyui_base_url() -> str:
         host = _env_value("COMFYUI_SSH_LOCAL_HOST", default="127.0.0.1") or "127.0.0.1"
         port = _env_value("COMFYUI_SSH_LOCAL_PORT", default="8189") or "8189"
         return f"http://{host}:{port}"
-    return _env_value("COMFYUI_BASE_URL", "COMFYUI_URL", default="http://127.0.0.1:8188").rstrip("/")
+    return _env_value("COMFYUI_BASE_URL", "COMFYUI_URL", default="http://127.0.0.1:8188").rstrip(
+        "/"
+    )
 
 
 def _comfyui_auth_headers() -> dict[str, str]:
@@ -96,7 +98,9 @@ def _resolve_template_value(value: Any) -> str | None:
         return None
     replacements = {
         "__LORA_NAME__": _env_value("COMFYUI_LORA_NAME", "COMFYUI_VIDEO_LORA_NAME", default=""),
-        "__CHECKPOINT_NAME__": _env_value("COMFYUI_CHECKPOINT_NAME", "COMFYUI_VIDEO_CHECKPOINT_NAME", default=""),
+        "__CHECKPOINT_NAME__": _env_value(
+            "COMFYUI_CHECKPOINT_NAME", "COMFYUI_VIDEO_CHECKPOINT_NAME", default=""
+        ),
     }
     return replacements.get(value, value)
 
@@ -127,12 +131,7 @@ def _parse_template_requirements() -> dict[str, list[str]]:
 
 
 def _extract_combo_values(object_info: dict[str, Any], node: str, input_name: str) -> list[str]:
-    raw = (
-        object_info.get(node, {})
-        .get("input", {})
-        .get("required", {})
-        .get(input_name, [])
-    )
+    raw = object_info.get(node, {}).get("input", {}).get("required", {}).get(input_name, [])
     if not isinstance(raw, list) or not raw:
         return []
     values = raw[0]
@@ -158,7 +157,11 @@ def check_comfyui_health() -> dict[str, Any]:
     video_provider = provider_spec.id
     video_backend = provider_spec.backend
     requires_comfyui = video_backend == "comfyui"
-    raw_video_template = _env_value("COMFYUI_VIDEO_WORKFLOW_PATH", "VIDEO_WORKFLOW_PATH", default="workflows/comfyui_video_template.json")
+    raw_video_template = _env_value(
+        "COMFYUI_VIDEO_WORKFLOW_PATH",
+        "VIDEO_WORKFLOW_PATH",
+        default="workflows/comfyui_video_template.json",
+    )
     video_template_path = Path(raw_video_template)
     if not video_template_path.is_absolute():
         video_template_path = ROOT / video_template_path
@@ -168,7 +171,9 @@ def check_comfyui_health() -> dict[str, Any]:
     warnings: list[str] = []
 
     if requires_comfyui and via_ssh_tunnel and not paramiko_available:
-        blockers.append("SSH tunnel configured (COMFYUI_SSH_HOST is set) but paramiko is not installed")
+        blockers.append(
+            "SSH tunnel configured (COMFYUI_SSH_HOST is set) but paramiko is not installed"
+        )
     if requires_comfyui and not video_template_path.is_file():
         blockers.append(f"ComfyUI video workflow template not found: {video_template_path}")
 
@@ -184,7 +189,9 @@ def check_comfyui_health() -> dict[str, Any]:
         else:
             blockers.append(f"ComfyUI offline at {base_url}")
 
-    requirements = _parse_template_requirements() if requires_comfyui else {"checkpoints": [], "loras": []}
+    requirements = (
+        _parse_template_requirements() if requires_comfyui else {"checkpoints": [], "loras": []}
+    )
     checkpoint_required = requirements["checkpoints"]
     loras_required = requirements["loras"]
     if requires_comfyui and not checkpoint_required:
@@ -202,7 +209,9 @@ def check_comfyui_health() -> dict[str, Any]:
             blockers.append("Could not fetch ComfyUI /object_info")
         else:
             known_nodes = True
-            checkpoint_available = _extract_combo_values(object_info, "CheckpointLoaderSimple", "ckpt_name")
+            checkpoint_available = _extract_combo_values(
+                object_info, "CheckpointLoaderSimple", "ckpt_name"
+            )
             loras_available = _extract_combo_values(object_info, "LoraLoader", "lora_name")
             ipadapter_loader_available = "IPAdapterUnifiedLoader" in object_info
             ipadapter_node_available = "IPAdapter" in object_info
@@ -272,10 +281,16 @@ def _scene_mentions_character(scene: dict[str, Any], aliases: set[str]) -> bool:
     return False
 
 
-def check_character_consistency(project_data: dict[str, Any], project_dir: Path, char_name: str) -> dict[str, Any]:
+def check_character_consistency(
+    project_data: dict[str, Any], project_dir: Path, char_name: str
+) -> dict[str, Any]:
     warnings: list[str] = []
     character = next(
-        (item for item in project_data.get("characters", []) if item.get("name") == char_name or item.get("char_id") == char_name),
+        (
+            item
+            for item in project_data.get("characters", [])
+            if item.get("name") == char_name or item.get("char_id") == char_name
+        ),
         None,
     )
     if character is None:
@@ -293,7 +308,9 @@ def check_character_consistency(project_data: dict[str, Any], project_dir: Path,
         if str(value or "").strip()
     }
     reference_path = str(character.get("reference_image_path") or "").strip()
-    reference_meta = character.get("reference_meta") if isinstance(character.get("reference_meta"), dict) else {}
+    reference_meta = (
+        character.get("reference_meta") if isinstance(character.get("reference_meta"), dict) else {}
+    )
     crop_method = reference_meta.get("crop_method")
     reference_uploaded = bool(reference_path and (project_dir / reference_path).is_file())
 
@@ -303,7 +320,9 @@ def check_character_consistency(project_data: dict[str, Any], project_dir: Path,
     elif not reference_uploaded:
         warnings.append("No processed reference image found; IPAdapter will use placeholder")
     elif crop_method == "center_fallback":
-        warnings.append("Reference image uses center crop fallback; front-facing head-and-shoulders images work best")
+        warnings.append(
+            "Reference image uses center crop fallback; front-facing head-and-shoulders images work best"
+        )
 
     reference = {
         "uploaded": reference_uploaded,

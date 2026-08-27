@@ -9,11 +9,10 @@ from pydantic import BaseModel
 from backend.llm_hub import (
     LLM_SETTINGS_FILE,
     TASK_DEFINITIONS,
-    get_usage_summary as _get_llm_usage_summary,
-    llm_client as _llm_client,
-    load_llm_settings,
-    save_llm_settings,
 )
+from backend.llm_hub import get_usage_summary as _get_llm_usage_summary
+from backend.llm_hub import llm_client as _llm_client
+from backend.llm_hub import load_llm_settings, save_llm_settings
 
 router = APIRouter(tags=["llm"])
 
@@ -26,9 +25,21 @@ def llm_settings_config_path() -> str:
 LLM_PRESETS: list[dict[str, str]] = [
     {"label": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
     {"label": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-    {"label": "通义千问 (DashScope)", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
-    {"label": "Moonshot (Kimi)", "base_url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k"},
-    {"label": "智谱 GLM", "base_url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-4-flash"},
+    {
+        "label": "通义千问 (DashScope)",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-plus",
+    },
+    {
+        "label": "Moonshot (Kimi)",
+        "base_url": "https://api.moonshot.cn/v1",
+        "model": "moonshot-v1-8k",
+    },
+    {
+        "label": "智谱 GLM",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4-flash",
+    },
     {"label": "自定义", "base_url": "", "model": ""},
 ]
 
@@ -52,7 +63,9 @@ def merge_llm_settings_payload(payload: LlmSettingsRequest) -> dict[str, Any]:
     if is_masked_api_key(api_key):
         api_key = str(stored.get("api_key") or "")
 
-    stored_overrides = stored.get("task_overrides") if isinstance(stored.get("task_overrides"), dict) else {}
+    stored_overrides = (
+        stored.get("task_overrides") if isinstance(stored.get("task_overrides"), dict) else {}
+    )
     merged_overrides: dict[str, dict[str, str]] = {}
     for task_key, override in (payload.task_overrides or {}).items():
         if not isinstance(override, dict):
@@ -64,14 +77,22 @@ def merge_llm_settings_payload(payload: LlmSettingsRequest) -> dict[str, Any]:
                 clean[field] = value.strip()
         override_key = str(override.get("api_key") or "").strip()
         if is_masked_api_key(override_key):
-            stored_key = stored_overrides.get(task_key, {}).get("api_key") if isinstance(stored_overrides.get(task_key), dict) else ""
+            stored_key = (
+                stored_overrides.get(task_key, {}).get("api_key")
+                if isinstance(stored_overrides.get(task_key), dict)
+                else ""
+            )
             if stored_key:
                 clean["api_key"] = str(stored_key)
         elif "api_key" in override:
             if override_key:
                 clean["api_key"] = override_key
         else:
-            stored_key = stored_overrides.get(task_key, {}).get("api_key") if isinstance(stored_overrides.get(task_key), dict) else ""
+            stored_key = (
+                stored_overrides.get(task_key, {}).get("api_key")
+                if isinstance(stored_overrides.get(task_key), dict)
+                else ""
+            )
             if stored_key:
                 clean["api_key"] = str(stored_key)
         if clean:
@@ -105,7 +126,9 @@ def llm_settings_endpoint() -> dict:
             if field in override:
                 if field == "api_key":
                     ov_key = str(override.get("api_key") or "")
-                    masked_entry["api_key_masked"] = f"••••••••{ov_key[-4:]}" if len(ov_key) > 4 else ("••••" if ov_key else "")
+                    masked_entry["api_key_masked"] = (
+                        f"••••••••{ov_key[-4:]}" if len(ov_key) > 4 else ("••••" if ov_key else "")
+                    )
                     masked_entry["api_key_set"] = bool(ov_key)
                 else:
                     masked_entry[field] = override[field]
@@ -150,7 +173,9 @@ def save_llm_settings_endpoint(payload: LlmSettingsRequest) -> dict:
             if field in override:
                 if field == "api_key":
                     ov_key = str(override.get("api_key") or "")
-                    masked_entry["api_key_masked"] = f"••••••••{ov_key[-4:]}" if len(ov_key) > 4 else ("••••" if ov_key else "")
+                    masked_entry["api_key_masked"] = (
+                        f"••••••••{ov_key[-4:]}" if len(ov_key) > 4 else ("••••" if ov_key else "")
+                    )
                     masked_entry["api_key_set"] = bool(ov_key)
                 else:
                     masked_entry[field] = override[field]
@@ -189,12 +214,15 @@ def test_llm_connection(payload: LlmSettingsRequest) -> dict:
 
     try:
         import urllib.request
+
         url = f"{base_url}/chat/completions"
-        body = json.dumps({
-            "model": model,
-            "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 5,
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 5,
+            }
+        ).encode("utf-8")
         req = urllib.request.Request(
             url,
             data=body,

@@ -9,3 +9,13 @@ dependencies = []
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = "_external|\\.venv|\\.tmp|workspace|outputs|data|node_modules"
+
+[tool.isort]
+profile = "black"
+line_length = 100
+extend_skip = ["_external", ".venv", ".tmp", "workspace", "outputs", "data", "node_modules"]

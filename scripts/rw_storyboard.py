@@ -4,19 +4,8 @@ import os
 import re
 from typing import Any
 
-from scripts.rw_config import *  # noqa: F401,F403  - re-exports config constants
-from scripts.rw_models import StoryScene, SceneValidationError
-from scripts.rw_styles import normalize_audio_manifest, normalize_crop_box
-from scripts.rw_voice import split_dialogue_speaker, infer_voice_profile
-from scripts.rw_prompts import (
-    DIRECTOR_SYSTEM_PROMPT,
-    anime_visual_prompt,
-    storyboard_prompt,
-    extract_json_object,
-    _call_llm_chat_content,
-    script_storyboard_prompt,
-    call_llm_script_storyboard,
-)
+from backend.config_utils import coerce_float as _coerce_float
+from backend.llm_hub import llm_client
 from scripts.director_classifier import (
     DirectorClassificationError,
     apply_default_classification,
@@ -24,13 +13,26 @@ from scripts.director_classifier import (
     apply_rules_classification,
     classify_scenes_batch,
 )
-from backend.llm_hub import llm_client
-from backend.config_utils import coerce_float as _coerce_float
+from scripts.rw_config import *  # noqa: F401,F403  - re-exports config constants
+from scripts.rw_models import SceneValidationError, StoryScene
+from scripts.rw_prompts import (
+    DIRECTOR_SYSTEM_PROMPT,
+    _call_llm_chat_content,
+    anime_visual_prompt,
+    call_llm_script_storyboard,
+    extract_json_object,
+    script_storyboard_prompt,
+    storyboard_prompt,
+)
+from scripts.rw_styles import normalize_audio_manifest, normalize_crop_box
+from scripts.rw_voice import infer_voice_profile, split_dialogue_speaker
 
 
 def build_rule_storyboard(story: str) -> list[StoryScene]:
     compact_story = " ".join(story.strip().split())
-    premise = compact_story[:28] if compact_story else "一个被轻视的主角，在命运翻转前夕被推到悬崖边"
+    premise = (
+        compact_story[:28] if compact_story else "一个被轻视的主角，在命运翻转前夕被推到悬崖边"
+    )
 
     return [
         StoryScene(
@@ -149,7 +151,9 @@ def _raw_scene_number(raw: dict[str, Any]) -> int | None:
 
 def validate_scene(raw: dict[str, Any], index: int) -> None:
     if not isinstance(raw, dict):
-        raise SceneValidationError(f"分镜 #{index} 不是 JSON 对象，实际类型 {type(raw).__name__}", {}, field="scene")
+        raise SceneValidationError(
+            f"分镜 #{index} 不是 JSON 对象，实际类型 {type(raw).__name__}", {}, field="scene"
+        )
 
     scene_number = _raw_scene_number(raw)
     if scene_number is None:
@@ -159,7 +163,11 @@ def validate_scene(raw: dict[str, Any], index: int) -> None:
     if not isinstance(visual, str) or not visual.strip():
         raise SceneValidationError("visual 不能为空", raw, field="visual")
 
-    duration_value = raw.get("duration") if raw.get("duration") not in (None, "") else raw.get("duration_seconds")
+    duration_value = (
+        raw.get("duration")
+        if raw.get("duration") not in (None, "")
+        else raw.get("duration_seconds")
+    )
     try:
         duration = float(duration_value)
     except (TypeError, ValueError):
@@ -182,19 +190,27 @@ def validate_scene(raw: dict[str, Any], index: int) -> None:
     try:
         camera_speed_value = float(camera_speed)
     except (TypeError, ValueError):
-        raise SceneValidationError(f"camera_speed 不是数字: {camera_speed!r}", raw, field="camera_speed")
+        raise SceneValidationError(
+            f"camera_speed 不是数字: {camera_speed!r}", raw, field="camera_speed"
+        )
     if not 0.35 <= camera_speed_value <= 3.0:
-        raise SceneValidationError(f"camera_speed 超出范围: {camera_speed_value}", raw, field="camera_speed")
+        raise SceneValidationError(
+            f"camera_speed 超出范围: {camera_speed_value}", raw, field="camera_speed"
+        )
 
     audio_manifest = raw.get("audio_manifest")
     if not isinstance(audio_manifest, dict):
         raise SceneValidationError("audio_manifest 必须是对象", raw, field="audio_manifest")
     sfx_trigger = audio_manifest.get("sfx_trigger")
     if not isinstance(sfx_trigger, dict):
-        raise SceneValidationError("audio_manifest.sfx_trigger 必须是对象", raw, field="audio_manifest.sfx_trigger")
+        raise SceneValidationError(
+            "audio_manifest.sfx_trigger 必须是对象", raw, field="audio_manifest.sfx_trigger"
+        )
 
 
-def make_failed_placeholder(raw: dict[str, Any], index: int, err: SceneValidationError) -> StoryScene:
+def make_failed_placeholder(
+    raw: dict[str, Any], index: int, err: SceneValidationError
+) -> StoryScene:
     safe_raw = dict(raw or {})
     try:
         safe_duration = float(safe_raw.get("duration_seconds") or safe_raw.get("duration") or 3.0)
@@ -203,12 +219,21 @@ def make_failed_placeholder(raw: dict[str, Any], index: int, err: SceneValidatio
     safe_duration = min(6.0, max(3.0, safe_duration))
     safe_raw["duration"] = safe_duration
     safe_raw["duration_seconds"] = safe_duration
-    safe_raw["visual"] = str(safe_raw.get("visual") or safe_raw.get("visual_prompt") or "占位分镜").strip()
-    safe_raw["visual_prompt"] = str(safe_raw.get("visual_prompt") or safe_raw.get("visual") or safe_raw["visual"]).strip()
+    safe_raw["visual"] = str(
+        safe_raw.get("visual") or safe_raw.get("visual_prompt") or "占位分镜"
+    ).strip()
+    safe_raw["visual_prompt"] = str(
+        safe_raw.get("visual_prompt") or safe_raw.get("visual") or safe_raw["visual"]
+    ).strip()
     safe_raw["dialogue"] = str(safe_raw.get("dialogue") or "")
-    safe_raw["camera"] = str(safe_raw.get("camera") or safe_raw.get("camera_movement") or "slow_push_in").strip() or "slow_push_in"
+    safe_raw["camera"] = (
+        str(safe_raw.get("camera") or safe_raw.get("camera_movement") or "slow_push_in").strip()
+        or "slow_push_in"
+    )
     safe_raw["emotion"] = str(safe_raw.get("emotion") or "calm").strip() or "calm"
-    safe_raw["characters"] = safe_raw.get("characters") if isinstance(safe_raw.get("characters"), list) else []
+    safe_raw["characters"] = (
+        safe_raw.get("characters") if isinstance(safe_raw.get("characters"), list) else []
+    )
     safe_raw["camera_speed"] = safe_raw.get("camera_speed") or 1.0
     safe_raw["audio_manifest"] = normalize_audio_manifest(safe_raw.get("audio_manifest"))
     safe_raw["title"] = str(safe_raw.get("title") or "校验失败分镜").strip()
@@ -265,11 +290,19 @@ def _apply_director_rule_recommendation(scene: StoryScene) -> None:
         return any(token.lower() in text for token in tokens)
 
     camera = str(scene.camera or "").strip().lower()
-    if has("震惊", "愤怒", "对峙", "反转", "揭露", "爆发", "冲突", "撞", "打", "雷", "刀", "dramatic"):
+    if has(
+        "震惊", "愤怒", "对峙", "反转", "揭露", "爆发", "冲突", "撞", "打", "雷", "刀", "dramatic"
+    ):
         camera_movement = "dramatic_push"
-    elif has("悲", "哭", "回忆", "沉默", "雨", "压抑", "独白", "melancholy") or camera == "melancholy_pan":
+    elif (
+        has("悲", "哭", "回忆", "沉默", "雨", "压抑", "独白", "melancholy")
+        or camera == "melancholy_pan"
+    ):
         camera_movement = "melancholy_pan"
-    elif has("场景", "开端", "登场", "全景", "环境", "宗门", "宫殿", "山门", "高楼", "establish") or camera == "establishing_tilt":
+    elif (
+        has("场景", "开端", "登场", "全景", "环境", "宗门", "宫殿", "山门", "高楼", "establish")
+        or camera == "establishing_tilt"
+    ):
         camera_movement = "establishing_tilt"
     elif camera == "slow_zoom_out":
         camera_movement = "pull_back"
@@ -350,7 +383,9 @@ def _apply_director_rule_recommendation(scene: StoryScene) -> None:
     scene.subject_focus = subject_focus
 
 
-def _apply_director_classification_to_scenes(scenes: list[StoryScene], model: str | None = None) -> None:
+def _apply_director_classification_to_scenes(
+    scenes: list[StoryScene], model: str | None = None
+) -> None:
     """Apply director classification to scenes.
 
     Uses rule-based classification by default for speed.
@@ -373,7 +408,9 @@ def _apply_director_classification_to_scenes(scenes: list[StoryScene], model: st
     # Slow path: LLM classification
     model_name = (model or os.environ.get("LLM_MODEL", "").strip()).strip()
     eligible: list[tuple[int, StoryScene]] = [
-        (index, scene) for index, scene in enumerate(scenes) if not getattr(scene, "validation_failed", False)
+        (index, scene)
+        for index, scene in enumerate(scenes)
+        if not getattr(scene, "validation_failed", False)
     ]
 
     for batch_start in range(0, len(eligible), 10):
@@ -393,14 +430,20 @@ def _apply_director_classification_to_scenes(scenes: list[StoryScene], model: st
             print(f"[director] LLM classification failed, falling back to rules: {exc}")
             for _, scene in batch:
                 try:
-                    apply_rules_classification(scene, _apply_director_rule_recommendation, reason=str(exc))
+                    apply_rules_classification(
+                        scene, _apply_director_rule_recommendation, reason=str(exc)
+                    )
                 except Exception as rule_exc:
                     apply_default_classification(scene, reason=str(rule_exc))
         except Exception as exc:
-            print(f"[director] Unexpected director classification error, falling back to rules: {exc}")
+            print(
+                f"[director] Unexpected director classification error, falling back to rules: {exc}"
+            )
             for _, scene in batch:
                 try:
-                    apply_rules_classification(scene, _apply_director_rule_recommendation, reason=f"unexpected: {exc}")
+                    apply_rules_classification(
+                        scene, _apply_director_rule_recommendation, reason=f"unexpected: {exc}"
+                    )
                 except Exception as rule_exc:
                     apply_default_classification(scene, reason=str(rule_exc))
 
@@ -420,14 +463,20 @@ def coerce_scene(raw: dict, index: int) -> StoryScene:
     characters = [str(item).strip() for item in characters if str(item).strip()]
 
     dialogue_speaker = split_dialogue_speaker(str(raw.get("dialogue") or ""))[0]
-    speaker = str(raw.get("speaker") or dialogue_speaker or (characters[0] if len(characters) == 1 else ""))
+    speaker = str(
+        raw.get("speaker") or dialogue_speaker or (characters[0] if len(characters) == 1 else "")
+    )
     voice_profile = str(raw.get("voice_profile") or infer_voice_profile(speaker, characters))
 
     return StoryScene(
         scene=index,
         duration=duration,
         title=str(raw.get("title") or f"第{index}幕")[:24],
-        visual=str(raw.get("visual") or raw.get("visual_prompt") or "竖屏动漫番剧分镜，角色在强情绪场景中对峙，光影对比鲜明。"),
+        visual=str(
+            raw.get("visual")
+            or raw.get("visual_prompt")
+            or "竖屏动漫番剧分镜，角色在强情绪场景中对峙，光影对比鲜明。"
+        ),
         dialogue=str(raw.get("dialogue") or "主角：这一次，我不会再退。"),
         camera=str(raw.get("camera") or raw.get("camera_movement") or "slow_push_in"),
         emotion=str(raw.get("emotion") or "压抑"),
@@ -452,7 +501,11 @@ def coerce_scene(raw: dict, index: int) -> StoryScene:
         camera_speed=_coerce_float(raw.get("camera_speed"), 1.0, 0.35, 3.0),
         crop_box=normalize_crop_box(raw.get("crop_box")),
         character_descriptions=str(raw.get("character_descriptions") or ""),
-        character_references=raw.get("character_references") if isinstance(raw.get("character_references"), list) else [],
+        character_references=(
+            raw.get("character_references")
+            if isinstance(raw.get("character_references"), list)
+            else []
+        ),
         primary_reference_image_path=str(raw.get("primary_reference_image_path") or ""),
         primary_reference_image_abs_path=str(raw.get("primary_reference_image_abs_path") or ""),
     )
@@ -534,7 +587,25 @@ def _looks_like_speaker_label(line: str) -> bool:
         return False
     if candidate.startswith(("AI漫剧剧本", "第", "场景", "镜头", "分镜")):
         return False
-    if any(token in candidate for token in ("剧本", "标题", "类型", "作者", "编剧", "提示", "提示词", "画面", "氛围", "音效", "说明", "备注", "简介", "梗概")):
+    if any(
+        token in candidate
+        for token in (
+            "剧本",
+            "标题",
+            "类型",
+            "作者",
+            "编剧",
+            "提示",
+            "提示词",
+            "画面",
+            "氛围",
+            "音效",
+            "说明",
+            "备注",
+            "简介",
+            "梗概",
+        )
+    ):
         return False
     if any(char in candidate for char in "，。！？；;,.!?：:—-（）()[]【】《》「」『』 "):
         return False
@@ -565,7 +636,9 @@ def _looks_like_scene_heading(line: str) -> tuple[str, str] | None:
     elif "场景" in raw or "镜头" in raw:
         title = re.sub(r"^\s*(?:场景|镜头)\s*\d{1,3}\s*[:：\-—]?\s*", "", raw).strip()
     elif index:
-        title = re.sub(r"^\s*第\s*[\d一二三四五六七八九十百]{1,6}\s*(?:场|幕|节|镜头)\s*[:：\-—]?\s*", "", raw).strip()
+        title = re.sub(
+            r"^\s*第\s*[\d一二三四五六七八九十百]{1,6}\s*(?:场|幕|节|镜头)\s*[:：\-—]?\s*", "", raw
+        ).strip()
     return index, title
 
 
@@ -590,9 +663,9 @@ def _is_script_cue_line(line: str) -> bool:
     stripped = str(line or "").strip()
     if not stripped:
         return False
-    return stripped.startswith(("(", "（", "[", "【", "「", "『", "*", "﹙", "《")) and stripped.endswith(
-        (")", "）", "]", "】", "」", "』", "*", "﹚", "》")
-    )
+    return stripped.startswith(
+        ("(", "（", "[", "【", "「", "『", "*", "﹙", "《")
+    ) and stripped.endswith((")", "）", "]", "】", "」", "』", "*", "﹚", "》"))
 
 
 def _normalize_script_lines(script: str) -> list[str]:
@@ -606,18 +679,31 @@ def _normalize_script_lines(script: str) -> list[str]:
             index += 1
             continue
 
-        if _looks_like_scene_heading(stripped) or _is_script_cue_line(stripped) or _split_script_dialogue(stripped)[0]:
+        if (
+            _looks_like_scene_heading(stripped)
+            or _is_script_cue_line(stripped)
+            or _split_script_dialogue(stripped)[0]
+        ):
             normalized.append(stripped)
             index += 1
             continue
 
         next_line = raw_lines[index + 1].strip() if index + 1 < len(raw_lines) else ""
-        if _looks_like_speaker_label(stripped) and next_line and not _looks_like_scene_heading(next_line) and not _is_script_cue_line(next_line):
+        if (
+            _looks_like_speaker_label(stripped)
+            and next_line
+            and not _looks_like_scene_heading(next_line)
+            and not _is_script_cue_line(next_line)
+        ):
             normalized.append(f"{_clean_script_label(stripped)}：{next_line}")
             index += 2
             continue
 
-        chunks = [chunk.strip() for chunk in re.split(r"(?<=[。！？!?；;…])\s*", stripped) if chunk.strip()]
+        chunks = [
+            chunk.strip()
+            for chunk in re.split(r"(?<=[。！？!?；;…])\s*", stripped)
+            if chunk.strip()
+        ]
         if len(chunks) > 1 and len(stripped) > 100:
             normalized.extend(chunks)
         else:
@@ -665,7 +751,11 @@ def _split_script_paragraphs(script: str) -> list[list[str]]:
 
 def _is_storyboard_shot_heading(line: str) -> bool:
     stripped = str(line or "").strip().strip("【】[]")
-    return bool(re.match(r"^(?:分镜|镜头|shot)\s*[0-9一二三四五六七八九十百两]{1,6}\b", stripped, re.IGNORECASE))
+    return bool(
+        re.match(
+            r"^(?:分镜|镜头|shot)\s*[0-9一二三四五六七八九十百两]{1,6}\b", stripped, re.IGNORECASE
+        )
+    )
 
 
 def _merge_script_shot_blocks(blocks: list[list[str]]) -> list[list[str]]:
@@ -710,7 +800,9 @@ def _infer_script_emotion(text: str) -> str:
     return "neutral"
 
 
-def _derive_script_scene_title(index: int, heading: str, visual_lines: list[str], dialogue_lines: list[str]) -> str:
+def _derive_script_scene_title(
+    index: int, heading: str, visual_lines: list[str], dialogue_lines: list[str]
+) -> str:
     heading = heading.strip()
     if heading:
         return heading[:24]
@@ -852,7 +944,9 @@ def build_script_storyboard(
         _apply_director_classification_to_scenes(scenes)
         return scenes, "llm"
     except Exception as exc:
-        print(f"[planner] LLM unavailable for script recognition, falling back to rule planner: {exc}")
+        print(
+            f"[planner] LLM unavailable for script recognition, falling back to rule planner: {exc}"
+        )
         scenes = build_rule_script_storyboard(script, max_scenes=max_scenes)
         _apply_director_classification_to_scenes(scenes)
         return scenes, "rule"
@@ -970,7 +1064,11 @@ def analyze_script_text(script: str, max_events: int = 12) -> dict[str, object]:
 
     roles = sorted(
         role_counts.values(),
-        key=lambda item: (-int(item.get("mentions", 0)), int(item.get("first_scene", 0)), str(item.get("name", ""))),
+        key=lambda item: (
+            -int(item.get("mentions", 0)),
+            int(item.get("first_scene", 0)),
+            str(item.get("name", "")),
+        ),
     )
     for role in roles:
         name = str(role.get("name") or "")
@@ -1032,7 +1130,9 @@ def analyze_script_workflow(
 ) -> tuple[dict[str, object], list[StoryScene], str]:
     validate_script_text(script)
     analysis = analyze_script_text(script, max_events=max_scenes)
-    scenes, planner_used = build_script_storyboard(script, planner, max_scenes=max_scenes, script_hint=script_hint)
+    scenes, planner_used = build_script_storyboard(
+        script, planner, max_scenes=max_scenes, script_hint=script_hint
+    )
     analysis["planner_used"] = planner_used
     if script_hint.strip():
         analysis["script_hint"] = script_hint.strip()

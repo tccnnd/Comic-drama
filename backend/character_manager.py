@@ -1,8 +1,10 @@
 """Character-related logic: cards, references, prompts, and voice inheritance."""
+
 from __future__ import annotations
 
 import base64
 import binascii
+import os as _os
 import re
 import shutil
 import uuid
@@ -12,10 +14,8 @@ from typing import Any
 
 from PIL import Image, ImageStat, UnidentifiedImageError
 
-from scripts.face_crop import preprocess_reference_image
-from scripts.run_workflow import StoryScene
-
 from backend.project_models import (
+    WORKSPACE,
     atomic_write_json,
     default_character_meta,
     default_voice_config,
@@ -25,44 +25,133 @@ from backend.project_models import (
     project_dir,
     project_relative_file_exists,
     workspace_url,
-    WORKSPACE,
 )
-
+from scripts.face_crop import preprocess_reference_image
+from scripts.run_workflow import StoryScene
 
 # ─── Voice auto-assignment ────────────────────────────────────────────────────
 # Profiles are selected based on DEFAULT_VOICE_PROVIDER in .env:
 #   - "cosyvoice" → OmniVoice presets (voice_id = preset name on remote GPU)
 #   - "edge"      → Edge TTS neural voices (fallback)
 
-import os as _os
 
 _VOICE_PROVIDER = (_os.environ.get("DEFAULT_VOICE_PROVIDER") or "edge").strip().lower()
 
 # OmniVoice presets (matches remote API /health → voice_designs)
 _OMNIVOICE_PROFILES = {
-    "male_protagonist": {"voice_id": "male_protagonist", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "male_cold": {"voice_id": "male_cold", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "male_villain": {"voice_id": "male_villain", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "male_bully": {"voice_id": "male_bully", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "male_young": {"voice_id": "male_young", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "male_narrator": {"voice_id": "narrator", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
+    "male_protagonist": {
+        "voice_id": "male_protagonist",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "male_cold": {
+        "voice_id": "male_cold",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "male_villain": {
+        "voice_id": "male_villain",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "male_bully": {
+        "voice_id": "male_bully",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "male_young": {
+        "voice_id": "male_young",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "male_narrator": {
+        "voice_id": "narrator",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
     # Female voices
-    "female_protagonist": {"voice_id": "female_protagonist", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "female_cold": {"voice_id": "male_cold", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "female_gentle": {"voice_id": "female_protagonist", "voice_rate": 0.92, "voice_pitch": 0.0, "voice_volume": 0.9},
+    "female_protagonist": {
+        "voice_id": "female_protagonist",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "female_cold": {
+        "voice_id": "male_cold",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "female_gentle": {
+        "voice_id": "female_protagonist",
+        "voice_rate": 0.92,
+        "voice_pitch": 0.0,
+        "voice_volume": 0.9,
+    },
 }
 
 # Edge TTS fallback profiles
 _EDGE_TTS_PROFILES = {
-    "male_protagonist": {"voice_id": "zh-CN-YunxiNeural", "voice_rate": 0.95, "voice_pitch": -2.0, "voice_volume": 1.0},
-    "male_cold": {"voice_id": "zh-CN-YunxiNeural", "voice_rate": 0.85, "voice_pitch": -3.0, "voice_volume": 0.95},
-    "male_villain": {"voice_id": "zh-CN-YunyangNeural", "voice_rate": 0.88, "voice_pitch": -1.0, "voice_volume": 1.0},
-    "male_bully": {"voice_id": "zh-CN-YunjianNeural", "voice_rate": 1.1, "voice_pitch": 2.0, "voice_volume": 1.1},
-    "male_young": {"voice_id": "zh-CN-YunxiaNeural", "voice_rate": 1.0, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "male_narrator": {"voice_id": "zh-CN-YunyangNeural", "voice_rate": 0.92, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "female_protagonist": {"voice_id": "zh-CN-XiaoxiaoNeural", "voice_rate": 0.95, "voice_pitch": 0.0, "voice_volume": 1.0},
-    "female_cold": {"voice_id": "zh-CN-XiaoyiNeural", "voice_rate": 0.9, "voice_pitch": -1.0, "voice_volume": 0.95},
-    "female_gentle": {"voice_id": "zh-CN-XiaoxiaoNeural", "voice_rate": 0.9, "voice_pitch": 1.0, "voice_volume": 0.9},
+    "male_protagonist": {
+        "voice_id": "zh-CN-YunxiNeural",
+        "voice_rate": 0.95,
+        "voice_pitch": -2.0,
+        "voice_volume": 1.0,
+    },
+    "male_cold": {
+        "voice_id": "zh-CN-YunxiNeural",
+        "voice_rate": 0.85,
+        "voice_pitch": -3.0,
+        "voice_volume": 0.95,
+    },
+    "male_villain": {
+        "voice_id": "zh-CN-YunyangNeural",
+        "voice_rate": 0.88,
+        "voice_pitch": -1.0,
+        "voice_volume": 1.0,
+    },
+    "male_bully": {
+        "voice_id": "zh-CN-YunjianNeural",
+        "voice_rate": 1.1,
+        "voice_pitch": 2.0,
+        "voice_volume": 1.1,
+    },
+    "male_young": {
+        "voice_id": "zh-CN-YunxiaNeural",
+        "voice_rate": 1.0,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "male_narrator": {
+        "voice_id": "zh-CN-YunyangNeural",
+        "voice_rate": 0.92,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "female_protagonist": {
+        "voice_id": "zh-CN-XiaoxiaoNeural",
+        "voice_rate": 0.95,
+        "voice_pitch": 0.0,
+        "voice_volume": 1.0,
+    },
+    "female_cold": {
+        "voice_id": "zh-CN-XiaoyiNeural",
+        "voice_rate": 0.9,
+        "voice_pitch": -1.0,
+        "voice_volume": 0.95,
+    },
+    "female_gentle": {
+        "voice_id": "zh-CN-XiaoxiaoNeural",
+        "voice_rate": 0.9,
+        "voice_pitch": 1.0,
+        "voice_volume": 0.9,
+    },
 }
 
 VOICE_PROFILES = _OMNIVOICE_PROFILES if _VOICE_PROVIDER == "cosyvoice" else _EDGE_TTS_PROFILES
@@ -122,9 +211,16 @@ def character_card_path(project_id: str, character: dict[str, Any] | str) -> Pat
     if isinstance(character, dict):
         char_id = str(character.get("char_id") or "").strip()
         if not char_id:
-            char_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(character.get("name") or "character")).strip("_") or "character"
+            char_id = (
+                re.sub(r"[^a-zA-Z0-9_-]+", "_", str(character.get("name") or "character")).strip(
+                    "_"
+                )
+                or "character"
+            )
     else:
-        char_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(character or "character")).strip("_") or "character"
+        char_id = (
+            re.sub(r"[^a-zA-Z0-9_-]+", "_", str(character or "character")).strip("_") or "character"
+        )
     return character_dir(project_id) / f"{char_id}.json"
 
 
@@ -150,14 +246,22 @@ def normalize_character_card(character: dict[str, Any]) -> dict[str, Any]:
     merged["reference_audio_url"] = str(merged.get("reference_audio_url") or "").strip()
     merged["reference_text"] = str(merged.get("reference_text") or "").strip()
     merged["emotion"] = str(merged.get("emotion") or "").strip()
-    merged["suggested_voice_engine"] = str(merged.get("suggested_voice_engine") or _VOICE_PROVIDER or "edge").strip() or "edge"
+    merged["suggested_voice_engine"] = (
+        str(merged.get("suggested_voice_engine") or _VOICE_PROVIDER or "edge").strip() or "edge"
+    )
     merged["reference_image_path"] = str(merged.get("reference_image_path") or "").strip()
     merged["reference_image_url"] = str(merged.get("reference_image_url") or "").strip()
-    merged["primary_reference_image_path"] = str(merged.get("primary_reference_image_path") or "").strip()
-    merged["primary_reference_image_url"] = str(merged.get("primary_reference_image_url") or "").strip()
+    merged["primary_reference_image_path"] = str(
+        merged.get("primary_reference_image_path") or ""
+    ).strip()
+    merged["primary_reference_image_url"] = str(
+        merged.get("primary_reference_image_url") or ""
+    ).strip()
     merged["reference_original_path"] = str(merged.get("reference_original_path") or "").strip()
     merged["reference_original_url"] = str(merged.get("reference_original_url") or "").strip()
-    merged["reference_meta"] = deepcopy(merged.get("reference_meta") if isinstance(merged.get("reference_meta"), dict) else {})
+    merged["reference_meta"] = deepcopy(
+        merged.get("reference_meta") if isinstance(merged.get("reference_meta"), dict) else {}
+    )
     return merged
 
 
@@ -206,7 +310,9 @@ def hydrate_character_cards(project: dict[str, Any]) -> dict[str, Any]:
     for character in project.get("characters", []):
         if not isinstance(character, dict):
             continue
-        card = cards.get(str(character.get("char_id") or "")) or cards.get(_normalized_name(character.get("name")))
+        card = cards.get(str(character.get("char_id") or "")) or cards.get(
+            _normalized_name(character.get("name"))
+        )
         if not isinstance(card, dict):
             continue
         for key in (
@@ -262,7 +368,9 @@ _PLACEHOLDER_CHARACTER_NAMES = {
     "女主",
     "反派",
 }
-_PLACEHOLDER_CHARACTER_NAMES_NORMALIZED = {str(item).strip().lower() for item in _PLACEHOLDER_CHARACTER_NAMES}
+_PLACEHOLDER_CHARACTER_NAMES_NORMALIZED = {
+    str(item).strip().lower() for item in _PLACEHOLDER_CHARACTER_NAMES
+}
 
 
 def _is_placeholder_character(name: str, role_map: dict[str, dict[str, Any]]) -> bool:
@@ -270,7 +378,9 @@ def _is_placeholder_character(name: str, role_map: dict[str, dict[str, Any]]) ->
     return normalized in _PLACEHOLDER_CHARACTER_NAMES_NORMALIZED and normalized not in role_map
 
 
-def build_initial_characters(scenes: list[StoryScene], roles: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def build_initial_characters(
+    scenes: list[StoryScene], roles: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     seen: dict[str, dict[str, Any]] = {}
     role_map = _role_lookup(roles)
     index = 1
@@ -282,22 +392,43 @@ def build_initial_characters(scenes: list[StoryScene], roles: list[dict[str, Any
             if _is_placeholder_character(name, role_map):
                 continue
             role = role_map.get(_normalized_name(name), {})
-            voice_rate = role.get("voice_rate") if role.get("voice_rate") not in (None, "") else scene.voice_rate
-            voice_pitch = role.get("voice_pitch") if role.get("voice_pitch") not in (None, "") else scene.voice_pitch
-            voice_volume = role.get("voice_volume") if role.get("voice_volume") not in (None, "") else scene.voice_volume
+            voice_rate = (
+                role.get("voice_rate")
+                if role.get("voice_rate") not in (None, "")
+                else scene.voice_rate
+            )
+            voice_pitch = (
+                role.get("voice_pitch")
+                if role.get("voice_pitch") not in (None, "")
+                else scene.voice_pitch
+            )
+            voice_volume = (
+                role.get("voice_volume")
+                if role.get("voice_volume") not in (None, "")
+                else scene.voice_volume
+            )
             seen[name] = {
                 "char_id": f"c_{index:03d}",
                 "name": name,
                 **default_voice_config(),
-                "meta": normalize_character_meta(role.get("meta") if isinstance(role.get("meta"), dict) else {}),
+                "meta": normalize_character_meta(
+                    role.get("meta") if isinstance(role.get("meta"), dict) else {}
+                ),
                 "appearance_core": str(role.get("appearance_core") or ""),
                 "clothing_style": str(role.get("clothing_style") or ""),
                 "negative_constraints": str(role.get("negative_constraints") or ""),
                 "immutable_features": str(role.get("immutable_features") or ""),
                 "voice_profile": str(role.get("voice_profile") or scene.voice_profile or ""),
-                "voice_engine": str(role.get("suggested_voice_engine") or scene.voice_engine or _VOICE_PROVIDER or ""),
+                "voice_engine": str(
+                    role.get("suggested_voice_engine")
+                    or scene.voice_engine
+                    or _VOICE_PROVIDER
+                    or ""
+                ),
                 "voice_id": str(role.get("voice_id") or scene.voice_id or ""),
-                "reference_audio_path": str(role.get("reference_audio_path") or scene.reference_audio_path or ""),
+                "reference_audio_path": str(
+                    role.get("reference_audio_path") or scene.reference_audio_path or ""
+                ),
                 "reference_audio_url": "",
                 "reference_text": str(role.get("reference_text") or scene.reference_text or ""),
                 "emotion": str(role.get("emotion") or scene.emotion or ""),
@@ -308,7 +439,9 @@ def build_initial_characters(scenes: list[StoryScene], roles: list[dict[str, Any
                 "first_scene": int(role.get("first_scene") or scene.scene),
                 "importance": float(role.get("importance") or 0),
                 "summary": str(role.get("summary") or ""),
-                "suggested_voice_engine": str(role.get("suggested_voice_engine") or _VOICE_PROVIDER or "edge"),
+                "suggested_voice_engine": str(
+                    role.get("suggested_voice_engine") or _VOICE_PROVIDER or "edge"
+                ),
                 "reference_image_path": "",
                 "reference_image_url": "",
                 "primary_reference_image_path": "",
@@ -322,12 +455,16 @@ def build_initial_characters(scenes: list[StoryScene], roles: list[dict[str, Any
     return [auto_assign_voice(char) for char in seen.values()]
 
 
-def remove_placeholder_scene_characters(scenes: list[StoryScene], roles: list[dict[str, Any]] | None = None) -> list[StoryScene]:
+def remove_placeholder_scene_characters(
+    scenes: list[StoryScene], roles: list[dict[str, Any]] | None = None
+) -> list[StoryScene]:
     role_map = _role_lookup(roles)
     if not role_map:
         return scenes
     for scene in scenes:
-        scene.characters = [name for name in scene.characters if not _is_placeholder_character(name, role_map)]
+        scene.characters = [
+            name for name in scene.characters if not _is_placeholder_character(name, role_map)
+        ]
         if scene.speaker and _is_placeholder_character(scene.speaker, role_map):
             scene.speaker = ""
     return scenes
@@ -386,7 +523,9 @@ def _normalized_key(value: object) -> str:
     return str(value or "").strip().lower()
 
 
-def _voice_source_for_scene(project: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any] | None:
+def _voice_source_for_scene(
+    project: dict[str, Any], scene: dict[str, Any]
+) -> dict[str, Any] | None:
     names = [
         scene.get("speaker"),
         *list(scene.get("characters") or []),
@@ -415,7 +554,8 @@ def scene_character_refs(project: dict[str, Any], scene: dict[str, Any]) -> list
     # Load asset store to enrich character data with visual descriptions
     asset_char_map: dict[str, Any] = {}
     try:
-        from backend.assets import load_asset_store, AssetType
+        from backend.assets import AssetType, load_asset_store
+
         asset_store = load_asset_store(project_id)
         for asset in asset_store.characters:
             asset_key = _normalized_key(asset.name)
@@ -454,7 +594,11 @@ def scene_character_refs(project: dict[str, Any], scene: dict[str, Any]) -> list
         clothing_style = str(character.get("clothing_style") or "").strip()
         description = str(character.get("description") or "").strip()
         negative_constraints = str(character.get("negative_constraints") or "").strip()
-        meta = deepcopy(character.get("meta") if isinstance(character.get("meta"), dict) else default_character_meta())
+        meta = deepcopy(
+            character.get("meta")
+            if isinstance(character.get("meta"), dict)
+            else default_character_meta()
+        )
 
         # Enrich from asset store if project character data is sparse
         asset = asset_char_map.get(key)
@@ -484,7 +628,11 @@ def scene_character_refs(project: dict[str, Any], scene: dict[str, Any]) -> list
                 "appearance_core": appearance_core,
                 "clothing_style": clothing_style,
                 "negative_constraints": negative_constraints,
-                "reference_meta": deepcopy(character.get("reference_meta") if isinstance(character.get("reference_meta"), dict) else {}),
+                "reference_meta": deepcopy(
+                    character.get("reference_meta")
+                    if isinstance(character.get("reference_meta"), dict)
+                    else {}
+                ),
                 "reference_image_path": relative_path,
                 "reference_image_abs_path": abs_path,
                 "reference_image_url": url,
@@ -537,7 +685,9 @@ def _character_prompt_feature_lines(ref: dict[str, Any]) -> tuple[list[str], lis
     if negative_constraints:
         negative.append(negative_constraints)
     # Standard consistency negatives
-    negative.append("inconsistent character design, wrong hair color, wrong eye color, wrong clothing")
+    negative.append(
+        "inconsistent character design, wrong hair color, wrong eye color, wrong clothing"
+    )
 
     return positive, negative
 
@@ -576,23 +726,40 @@ def compile_character_prompt(scene: dict[str, Any], refs: list[dict[str, Any]]) 
 
     # Add character count hint for SD composition
     if char_count == 1:
-        positive_lines.insert(0, "1girl" if any(
-            kw in " ".join(positive_lines).lower()
-            for kw in ("female", "girl", "woman", "she")
-        ) else "1boy" if any(
-            kw in " ".join(positive_lines).lower()
-            for kw in ("male", "boy", "man", "he")
-        ) else "1person")
+        positive_lines.insert(
+            0,
+            (
+                "1girl"
+                if any(
+                    kw in " ".join(positive_lines).lower()
+                    for kw in ("female", "girl", "woman", "she")
+                )
+                else (
+                    "1boy"
+                    if any(
+                        kw in " ".join(positive_lines).lower()
+                        for kw in ("male", "boy", "man", "he")
+                    )
+                    else "1person"
+                )
+            ),
+        )
     elif char_count == 2:
         positive_lines.insert(0, "2people")
     elif char_count > 2:
         positive_lines.insert(0, f"{char_count}people, multiple characters")
 
-    return ", ".join(line for line in positive_lines if line), ", ".join(line for line in negative_lines if line)
+    return ", ".join(line for line in positive_lines if line), ", ".join(
+        line for line in negative_lines if line
+    )
 
 
 def scene_with_character_context(project: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
-    from backend.scene_graph import _scene_graph_payload, build_production_bible, scene_production_bible
+    from backend.scene_graph import (
+        _scene_graph_payload,
+        build_production_bible,
+        scene_production_bible,
+    )
 
     merged = scene_with_inherited_voice(project, scene)
     refs = scene_character_refs(project, merged)
@@ -601,7 +768,14 @@ def scene_with_character_context(project: dict[str, Any], scene: dict[str, Any])
         for ref in refs
         if str(ref.get("description") or "").strip()
     ]
-    primary = next((ref for ref in refs if ref.get("reference_image_abs_path") or ref.get("reference_image_path")), refs[0] if refs else None)
+    primary = next(
+        (
+            ref
+            for ref in refs
+            if ref.get("reference_image_abs_path") or ref.get("reference_image_path")
+        ),
+        refs[0] if refs else None,
+    )
     merged["character_references"] = refs
     merged["character_descriptions"] = "；".join(descriptions)
     positive_prompt, negative_prompt = compile_character_prompt(merged, refs)
@@ -612,16 +786,26 @@ def scene_with_character_context(project: dict[str, Any], scene: dict[str, Any])
     )
     if primary:
         merged["primary_reference_image_path"] = str(primary.get("reference_image_path") or "")
-        merged["primary_reference_image_abs_path"] = str(primary.get("reference_image_abs_path") or "")
-        primary_meta = primary.get("reference_meta") if isinstance(primary.get("reference_meta"), dict) else {}
+        merged["primary_reference_image_abs_path"] = str(
+            primary.get("reference_image_abs_path") or ""
+        )
+        primary_meta = (
+            primary.get("reference_meta") if isinstance(primary.get("reference_meta"), dict) else {}
+        )
         merged["primary_reference_meta"] = {
             "crop_method": primary_meta.get("crop_method"),
-            "output_size": deepcopy(primary_meta.get("output_size")) if isinstance(primary_meta.get("output_size"), list) else primary_meta.get("output_size"),
+            "output_size": (
+                deepcopy(primary_meta.get("output_size"))
+                if isinstance(primary_meta.get("output_size"), list)
+                else primary_meta.get("output_size")
+            ),
             "warnings": list(primary_meta.get("warnings") or []),
         }
     merged["production_bible"] = scene_production_bible(project, merged, refs)
     scene_order = int(merged.get("order") or 1)
-    scene_graph = _scene_graph_payload(merged, scene_order, project_id=str(project.get("project_id") or ""))
+    scene_graph = _scene_graph_payload(
+        merged, scene_order, project_id=str(project.get("project_id") or "")
+    )
     merged["temporal_spec"] = {
         "version": 1,
         "kind": "scene_temporal_video_spec",
@@ -678,7 +862,9 @@ def validate_reference_image(path: Path) -> None:
         raise ValueError("Uploaded file is not a readable image.") from exc
 
     if len(color_bins) < 8 or max(channel_ranges) < 24 or max_stddev < 10:
-        raise ValueError("Reference image has too little visual detail. Upload a real character image, not a flat placeholder.")
+        raise ValueError(
+            "Reference image has too little visual detail. Upload a real character image, not a flat placeholder."
+        )
 
 
 def write_data_url_image(project_id: str, filename: str, data_url: str) -> Path:
@@ -705,14 +891,17 @@ def write_data_url_image(project_id: str, filename: str, data_url: str) -> Path:
     return out
 
 
-def update_character_reference_image(project_id: str, char_index: int, source_path: Path) -> dict[str, Any]:
+def update_character_reference_image(
+    project_id: str, char_index: int, source_path: Path
+) -> dict[str, Any]:
     """Update a character's reference image. Requires project_lock externally or uses it internally."""
     from backend.project_models import project_lock
     from backend.scene_renderer import _invalidate_character_scenes
 
     validate_reference_image(source_path)
     with project_lock(project_id):
-        from backend.project_runtime import load_project, _save_project_with_project_event
+        from backend.project_runtime import _save_project_with_project_event, load_project
+
         project = load_project(project_id)
         characters = project.get("characters", [])
         if char_index < 1 or char_index > len(characters):

@@ -68,7 +68,9 @@ def run_background_job(
         try:
             action()
             if update_on_success:
-                update_runtime(project_id, status="ready", stage="done", message="Completed", progress=100)
+                update_runtime(
+                    project_id, status="ready", stage="done", message="Completed", progress=100
+                )
         except Exception as exc:
             update_runtime(project_id, status="failed", stage="failed", message=fail_message)
             logger.error(error_log, *error_args, exc)

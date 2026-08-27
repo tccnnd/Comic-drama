@@ -8,13 +8,20 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     pyttsx3 = None
 
-from scripts import tts_engines
 from backend.config_utils import env_value
+from scripts import tts_engines
 from scripts.rw_config import DEFAULT_SUBPROCESS_TIMEOUTS, DEFAULT_VOICE_PRESETS, ROOT
 from scripts.rw_ffmpeg import concat_timeout, run_guarded
 from scripts.rw_models import StoryScene
 from scripts.rw_styles import normalize_audio_style, normalize_subtitle_style
-from scripts.rw_utils import ensure_parent, load_json, media_duration, wav_duration, write_silent_wav, write_text
+from scripts.rw_utils import (
+    ensure_parent,
+    load_json,
+    media_duration,
+    wav_duration,
+    write_silent_wav,
+    write_text,
+)
 
 
 def voice_presets_path() -> Path:
@@ -64,9 +71,14 @@ def infer_voice_profile(speaker: str, characters: list[str]) -> str:
         return "narrator"
     if speaker in {"主持人", "主播", "记者"}:
         return "host"
-    if speaker in {"反派", "对手", "老板"} or any(token in speaker for token in {"虎", "护法", "魔", "敌", "贼", "恶", "妖"}):
+    if speaker in {"反派", "对手", "老板"} or any(
+        token in speaker for token in {"虎", "护法", "魔", "敌", "贼", "恶", "妖"}
+    ):
         return "antagonist"
-    if any(token in speaker for token in {"姐", "妹", "她", "女", "娘", "妃", "姬", "嫣", "雪", "月", "晚"}):
+    if any(
+        token in speaker
+        for token in {"姐", "妹", "她", "女", "娘", "妃", "姬", "嫣", "雪", "月", "晚"}
+    ):
         return "female_lead"
     return "male_lead"
 
@@ -106,11 +118,21 @@ def resolve_voice_engine(scene: StoryScene, provider: str) -> str:
     return engine
 
 
-def local_tts_engine(preferred_voice: str = "", rate_scale: float = 1.0, volume_scale: float = 1.0) -> pyttsx3.Engine:
-    return tts_engines.local_tts_engine(preferred_voice, rate_scale=rate_scale, volume_scale=volume_scale)
+def local_tts_engine(
+    preferred_voice: str = "", rate_scale: float = 1.0, volume_scale: float = 1.0
+) -> pyttsx3.Engine:
+    return tts_engines.local_tts_engine(
+        preferred_voice, rate_scale=rate_scale, volume_scale=volume_scale
+    )
 
 
-def synthesize_local_tts(text: str, out_path: Path, preferred_voice: str = "", rate_scale: float = 1.0, volume_scale: float = 1.0) -> None:
+def synthesize_local_tts(
+    text: str,
+    out_path: Path,
+    preferred_voice: str = "",
+    rate_scale: float = 1.0,
+    volume_scale: float = 1.0,
+) -> None:
     tts_engines.synthesize_local_tts(
         text,
         out_path,
@@ -148,7 +170,14 @@ def format_edge_pitch(pitch: float) -> str:
     return tts_engines.format_edge_pitch(pitch)
 
 
-def synthesize_edge_tts(text: str, out_path: Path, voice: str, rate: float = 1.0, volume: float = 1.0, pitch: float = 0.0) -> None:
+def synthesize_edge_tts(
+    text: str,
+    out_path: Path,
+    voice: str,
+    rate: float = 1.0,
+    volume: float = 1.0,
+    pitch: float = 0.0,
+) -> None:
     tts_engines.synthesize_edge_tts(text, out_path, voice, rate=rate, volume=volume, pitch=pitch)
 
 
@@ -166,7 +195,19 @@ def concat_audio_segments(ffmpeg: str, segments: list[Path], out_path: Path, run
     concat_file = run_dir / f"{out_path.stem}_audio_concat.txt"
     write_text(concat_file, "\n".join(f"file '{segment.name}'" for segment in segments))
     result = run_guarded(
-        [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c", "copy", str(out_path)],
+        [
+            ffmpeg,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_file),
+            "-c",
+            "copy",
+            str(out_path),
+        ],
         cwd=run_dir,
         timeout=concat_timeout(len(segments)),
         stage="ffmpeg_concat_audio",
@@ -198,13 +239,26 @@ def synthesize_voice_fragment(
             if candidate == "edge":
                 mp3_path = out_wav.with_suffix(".mp3")
                 edge_voice = env_value("TTS_EDGE_VOICE", default=voice)
-                synthesize_edge_tts(text, mp3_path, edge_voice, rate=rate_scale, volume=volume_scale, pitch=pitch_shift)
+                synthesize_edge_tts(
+                    text,
+                    mp3_path,
+                    edge_voice,
+                    rate=rate_scale,
+                    volume=volume_scale,
+                    pitch=pitch_shift,
+                )
                 convert_audio_to_wav(ffmpeg, mp3_path, out_wav)
                 if mp3_path.exists():
                     mp3_path.unlink()
                 return wav_duration(out_wav)
             if candidate == "local":
-                synthesize_local_tts(text, out_wav, preferred_voice=voice, rate_scale=rate_scale, volume_scale=volume_scale)
+                synthesize_local_tts(
+                    text,
+                    out_wav,
+                    preferred_voice=voice,
+                    rate_scale=rate_scale,
+                    volume_scale=volume_scale,
+                )
                 return wav_duration(out_wav)
             if candidate == "silent":
                 write_silent_wav(out_wav, max(0.4, min(2.0, len(text) / 10)))
@@ -231,7 +285,9 @@ def synthesize_voice_fragment(
     return wav_duration(out_wav)
 
 
-def resolve_dialogue_voice(scene: StoryScene, speaker: str, spoken_text: str) -> tuple[str, str, str]:
+def resolve_dialogue_voice(
+    scene: StoryScene, speaker: str, spoken_text: str
+) -> tuple[str, str, str]:
     segment_scene = StoryScene(
         scene=scene.scene,
         duration=scene.duration,
@@ -315,7 +371,9 @@ def render_voice_track(
     for index, (speaker, spoken_text) in enumerate(dialogue_segments, start=1):
         segment_speaker = speaker or scene.speaker or "旁白"
         _, _, voice_name = resolve_dialogue_voice(scene, segment_speaker, spoken_text)
-        segment_wav = raw_wav if single_segment else run_dir / f"scene_{scene_id}_voice_{index:02}.wav"
+        segment_wav = (
+            raw_wav if single_segment else run_dir / f"scene_{scene_id}_voice_{index:02}.wav"
+        )
         try:
             duration = synthesize_voice_fragment(
                 ffmpeg,

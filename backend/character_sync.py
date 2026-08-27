@@ -10,6 +10,7 @@ Data flow:
   AssetStore (visual authority) ──sync──> project.characters (rendering uses this)
   project.characters (voice/ref authority) ──sync──> AssetStore (display uses this)
 """
+
 from __future__ import annotations
 
 import logging
@@ -89,17 +90,25 @@ def sync_characters_from_assets(project: dict[str, Any], project_id: str) -> boo
             updated = True
 
         # Sync clothing_style from visual_prompt if empty
-        if not str(character.get("clothing_style") or "").strip() and str(asset.visual_prompt or "").strip():
+        if (
+            not str(character.get("clothing_style") or "").strip()
+            and str(asset.visual_prompt or "").strip()
+        ):
             character["clothing_style"] = str(asset.visual_prompt).strip()
             updated = True
 
         # Sync personality
-        if not str(character.get("personality") or "").strip() and str(asset.personality or "").strip():
+        if (
+            not str(character.get("personality") or "").strip()
+            and str(asset.personality or "").strip()
+        ):
             character["personality"] = str(asset.personality).strip()
             updated = True
 
     if updated:
-        logger.info("[character-sync] Synced visual data from AssetStore for project %s", project_id)
+        logger.info(
+            "[character-sync] Synced visual data from AssetStore for project %s", project_id
+        )
 
     return updated
 

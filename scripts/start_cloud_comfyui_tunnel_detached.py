@@ -5,7 +5,6 @@ import subprocess
 import time
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 TUNNEL_SCRIPT = ROOT / "scripts" / "cloud_comfyui_tunnel.py"

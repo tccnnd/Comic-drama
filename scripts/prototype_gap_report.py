@@ -3,6 +3,7 @@
 This script intentionally reads raw project JSON instead of importing backend
 runtime modules, so it can be used against archived workspace snapshots.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -171,13 +172,20 @@ def merge_reports(project_reports: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_report(path: Path) -> dict[str, Any]:
     project_files = discover_project_files(path)
-    reports = [summarize_project(_load_json(project_file), str(project_file)) for project_file in project_files]
+    reports = [
+        summarize_project(_load_json(project_file), str(project_file))
+        for project_file in project_files
+    ]
     return merge_reports(reports)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Report visual prototype coverage and freeform gaps.")
-    parser.add_argument("path", type=Path, help="project.json, project directory, or workspace directory")
+    parser = argparse.ArgumentParser(
+        description="Report visual prototype coverage and freeform gaps."
+    )
+    parser.add_argument(
+        "path", type=Path, help="project.json, project directory, or workspace directory"
+    )
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     args = parser.parse_args(argv)
 

@@ -1,4 +1,5 @@
 """Tests for backend.scene_graph — shot overrides, director recommendations, production bible."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -10,7 +11,6 @@ from backend.scene_graph import (
     apply_director_recommendation,
     build_production_bible,
 )
-
 
 # ─── _normalize_shot_overrides ────────────────────────────────────────────────
 
@@ -49,13 +49,15 @@ class TestNormalizeShotOverrides:
         assert result[0]["duration_seconds"] == 3.0
 
     def test_numeric_values_bounded(self):
-        overrides = [{
-            "shot_order": 1,
-            "duration_seconds": 200.0,  # Max is 120
-            "camera_speed": 10.0,  # Max is 5.0
-            "zoom": 5.0,  # Max is 3.0
-            "center_x": 2.0,  # Max is 1.0
-        }]
+        overrides = [
+            {
+                "shot_order": 1,
+                "duration_seconds": 200.0,  # Max is 120
+                "camera_speed": 10.0,  # Max is 5.0
+                "zoom": 5.0,  # Max is 3.0
+                "center_x": 2.0,  # Max is 1.0
+            }
+        ]
         result = _normalize_shot_overrides(overrides)
         assert result[0]["duration_seconds"] <= 120.0
         assert result[0]["camera_speed"] <= 5.0
@@ -63,11 +65,13 @@ class TestNormalizeShotOverrides:
         assert result[0]["center_x"] <= 1.0
 
     def test_numeric_values_minimum_enforced(self):
-        overrides = [{
-            "shot_order": 1,
-            "duration_seconds": 0.01,  # Min is 0.25
-            "camera_speed": 0.01,  # Min is 0.1
-        }]
+        overrides = [
+            {
+                "shot_order": 1,
+                "duration_seconds": 0.01,  # Min is 0.25
+                "camera_speed": 0.01,  # Min is 0.1
+            }
+        ]
         result = _normalize_shot_overrides(overrides)
         assert result[0]["duration_seconds"] >= 0.25
         assert result[0]["camera_speed"] >= 0.1
@@ -231,8 +235,24 @@ class TestBuildProductionBible:
             "title": "",
             "style_id": "",
             "characters": [
-                {"name": "角色A", "char_id": "c_001", "description": "描述A", "appearance_core": "外貌A", "clothing_style": "", "negative_constraints": "", "reference_image_path": ""},
-                {"name": "角色B", "char_id": "c_002", "description": "描述B", "appearance_core": "外貌B", "clothing_style": "", "negative_constraints": "", "reference_image_path": ""},
+                {
+                    "name": "角色A",
+                    "char_id": "c_001",
+                    "description": "描述A",
+                    "appearance_core": "外貌A",
+                    "clothing_style": "",
+                    "negative_constraints": "",
+                    "reference_image_path": "",
+                },
+                {
+                    "name": "角色B",
+                    "char_id": "c_002",
+                    "description": "描述B",
+                    "appearance_core": "外貌B",
+                    "clothing_style": "",
+                    "negative_constraints": "",
+                    "reference_image_path": "",
+                },
             ],
             "scenes": [],
         }
@@ -248,8 +268,26 @@ class TestBuildProductionBible:
             "style_id": "",
             "characters": [],
             "scenes": [
-                {"scene_id": "scene_001", "order": 1, "title": "场景1", "emotion": "happy", "pacing": "fast", "scene_intent": "introduce", "subject_focus": "角色", "characters": ["A"]},
-                {"scene_id": "scene_002", "order": 2, "title": "场景2", "emotion": "sad", "pacing": "slow", "scene_intent": "conflict", "subject_focus": "", "characters": ["A", "B"]},
+                {
+                    "scene_id": "scene_001",
+                    "order": 1,
+                    "title": "场景1",
+                    "emotion": "happy",
+                    "pacing": "fast",
+                    "scene_intent": "introduce",
+                    "subject_focus": "角色",
+                    "characters": ["A"],
+                },
+                {
+                    "scene_id": "scene_002",
+                    "order": 2,
+                    "title": "场景2",
+                    "emotion": "sad",
+                    "pacing": "slow",
+                    "scene_intent": "conflict",
+                    "subject_focus": "",
+                    "characters": ["A", "B"],
+                },
             ],
         }
         bible = build_production_bible(project)

@@ -10,7 +10,6 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 STYLES_PATH = DATA_DIR / "styles.json"
@@ -210,7 +209,9 @@ def load_style_store() -> StyleStore:
     normalized_styles = [_normalize_style_record(item) for item in styles]
     if not normalized_styles:
         return _default_store()
-    default_style_id = str(payload.get("default_style_id") or payload.get("selected_style_id") or "").strip()
+    default_style_id = str(
+        payload.get("default_style_id") or payload.get("selected_style_id") or ""
+    ).strip()
     if default_style_id not in {style.id for style in normalized_styles}:
         default_style_id = normalized_styles[0].id
     store = StyleStore(default_style_id=default_style_id, styles=normalized_styles)
@@ -223,7 +224,9 @@ def save_style_store(store: StyleStore | dict[str, Any]) -> StyleStore:
     normalized = store if isinstance(store, StyleStore) else StyleStore.model_validate(store)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp_path = STYLES_PATH.with_suffix(".json.tmp")
-    tmp_path.write_text(json.dumps(normalized.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp_path.write_text(
+        json.dumps(normalized.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     tmp_path.replace(STYLES_PATH)
     return normalized
 
@@ -258,7 +261,11 @@ def get_default_style_id() -> str:
 
 
 def create_style(payload: StyleCreateRequest | dict[str, Any]) -> StyleRecord:
-    request = payload if isinstance(payload, StyleCreateRequest) else StyleCreateRequest.model_validate(payload)
+    request = (
+        payload
+        if isinstance(payload, StyleCreateRequest)
+        else StyleCreateRequest.model_validate(payload)
+    )
     with _STYLE_LOCK:
         store = load_style_store()
         style_id = str(request.id or "").strip() or utc_slug(request.name)
@@ -280,7 +287,11 @@ def create_style(payload: StyleCreateRequest | dict[str, Any]) -> StyleRecord:
 
 
 def update_style(style_id: str, payload: StyleUpdateRequest | dict[str, Any]) -> StyleRecord:
-    request = payload if isinstance(payload, StyleUpdateRequest) else StyleUpdateRequest.model_validate(payload)
+    request = (
+        payload
+        if isinstance(payload, StyleUpdateRequest)
+        else StyleUpdateRequest.model_validate(payload)
+    )
     with _STYLE_LOCK:
         store = load_style_store()
         for index, style in enumerate(store.styles):

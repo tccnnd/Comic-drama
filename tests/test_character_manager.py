@@ -1,20 +1,20 @@
 """Tests for backend.character_manager — character card, prompt, and voice logic."""
+
 from __future__ import annotations
 
 from copy import deepcopy
 
 import pytest
 
-from scripts.run_workflow import StoryScene
 from backend.character_manager import (
-    normalize_character_card,
     build_initial_characters,
-    merge_character_configs,
-    remove_placeholder_scene_characters,
     compile_character_prompt,
+    merge_character_configs,
+    normalize_character_card,
+    remove_placeholder_scene_characters,
     scene_with_inherited_voice,
 )
-
+from scripts.run_workflow import StoryScene
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,20 +266,48 @@ class TestCompileCharacterPrompt:
 
     def test_includes_scene_title_in_positive(self):
         scene = {"title": "初次相遇", "character_descriptions": ""}
-        refs = [{"char_id": "c_001", "name": "角色", "meta": {}, "appearance_core": "", "clothing_style": "", "description": "", "negative_constraints": ""}]
+        refs = [
+            {
+                "char_id": "c_001",
+                "name": "角色",
+                "meta": {},
+                "appearance_core": "",
+                "clothing_style": "",
+                "description": "",
+                "negative_constraints": "",
+            }
+        ]
         positive, _ = compile_character_prompt(scene, refs)
         assert "初次相遇" in positive
 
     def test_includes_character_descriptions(self):
         scene = {"title": "", "character_descriptions": "两人对峙"}
-        refs = [{"char_id": "c_001", "name": "角色", "meta": {}, "appearance_core": "", "clothing_style": "", "description": "", "negative_constraints": ""}]
+        refs = [
+            {
+                "char_id": "c_001",
+                "name": "角色",
+                "meta": {},
+                "appearance_core": "",
+                "clothing_style": "",
+                "description": "",
+                "negative_constraints": "",
+            }
+        ]
         positive, _ = compile_character_prompt(scene, refs)
         assert "两人对峙" in positive
 
     def test_limits_to_four_characters(self):
         scene = {"title": "", "character_descriptions": ""}
         refs = [
-            {"char_id": f"c_{i:03d}", "name": f"角色{i}", "meta": {}, "appearance_core": "外貌", "clothing_style": "", "description": "", "negative_constraints": ""}
+            {
+                "char_id": f"c_{i:03d}",
+                "name": f"角色{i}",
+                "meta": {},
+                "appearance_core": "外貌",
+                "clothing_style": "",
+                "description": "",
+                "negative_constraints": "",
+            }
             for i in range(1, 7)
         ]
         positive, _ = compile_character_prompt(scene, refs)
@@ -295,7 +323,17 @@ class TestCompileCharacterPrompt:
 
     def test_negative_prompt_includes_identity_preservation(self):
         scene = {"title": "", "character_descriptions": ""}
-        refs = [{"char_id": "c_001", "name": "林晚", "meta": {}, "appearance_core": "", "clothing_style": "", "description": "", "negative_constraints": ""}]
+        refs = [
+            {
+                "char_id": "c_001",
+                "name": "林晚",
+                "meta": {},
+                "appearance_core": "",
+                "clothing_style": "",
+                "description": "",
+                "negative_constraints": "",
+            }
+        ]
         _, negative = compile_character_prompt(scene, refs)
         assert "林晚" in negative
         assert "辨识度" in negative
@@ -386,9 +424,7 @@ class TestSceneWithInheritedVoice:
         assert result["voice_engine"] == ""
 
     def test_does_not_mutate_original_scene(self):
-        project = {
-            "characters": [{"name": "林晚", "voice_engine": "edge", "voice_id": "test"}]
-        }
+        project = {"characters": [{"name": "林晚", "voice_engine": "edge", "voice_id": "test"}]}
         scene = {
             "speaker": "林晚",
             "characters": ["林晚"],

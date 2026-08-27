@@ -5,7 +5,6 @@ import os
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_EXTENSIONS = {
@@ -35,6 +34,7 @@ SKIP_DIRS = {
 }
 
 QUESTION_RUN_RE = re.compile(r"\?{4,}")
+
 
 def chars(*codepoints: int) -> str:
     return "".join(chr(codepoint) for codepoint in codepoints)
@@ -122,8 +122,12 @@ def text_issues(path: Path) -> list[tuple[int, str]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check source text for mojibake and invalid UTF-8.")
-    parser.add_argument("paths", nargs="*", help="Files or directories to scan. Defaults to repository root.")
+    parser = argparse.ArgumentParser(
+        description="Check source text for mojibake and invalid UTF-8."
+    )
+    parser.add_argument(
+        "paths", nargs="*", help="Files or directories to scan. Defaults to repository root."
+    )
     args = parser.parse_args()
 
     targets = [ROOT / value for value in args.paths] if args.paths else [ROOT]

@@ -6,7 +6,6 @@ import sys
 import time
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
 SERVER = ROOT / "scripts" / "dev_server.py"

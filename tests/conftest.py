@@ -1,4 +1,5 @@
 """Shared fixtures for the Comic Drama test suite."""
+
 from __future__ import annotations
 
 import json
@@ -196,7 +197,9 @@ def sample_project(tmp_workspace):
     }
 
     project_file = project_root / "project.json"
-    project_file.write_text(json.dumps(project_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    project_file.write_text(
+        json.dumps(project_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     return {
         "project_id": project_id,

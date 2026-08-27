@@ -6,6 +6,7 @@ split/merge/restore operations. Filesystem is isolated via tmp_path
 with both project_models.WORKSPACE and project_runtime.WORKSPACE
 patched to the same temp directory.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,43 +16,45 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.run_workflow import StoryScene
 from backend import project_runtime
 from backend.project_runtime import (
+    _renumber_scenes,
+    _set_runtime,
+    apply_project_episode_pacing,
+    capture_scene_snapshot,
     create_project,
-    load_project,
-    save_project,
-    list_projects,
     delete_project,
+    latest_scene_snapshot,
+    list_projects,
+    load_project,
+    merge_scene_with_next,
+    normalize_scene_pacing_update,
     project_snapshot,
-    update_runtime,
-    update_scene_fields,
+    reconstruct_story_text_from_scenes,
+    restore_scene_snapshot,
+    save_project,
+    split_scene,
     update_character_fields,
     update_project_fields,
-    split_scene,
-    merge_scene_with_next,
-    restore_scene_snapshot,
-    capture_scene_snapshot,
-    latest_scene_snapshot,
-    apply_project_episode_pacing,
-    normalize_scene_pacing_update,
-    reconstruct_story_text_from_scenes,
-    _set_runtime,
-    _renumber_scenes,
+    update_runtime,
+    update_scene_fields,
 )
-
+from scripts.run_workflow import StoryScene
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def runtime_workspace(tmp_path):
     """Patch WORKSPACE in both project_models and project_runtime to a temp dir."""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    with patch("backend.project_models.WORKSPACE", workspace), \
-         patch("backend.project_runtime.WORKSPACE", workspace):
+    with (
+        patch("backend.project_models.WORKSPACE", workspace),
+        patch("backend.project_runtime.WORKSPACE", workspace),
+    ):
         yield workspace
 
 
@@ -173,6 +176,7 @@ def _mock_storyboard(scene_count: int = 3):
 # create_project
 # ---------------------------------------------------------------------------
 
+
 class TestCreateProject:
     def test_creates_project_with_valid_fields(self, runtime_workspace):
         scenes, planner = _mock_storyboard(2)
@@ -242,6 +246,7 @@ class TestCreateProject:
 # load_project
 # ---------------------------------------------------------------------------
 
+
 class TestLoadProject:
     def test_loads_existing_project(self, runtime_workspace):
         project_data = _make_minimal_project()
@@ -288,6 +293,7 @@ class TestLoadProject:
 # save_project
 # ---------------------------------------------------------------------------
 
+
 class TestSaveProject:
     def test_saves_and_updates_timestamp(self, runtime_workspace):
         project_data = _make_minimal_project()
@@ -321,6 +327,7 @@ class TestSaveProject:
 # list_projects
 # ---------------------------------------------------------------------------
 
+
 class TestListProjects:
     def test_returns_empty_when_no_projects(self, runtime_workspace):
         assert list_projects() == []
@@ -353,6 +360,7 @@ class TestListProjects:
 # delete_project
 # ---------------------------------------------------------------------------
 
+
 class TestDeleteProject:
     def test_deletes_existing_project(self, runtime_workspace):
         _write_project(runtime_workspace, "proj_del_001", _make_minimal_project())
@@ -372,6 +380,7 @@ class TestDeleteProject:
 # ---------------------------------------------------------------------------
 # project_snapshot
 # ---------------------------------------------------------------------------
+
 
 class TestProjectSnapshot:
     def test_returns_deep_copy(self, runtime_workspace):
@@ -429,10 +438,13 @@ class TestProjectSnapshot:
 # update_runtime
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateRuntime:
     def test_updates_status_and_progress(self, runtime_workspace):
         _write_project(runtime_workspace, "proj_rt_001", _make_minimal_project())
-        updated = update_runtime("proj_rt_001", status="running", progress=50, stage="rendering", message="半完成")
+        updated = update_runtime(
+            "proj_rt_001", status="running", progress=50, stage="rendering", message="半完成"
+        )
         assert updated["runtime"]["status"] == "running"
         assert updated["runtime"]["progress"] == 50
         assert updated["runtime"]["stage"] == "rendering"
@@ -457,6 +469,7 @@ class TestUpdateRuntime:
 # update_scene_fields
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateSceneFields:
     def test_updates_visual_prompt(self, runtime_workspace):
         _write_project(runtime_workspace, "proj_usf_001", _make_minimal_project())
@@ -479,7 +492,9 @@ class TestUpdateSceneFields:
 
     def test_normalizes_crop_box(self, runtime_workspace):
         _write_project(runtime_workspace, "proj_usf_004", _make_minimal_project())
-        updated = update_scene_fields("proj_usf_004", 1, {"crop_box": {"x": 10, "y": 20, "w": 100, "h": 200}})
+        updated = update_scene_fields(
+            "proj_usf_004", 1, {"crop_box": {"x": 10, "y": 20, "w": 100, "h": 200}}
+        )
         scene = next(s for s in updated["scenes"] if s["order"] == 1)
         assert "crop_box" in scene
 
@@ -487,6 +502,7 @@ class TestUpdateSceneFields:
 # ---------------------------------------------------------------------------
 # update_character_fields
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateCharacterFields:
     def test_updates_character_name(self, runtime_workspace):
@@ -513,6 +529,7 @@ class TestUpdateCharacterFields:
 # ---------------------------------------------------------------------------
 # update_project_fields
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateProjectFields:
     def test_updates_title(self, runtime_workspace):
@@ -541,6 +558,7 @@ class TestUpdateProjectFields:
 # ---------------------------------------------------------------------------
 # split_scene
 # ---------------------------------------------------------------------------
+
 
 class TestSplitScene:
     def test_splits_scene_into_two(self, runtime_workspace):
@@ -579,6 +597,7 @@ class TestSplitScene:
 # ---------------------------------------------------------------------------
 # merge_scene_with_next
 # ---------------------------------------------------------------------------
+
 
 class TestMergeSceneWithNext:
     def test_merges_two_scenes_into_one(self, runtime_workspace):
@@ -619,6 +638,7 @@ class TestMergeSceneWithNext:
 # restore_scene_snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestRestoreSceneSnapshot:
     def test_raises_when_no_snapshot(self, runtime_workspace):
         _write_project(runtime_workspace, "proj_restore_001", _make_minimal_project())
@@ -640,6 +660,7 @@ class TestRestoreSceneSnapshot:
 # capture_scene_snapshot / latest_scene_snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestSceneSnapshotCapture:
     def test_capture_creates_snapshot_file(self, runtime_workspace):
         _write_project(runtime_workspace, "proj_cap_001", _make_minimal_project())
@@ -653,6 +674,7 @@ class TestSceneSnapshotCapture:
         _write_project(runtime_workspace, "proj_cap_002", _make_minimal_project())
         capture_scene_snapshot("proj_cap_002", 1, "edit")
         import time
+
         time.sleep(0.01)
         capture_scene_snapshot("proj_cap_002", 1, "split")
         latest = latest_scene_snapshot("proj_cap_002", 1)
@@ -663,6 +685,7 @@ class TestSceneSnapshotCapture:
         _write_project(runtime_workspace, "proj_cap_003", _make_minimal_project())
         capture_scene_snapshot("proj_cap_003", 1, "edit")
         import time
+
         time.sleep(0.01)
         capture_scene_snapshot("proj_cap_003", 1, "split")
         latest = latest_scene_snapshot("proj_cap_003", 1, skip_actions={"split"})
@@ -679,12 +702,25 @@ class TestSceneSnapshotCapture:
 # Helper functions
 # ---------------------------------------------------------------------------
 
+
 class TestReconstructStoryText:
     def test_reconstructs_from_scenes(self):
         project = {
             "scenes": [
-                {"order": 1, "title": "场景一", "visual_prompt": "画面一", "dialogue": "对白一", "speaker": ""},
-                {"order": 2, "title": "场景二", "visual_prompt": "画面二", "dialogue": "对白二", "speaker": ""},
+                {
+                    "order": 1,
+                    "title": "场景一",
+                    "visual_prompt": "画面一",
+                    "dialogue": "对白一",
+                    "speaker": "",
+                },
+                {
+                    "order": 2,
+                    "title": "场景二",
+                    "visual_prompt": "画面二",
+                    "dialogue": "对白二",
+                    "speaker": "",
+                },
             ]
         }
         result = reconstruct_story_text_from_scenes(project)
@@ -697,12 +733,20 @@ class TestReconstructStoryText:
         assert reconstruct_story_text_from_scenes({"scenes": []}) == ""
 
     def test_uses_default_title_when_missing(self):
-        project = {"scenes": [{"order": 1, "title": "", "visual_prompt": "", "dialogue": "", "speaker": ""}]}
+        project = {
+            "scenes": [
+                {"order": 1, "title": "", "visual_prompt": "", "dialogue": "", "speaker": ""}
+            ]
+        }
         result = reconstruct_story_text_from_scenes(project)
         assert "场景 1" in result
 
     def test_speaker_fallback_when_no_dialogue(self):
-        project = {"scenes": [{"order": 1, "title": "T", "visual_prompt": "", "dialogue": "", "speaker": "林晚"}]}
+        project = {
+            "scenes": [
+                {"order": 1, "title": "T", "visual_prompt": "", "dialogue": "", "speaker": "林晚"}
+            ]
+        }
         result = reconstruct_story_text_from_scenes(project)
         assert "林晚" in result
 
@@ -750,29 +794,39 @@ class TestApplyProjectEpisodePacing:
 
 class TestRenumberScenes:
     def test_sequential_order(self):
-        project = {"project_id": "p1", "scenes": [
-            {"order": 5, "scene_id": ""},
-            {"order": 3, "scene_id": ""},
-            {"order": 1, "scene_id": ""},
-        ]}
+        project = {
+            "project_id": "p1",
+            "scenes": [
+                {"order": 5, "scene_id": ""},
+                {"order": 3, "scene_id": ""},
+                {"order": 1, "scene_id": ""},
+            ],
+        }
         _renumber_scenes(project)
         orders = [s["order"] for s in project["scenes"]]
         assert orders == [1, 2, 3]
 
     def test_assigns_scene_ids(self):
-        project = {"project_id": "p1", "scenes": [
-            {"order": 1, "scene_id": ""},
-            {"order": 2, "scene_id": ""},
-        ]}
+        project = {
+            "project_id": "p1",
+            "scenes": [
+                {"order": 1, "scene_id": ""},
+                {"order": 2, "scene_id": ""},
+            ],
+        }
         _renumber_scenes(project)
         for scene in project["scenes"]:
             assert scene["scene_id"].startswith("scene_")
 
     def test_updates_scene_count_setting(self):
-        project = {"project_id": "p1", "settings": {}, "scenes": [
-            {"order": 1, "scene_id": ""},
-            {"order": 2, "scene_id": ""},
-        ]}
+        project = {
+            "project_id": "p1",
+            "settings": {},
+            "scenes": [
+                {"order": 1, "scene_id": ""},
+                {"order": 2, "scene_id": ""},
+            ],
+        }
         _renumber_scenes(project)
         assert project["settings"]["scene_count"] == 2
 

@@ -3,83 +3,98 @@
 Covers VideoProviderSpec, register_video_provider, list/query/normalize
 functions, and provider readiness logic.
 """
+
 from __future__ import annotations
 
 import pytest
 
 from video_providers import (
     VideoProviderSpec,
-    register_video_provider,
-    list_video_provider_specs,
-    list_video_providers,
     get_video_provider_spec,
     get_video_provider_status,
+    list_video_provider_specs,
+    list_video_providers,
     normalize_video_provider,
+    register_video_provider,
     video_provider_backend,
 )
-
 
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterVideoProvider:
     def test_normalizes_id_to_lowercase(self):
-        spec = register_video_provider(VideoProviderSpec(
-            id="TestProvider",
-            label="Test",
-            backend="remote",
-        ))
+        spec = register_video_provider(
+            VideoProviderSpec(
+                id="TestProvider",
+                label="Test",
+                backend="remote",
+            )
+        )
         assert spec.id == "testprovider"
 
     def test_normalizes_aliases_to_lowercase(self):
-        spec = register_video_provider(VideoProviderSpec(
-            id="MyProvider",
-            label="My",
-            backend="remote",
-            aliases=("MyAlias", "  Spaced  ", ""),
-        ))
+        spec = register_video_provider(
+            VideoProviderSpec(
+                id="MyProvider",
+                label="My",
+                backend="remote",
+                aliases=("MyAlias", "  Spaced  ", ""),
+            )
+        )
         assert spec.aliases == ("myalias", "spaced")
 
     def test_rejects_empty_id(self):
         with pytest.raises(ValueError, match="video provider id is required"):
-            register_video_provider(VideoProviderSpec(
-                id="  ",
-                label="Empty",
-                backend="local",
-            ))
+            register_video_provider(
+                VideoProviderSpec(
+                    id="  ",
+                    label="Empty",
+                    backend="local",
+                )
+            )
 
     def test_returns_frozen_spec(self):
-        spec = register_video_provider(VideoProviderSpec(
-            id="frozen_test",
-            label="Frozen",
-            backend="local",
-        ))
+        spec = register_video_provider(
+            VideoProviderSpec(
+                id="frozen_test",
+                label="Frozen",
+                backend="local",
+            )
+        )
         with pytest.raises(AttributeError):
             spec.id = "changed"
 
     def test_overwrites_existing(self):
-        register_video_provider(VideoProviderSpec(
-            id="overwrite_me",
-            label="Original",
-            backend="local",
-        ))
-        register_video_provider(VideoProviderSpec(
-            id="overwrite_me",
-            label="Updated",
-            backend="remote",
-        ))
+        register_video_provider(
+            VideoProviderSpec(
+                id="overwrite_me",
+                label="Original",
+                backend="local",
+            )
+        )
+        register_video_provider(
+            VideoProviderSpec(
+                id="overwrite_me",
+                label="Updated",
+                backend="remote",
+            )
+        )
         spec = get_video_provider_spec("overwrite_me")
         assert spec.label == "Updated"
         assert spec.backend == "remote"
 
     def test_aliases_registered_for_lookup(self):
-        register_video_provider(VideoProviderSpec(
-            id="alias_host",
-            label="Alias Host",
-            backend="remote",
-            aliases=("alias_one", "alias_two"),
-        ))
+        register_video_provider(
+            VideoProviderSpec(
+                id="alias_host",
+                label="Alias Host",
+                backend="remote",
+                aliases=("alias_one", "alias_two"),
+            )
+        )
         assert get_video_provider_spec("alias_one").id == "alias_host"
         assert get_video_provider_spec("alias_two").id == "alias_host"
 
@@ -87,6 +102,7 @@ class TestRegisterVideoProvider:
 # ---------------------------------------------------------------------------
 # Default providers
 # ---------------------------------------------------------------------------
+
 
 class TestDefaultProviders:
     @pytest.fixture
@@ -131,6 +147,7 @@ class TestDefaultProviders:
 # List functions
 # ---------------------------------------------------------------------------
 
+
 class TestListFunctions:
     def test_list_specs_returns_list_of_video_provider_spec(self):
         specs = list_video_provider_specs()
@@ -150,6 +167,7 @@ class TestListFunctions:
 # ---------------------------------------------------------------------------
 # get_video_provider_spec
 # ---------------------------------------------------------------------------
+
 
 class TestGetVideoProviderSpec:
     def test_by_id(self):
@@ -201,6 +219,7 @@ class TestGetVideoProviderSpec:
 # normalize_video_provider
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizeVideoProvider:
     def test_returns_id(self):
         assert normalize_video_provider("local") == "local"
@@ -223,6 +242,7 @@ class TestNormalizeVideoProvider:
 # video_provider_backend
 # ---------------------------------------------------------------------------
 
+
 class TestVideoProviderBackend:
     def test_local_backend(self):
         assert video_provider_backend("local") == "local"
@@ -240,6 +260,7 @@ class TestVideoProviderBackend:
 # ---------------------------------------------------------------------------
 # get_video_provider_status
 # ---------------------------------------------------------------------------
+
 
 class TestGetVideoProviderStatus:
     def test_local_status_is_ready(self):
@@ -276,8 +297,15 @@ class TestGetVideoProviderStatus:
         assert status["configured_count"] >= 1
 
     def test_remote_missing_env(self, monkeypatch):
-        for var in ("SORA_API_KEY", "SORA_MODEL", "SORA_BASE_URL", "SORA_SUBMIT_URL",
-                     "OPENAI_API_KEY", "OPENAI_VIDEO_MODEL", "OPENAI_BASE_URL"):
+        for var in (
+            "SORA_API_KEY",
+            "SORA_MODEL",
+            "SORA_BASE_URL",
+            "SORA_SUBMIT_URL",
+            "OPENAI_API_KEY",
+            "OPENAI_VIDEO_MODEL",
+            "OPENAI_BASE_URL",
+        ):
             monkeypatch.delenv(var, raising=False)
         status = get_video_provider_status("sora")
         assert not status["readiness"]["ready"]

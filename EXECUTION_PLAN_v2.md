@@ -364,7 +364,7 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | T1.3 | 依赖现代化 | 1 | completed |
 | T1.4 | app.py 路由拆分 | 1 | completed（主体由 P2 合入完成；补契约快照+WebSocket 连通测试） |
 | T1.5 | 前端工具链 | 1 | completed（npm install/ lint 0 error/ format:check 通过；events.js 重复导入已修） |
-| T1.6 | 格式化 | 1 | planned |
+| T1.6 | 格式化 | 1 | completed（black 81 文件 reformat/isort 全修；--check 回填通过；全量 511 passed/exit=0） |
 | T1.7 | mypy 渐进 | 1 | planned |
 | T1.8 | CI 增量增强 | 1 | planned |
 | T1.9 | 快速启动 | 1 | planned |

@@ -3,6 +3,7 @@
 验证 WebSocket 端点能够完成握手、按契约返回结构化响应并优雅关闭。
 不依赖真实任务、不依赖前端/浏览器，纯后端连通性验证。
 """
+
 from __future__ import annotations
 
 import pytest

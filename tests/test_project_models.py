@@ -1,4 +1,5 @@
 """Tests for backend.project_models — pure logic functions."""
+
 from __future__ import annotations
 
 import re
@@ -6,7 +7,17 @@ from copy import deepcopy
 
 import pytest
 
-from scripts.run_workflow import StoryScene, normalize_crop_box, DEFAULT_CROP_BOX
+from backend.project_models import (
+    _coerce_int_field,
+    _scene_from_payload,
+    default_drama_config,
+    derive_project_title,
+    project_dir,
+    scene_to_dict,
+    utc_iso,
+    validate_project_id,
+)
+from scripts.run_workflow import DEFAULT_CROP_BOX, StoryScene, normalize_crop_box
 from scripts.rw_models import (
     AudioConfig,
     CameraConfig,
@@ -17,17 +28,6 @@ from scripts.rw_models import (
     ValidationState,
     VoiceConfig,
 )
-from backend.project_models import (
-    utc_iso,
-    derive_project_title,
-    default_drama_config,
-    _coerce_int_field,
-    _scene_from_payload,
-    project_dir,
-    scene_to_dict,
-    validate_project_id,
-)
-
 
 # ─── utc_iso ──────────────────────────────────────────────────────────────────
 
@@ -85,9 +85,13 @@ class TestProjectIdValidation:
         monkeypatch.setattr(project_models, "WORKSPACE", tmp_path)
 
         assert validate_project_id("legacy_project") == "legacy_project"
-        assert project_dir("proj_20260625_120000_abcdef") == tmp_path / "proj_20260625_120000_abcdef"
+        assert (
+            project_dir("proj_20260625_120000_abcdef") == tmp_path / "proj_20260625_120000_abcdef"
+        )
 
-    @pytest.mark.parametrize("project_id", ["../escape", "..\\escape", "C:\\escape", ".", "", "bad/id"])
+    @pytest.mark.parametrize(
+        "project_id", ["../escape", "..\\escape", "C:\\escape", ".", "", "bad/id"]
+    )
     def test_rejects_path_traversal_project_ids(self, project_id):
         with pytest.raises(ValueError):
             validate_project_id(project_id)

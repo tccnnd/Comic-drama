@@ -3,6 +3,7 @@
 Centralizes environment variable access and value coercion helpers that
 were previously duplicated across scripts/ and backend/.
 """
+
 from __future__ import annotations
 
 import os

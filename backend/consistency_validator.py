@@ -9,6 +9,7 @@ This module provides automated quality checks after image/video generation:
 The validation pipeline:
   generate → validate → (pass: accept) | (fail: retry with stronger constraints)
 """
+
 from __future__ import annotations
 
 import json
@@ -42,6 +43,7 @@ CONSISTENCY_VALIDATION_ENABLED = os.environ.get(
 @dataclass
 class ValidationResult:
     """Result of a consistency validation check."""
+
     passed: bool
     score: float  # 0.0 to 1.0
     checks: list[ValidationCheck] = field(default_factory=list)
@@ -53,6 +55,7 @@ class ValidationResult:
 @dataclass
 class ValidationCheck:
     """Individual validation check result."""
+
     name: str
     passed: bool
     score: float
@@ -64,10 +67,12 @@ class ValidationCheck:
 # Image-based validation (histogram / structural comparison)
 # ---------------------------------------------------------------------------
 
+
 def _compute_color_histogram(image_path: Path) -> list[float] | None:
     """Compute a normalized color histogram for an image."""
     try:
         from PIL import Image
+
         img = Image.open(image_path).convert("RGB").resize((128, 128))
         pixels = list(img.getdata())
         # Simple 8-bin histogram per channel (24 bins total)
@@ -96,6 +101,7 @@ def _compute_structural_hash(image_path: Path, hash_size: int = 16) -> str | Non
     """Compute a perceptual hash (average hash) for structural comparison."""
     try:
         from PIL import Image
+
         img = Image.open(image_path).convert("L").resize((hash_size, hash_size))
         pixels = list(img.getdata())
         avg = sum(pixels) / len(pixels)
@@ -117,6 +123,7 @@ def _hamming_similarity(hash_a: str, hash_b: str) -> float:
 # ---------------------------------------------------------------------------
 # Character identity validation
 # ---------------------------------------------------------------------------
+
 
 def validate_character_identity(
     generated_image: Path,
@@ -178,6 +185,7 @@ def validate_character_identity(
 # Style consistency validation (across scenes)
 # ---------------------------------------------------------------------------
 
+
 def validate_style_consistency(
     current_image: Path,
     previous_image: Path | None,
@@ -226,6 +234,7 @@ def validate_style_consistency(
 # Lighting continuity validation
 # ---------------------------------------------------------------------------
 
+
 def validate_lighting_continuity(
     current_image: Path,
     previous_image: Path | None,
@@ -248,8 +257,9 @@ def validate_lighting_continuity(
         )
 
     try:
-        from PIL import Image
         import statistics
+
+        from PIL import Image
 
         # Compare brightness distribution (proxy for lighting)
         curr_img = Image.open(current_image).convert("L").resize((64, 64))
@@ -294,6 +304,7 @@ def validate_lighting_continuity(
 # ---------------------------------------------------------------------------
 # Prop and camera continuity validation
 # ---------------------------------------------------------------------------
+
 
 def _prop_reference_path(prop_ref: dict[str, Any] | None) -> Path | None:
     if not isinstance(prop_ref, dict):
@@ -409,8 +420,12 @@ def evaluate_camera_continuity(
             severity="info",
         )
 
-    current_camera = _scene_text_field(scene, "camera_movement") or _scene_text_field(scene, "camera")
-    previous_camera = _scene_text_field(prev_scene, "camera_movement") or _scene_text_field(prev_scene, "camera")
+    current_camera = _scene_text_field(scene, "camera_movement") or _scene_text_field(
+        scene, "camera"
+    )
+    previous_camera = _scene_text_field(prev_scene, "camera_movement") or _scene_text_field(
+        prev_scene, "camera"
+    )
     current_family = _camera_family(current_camera)
     previous_family = _camera_family(previous_camera)
     current_speed = _scene_float_field(scene, "camera_speed", 1.0)
@@ -419,13 +434,19 @@ def evaluate_camera_continuity(
 
     emotional_change = (
         _scene_text_field(scene, "emotion_tone") or _scene_text_field(scene, "emotion")
-    ) != (
-        _scene_text_field(prev_scene, "emotion_tone") or _scene_text_field(prev_scene, "emotion")
+    ) != (_scene_text_field(prev_scene, "emotion_tone") or _scene_text_field(prev_scene, "emotion"))
+    intent_change = _scene_text_field(scene, "scene_intent") != _scene_text_field(
+        prev_scene, "scene_intent"
     )
-    intent_change = _scene_text_field(scene, "scene_intent") != _scene_text_field(prev_scene, "scene_intent")
-    focus_change = _scene_text_field(scene, "subject_focus") != _scene_text_field(prev_scene, "subject_focus")
+    focus_change = _scene_text_field(scene, "subject_focus") != _scene_text_field(
+        prev_scene, "subject_focus"
+    )
     motivated_change = emotional_change or intent_change or focus_change
-    family_changed = current_family != previous_family and current_family != "unknown" and previous_family != "unknown"
+    family_changed = (
+        current_family != previous_family
+        and current_family != "unknown"
+        and previous_family != "unknown"
+    )
     abrupt_speed = speed_delta >= 0.65
 
     penalty = 0.0
@@ -449,11 +470,7 @@ def evaluate_camera_continuity(
         name="camera_continuity",
         passed=passed,
         score=round(score, 3),
-        details=(
-            "; ".join(reasons)
-            if reasons
-            else "Camera movement and speed are continuous"
-        ),
+        details=("; ".join(reasons) if reasons else "Camera movement and speed are continuous"),
         severity="warning",
     )
 
@@ -461,6 +478,7 @@ def evaluate_camera_continuity(
 # ---------------------------------------------------------------------------
 # Composite validation
 # ---------------------------------------------------------------------------
+
 
 def validate_scene_generation(
     generated_image: Path,
@@ -498,7 +516,11 @@ def validate_scene_generation(
     character_passed = True
     if character_references:
         for char_ref in character_references:
-            ref_path_str = str(char_ref.get("reference_image_path") or char_ref.get("reference_image_abs_path") or "").strip()
+            ref_path_str = str(
+                char_ref.get("reference_image_path")
+                or char_ref.get("reference_image_abs_path")
+                or ""
+            ).strip()
             if not ref_path_str:
                 continue
             ref_path = Path(ref_path_str)
@@ -564,6 +586,7 @@ def validate_scene_generation(
 # Validation-aware generation wrapper
 # ---------------------------------------------------------------------------
 
+
 def generate_with_validation(
     generate_fn,
     validate_fn,
@@ -603,13 +626,16 @@ def generate_with_validation(
         if validation.passed:
             logger.info(
                 "[consistency] Validation passed on attempt %d (score: %.3f)",
-                attempt + 1, validation.score,
+                attempt + 1,
+                validation.score,
             )
             return result, validation
 
         logger.warning(
             "[consistency] Validation failed on attempt %d (score: %.3f): %s",
-            attempt + 1, validation.score, validation.warnings[:2],
+            attempt + 1,
+            validation.score,
+            validation.warnings[:2],
         )
 
         if attempt < max_retries:
@@ -618,7 +644,8 @@ def generate_with_validation(
     # Return best result even if validation didn't pass
     logger.warning(
         "[consistency] All %d attempts failed validation. Using best result (score: %.3f)",
-        max_retries + 1, best_validation.score if best_validation else 0.0,
+        max_retries + 1,
+        best_validation.score if best_validation else 0.0,
     )
     return best_result, best_validation or ValidationResult(passed=False, score=0.0)
 
@@ -626,6 +653,7 @@ def generate_with_validation(
 # ---------------------------------------------------------------------------
 # Project-level consistency report
 # ---------------------------------------------------------------------------
+
 
 def generate_consistency_report(project_id: str) -> dict[str, Any]:
     """Generate a consistency report for all scenes in a project.
@@ -666,11 +694,13 @@ def generate_consistency_report(project_id: str) -> dict[str, Any]:
         # Get the scene's keyframe image
         current_image = scene_latest_path(project_id, scene, "image")
         if not current_image or not current_image.exists():
-            report["scenes"].append({
-                "order": scene_order,
-                "status": "no_image",
-                "score": None,
-            })
+            report["scenes"].append(
+                {
+                    "order": scene_order,
+                    "status": "no_image",
+                    "score": None,
+                }
+            )
             continue
 
         # Build character references for this scene
@@ -682,10 +712,12 @@ def generate_consistency_report(project_id: str) -> dict[str, Any]:
                 if ref_path:
                     abs_path = project_dir(project_id) / ref_path
                     if abs_path.exists():
-                        char_refs.append({
-                            "name": char.get("name"),
-                            "reference_image_path": str(abs_path),
-                        })
+                        char_refs.append(
+                            {
+                                "name": char.get("name"),
+                                "reference_image_path": str(abs_path),
+                            }
+                        )
 
         # Validate
         validation = validate_scene_generation(
@@ -696,16 +728,18 @@ def generate_consistency_report(project_id: str) -> dict[str, Any]:
         )
 
         scene_scores.append(validation.score)
-        report["scenes"].append({
-            "order": scene_order,
-            "status": "passed" if validation.passed else "failed",
-            "score": validation.score,
-            "checks": [
-                {"name": c.name, "passed": c.passed, "score": c.score, "details": c.details}
-                for c in validation.checks
-            ],
-            "warnings": validation.warnings,
-        })
+        report["scenes"].append(
+            {
+                "order": scene_order,
+                "status": "passed" if validation.passed else "failed",
+                "score": validation.score,
+                "checks": [
+                    {"name": c.name, "passed": c.passed, "score": c.score, "details": c.details}
+                    for c in validation.checks
+                ],
+                "warnings": validation.warnings,
+            }
+        )
 
         prev_image = current_image
 
@@ -722,9 +756,7 @@ def generate_consistency_report(project_id: str) -> dict[str, Any]:
 
     no_image_scenes = [s for s in report["scenes"] if s.get("status") == "no_image"]
     if no_image_scenes:
-        report["recommendations"].append(
-            f"{len(no_image_scenes)} 个场景缺少关键帧图片"
-        )
+        report["recommendations"].append(f"{len(no_image_scenes)} 个场景缺少关键帧图片")
 
     if report["overall_score"] < STYLE_SIMILARITY_THRESHOLD:
         report["recommendations"].append(

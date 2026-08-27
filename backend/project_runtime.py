@@ -11,6 +11,7 @@ This module was split into focused sub-modules:
 All public names are re-exported here so existing importers (e.g. backend.app)
 continue to work unchanged.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,43 +20,48 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from scripts.run_workflow import (
-    StoryScene,
-    analyze_script_workflow,
-    build_canonical_timeline,
-    build_shot_plan,
-    build_storyboard,
-    coerce_scene,
-    default_audio_style,
-    default_episode_pacing,
-    default_subtitle_style,
-    is_script_text_garbled,
-    load_env_file,
-    normalize_audio_style,
-    normalize_crop_box,
-    normalize_episode_pacing,
-    normalize_episode_phase,
-    normalize_shot_plan_visual_content,
-    normalize_subtitle_style,
-    validate_script_text,
-)
-from scripts.director_classifier import build_director_plan
-
 from backend.asset_retention import cleanup_project_versions
-from backend.event_bus import project_event_bus
-from backend.styles import get_default_style_id
+
+# ─── Re-exports from character_manager ────────────────────────────────────────
+from backend.character_manager import (  # noqa: F401
+    _character_prompt_feature_lines,
+    build_initial_characters,
+    character_card_path,
+    character_dir,
+    compile_character_prompt,
+    hydrate_character_cards,
+    load_character_card_files,
+    merge_character_configs,
+    normalize_character_card,
+    remove_placeholder_scene_characters,
+    scene_character_refs,
+    scene_with_character_context,
+    scene_with_inherited_voice,
+    sync_character_card_files,
+    update_character_reference_image,
+    validate_reference_image,
+    write_data_url_image,
+)
 from backend.consistency_governance import _normalized_governance, build_continuity_ledger
-from backend.video_generation import normalize_generation_meta, video_render_granularity
+from backend.event_bus import project_event_bus
+
+# ─── Re-exports from project_export ──────────────────────────────────────────
+from backend.project_export import (  # noqa: F401
+    _export_issue_item,
+    build_project,
+    export_project,
+    validate_export_assets,
+)
 
 # ─── Re-exports from project_models ───────────────────────────────────────────
 from backend.project_models import (  # noqa: F401
-    ExportAssetReadinessError,
-    ROOT,
-    WORKSPACE,
-    SCENE_HISTORY_LIMIT,
-    SCENE_ACTION_LABELS,
     _LOCKS,
     _LOCKS_GUARD,
+    ROOT,
+    SCENE_ACTION_LABELS,
+    SCENE_HISTORY_LIMIT,
+    WORKSPACE,
+    ExportAssetReadinessError,
     _coerce_int_field,
     _normalize_audio_manifest,
     _scene_from_payload,
@@ -82,27 +88,6 @@ from backend.project_models import (  # noqa: F401
     utc_iso,
     validate_task_id,
     workspace_url,
-)
-
-# ─── Re-exports from character_manager ────────────────────────────────────────
-from backend.character_manager import (  # noqa: F401
-    build_initial_characters,
-    character_card_path,
-    character_dir,
-    compile_character_prompt,
-    hydrate_character_cards,
-    load_character_card_files,
-    merge_character_configs,
-    normalize_character_card,
-    remove_placeholder_scene_characters,
-    scene_character_refs,
-    scene_with_character_context,
-    scene_with_inherited_voice,
-    sync_character_card_files,
-    update_character_reference_image,
-    validate_reference_image,
-    write_data_url_image,
-    _character_prompt_feature_lines,
 )
 
 # ─── Re-exports from scene_graph ──────────────────────────────────────────────
@@ -145,15 +130,29 @@ from backend.scene_renderer import (  # noqa: F401
     update_scene_consistency_meta,
     update_scene_governance,
 )
-
-# ─── Re-exports from project_export ──────────────────────────────────────────
-from backend.project_export import (  # noqa: F401
-    _export_issue_item,
-    build_project,
-    export_project,
-    validate_export_assets,
+from backend.styles import get_default_style_id
+from backend.video_generation import normalize_generation_meta, video_render_granularity
+from scripts.director_classifier import build_director_plan
+from scripts.run_workflow import (
+    StoryScene,
+    analyze_script_workflow,
+    build_canonical_timeline,
+    build_shot_plan,
+    build_storyboard,
+    coerce_scene,
+    default_audio_style,
+    default_episode_pacing,
+    default_subtitle_style,
+    is_script_text_garbled,
+    load_env_file,
+    normalize_audio_style,
+    normalize_crop_box,
+    normalize_episode_pacing,
+    normalize_episode_phase,
+    normalize_shot_plan_visual_content,
+    normalize_subtitle_style,
+    validate_script_text,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Core project CRUD and coordination (kept in this module)
@@ -268,7 +267,9 @@ def replace_project_storyboard(
         settings["planner"] = planner_used
         settings["scene_count"] = len(scenes)
         project["characters"] = merge_character_configs(existing_characters, scenes, roles=roles)
-        project["scenes"] = [scene_to_dict(scene, order) for order, scene in enumerate(scenes, start=1)]
+        project["scenes"] = [
+            scene_to_dict(scene, order) for order, scene in enumerate(scenes, start=1)
+        ]
         apply_project_episode_pacing(project, force=True)
         _mark_output_stale(project)
         project["output"] = {
@@ -304,7 +305,9 @@ def _preview_scene_to_story_scene(raw: dict[str, Any], index: int) -> StoryScene
         "voice_profile": raw.get("voice_profile") or "",
         "duration": raw.get("duration") or raw.get("duration_seconds") or 4.0,
         "sfx_type": raw.get("sfx_type") or "auto",
-        "audio_manifest": raw.get("audio_manifest") if isinstance(raw.get("audio_manifest"), dict) else {},
+        "audio_manifest": (
+            raw.get("audio_manifest") if isinstance(raw.get("audio_manifest"), dict) else {}
+        ),
         "camera_speed": raw.get("camera_speed") or 1.0,
         "crop_box": raw.get("crop_box"),
     }
@@ -325,10 +328,15 @@ def replace_project_storyboard_from_preview(
     if not isinstance(raw_scenes, list) or not raw_scenes:
         raise ValueError("Script preview must contain scenes.")
 
-    planner_used = str(draft.get("planner_used") or draft.get("planner") or "rule").strip() or "rule"
+    planner_used = (
+        str(draft.get("planner_used") or draft.get("planner") or "rule").strip() or "rule"
+    )
     title = str(draft.get("title") or "").strip()
     analysis = draft.get("analysis") if isinstance(draft.get("analysis"), dict) else {}
-    scenes = [_preview_scene_to_story_scene(raw if isinstance(raw, dict) else {}, index) for index, raw in enumerate(raw_scenes, start=1)]
+    scenes = [
+        _preview_scene_to_story_scene(raw if isinstance(raw, dict) else {}, index)
+        for index, raw in enumerate(raw_scenes, start=1)
+    ]
     analysis = deepcopy(analysis) if isinstance(analysis, dict) else {}
     roles = analysis.get("roles") if isinstance(analysis, dict) else None
     scenes = remove_placeholder_scene_characters(scenes, roles=roles)
@@ -363,7 +371,9 @@ def replace_project_storyboard_from_preview(
         settings["planner"] = planner_used
         settings["scene_count"] = len(scenes)
         project["characters"] = merge_character_configs(existing_characters, scenes, roles=roles)
-        project["scenes"] = [scene_to_dict(scene, order) for order, scene in enumerate(scenes, start=1)]
+        project["scenes"] = [
+            scene_to_dict(scene, order) for order, scene in enumerate(scenes, start=1)
+        ]
         apply_project_episode_pacing(project, force=True)
         _mark_output_stale(project)
         project["output"] = {
@@ -405,12 +415,15 @@ def load_project(project_id: str) -> dict[str, Any]:
             if not isinstance(scene.get("props"), list):
                 scene["props"] = []
             else:
-                scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
+                scene["props"] = [
+                    str(item).strip() for item in scene.get("props") or [] if str(item).strip()
+                ]
             scene["generation_meta"] = normalize_generation_meta(scene.get("generation_meta"))
             _normalize_director_interpretation(scene)
             scene["governance"] = _normalized_governance(scene)
         # Sync visual data from AssetStore into project.characters
         from backend.character_sync import sync_characters_from_assets
+
         sync_characters_from_assets(project, project_id)
     return project
 
@@ -453,6 +466,7 @@ def project_episode_pacing(project: dict[str, Any]) -> dict[str, Any]:
 
 def apply_project_episode_pacing(project: dict[str, Any], force: bool = False) -> dict[str, Any]:
     from scripts.run_workflow import infer_episode_phase
+
     pacing = project_episode_pacing(project)
     scenes = project.get("scenes", [])
     total = max(1, len(scenes))
@@ -477,9 +491,13 @@ def normalize_scene_pacing_update(updates: dict[str, Any]) -> dict[str, Any]:
     if "episode_phase" in normalized and normalized["episode_phase"] is not None:
         normalized["episode_phase"] = normalize_episode_phase(normalized["episode_phase"], "setup")
     if "episode_phase_index" in normalized and normalized["episode_phase_index"] is not None:
-        normalized["episode_phase_index"] = _coerce_int_field(normalized["episode_phase_index"], 1, 1, 100)
+        normalized["episode_phase_index"] = _coerce_int_field(
+            normalized["episode_phase_index"], 1, 1, 100
+        )
     if "episode_phase_total" in normalized and normalized["episode_phase_total"] is not None:
-        normalized["episode_phase_total"] = _coerce_int_field(normalized["episode_phase_total"], 1, 1, 100)
+        normalized["episode_phase_total"] = _coerce_int_field(
+            normalized["episode_phase_total"], 1, 1, 100
+        )
     if "episode_rhythm" in normalized and normalized["episode_rhythm"] is not None:
         pacing = normalize_episode_pacing({"preset": normalized["episode_rhythm"]})
         normalized["episode_rhythm"] = pacing["preset"]
@@ -498,6 +516,7 @@ def list_projects() -> list[dict[str, Any]]:
 
 def delete_project(project_id: str) -> dict[str, str]:
     import shutil
+
     base = project_dir(project_id).resolve()
     workspace = WORKSPACE.resolve()
     if base == workspace or workspace not in base.parents:
@@ -542,7 +561,9 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(scene.get("props"), list):
             scene["props"] = []
         else:
-            scene["props"] = [str(item).strip() for item in scene.get("props") or [] if str(item).strip()]
+            scene["props"] = [
+                str(item).strip() for item in scene.get("props") or [] if str(item).strip()
+            ]
         scene["generation_meta"] = normalize_generation_meta(scene.get("generation_meta"))
         _normalize_director_interpretation(scene)
         scene["governance"] = _normalized_governance(scene)
@@ -576,17 +597,23 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
                 else ""
             )
     output = snapshot.get("output", {})
-    if output.get("final_video_path") and project_relative_file_exists(project_id, output["final_video_path"]):
+    if output.get("final_video_path") and project_relative_file_exists(
+        project_id, output["final_video_path"]
+    ):
         output["final_video_url"] = workspace_url(project_id, output["final_video_path"])
     else:
         output["final_video_path"] = ""
         output["final_video_url"] = ""
-    if output.get("subtitles_path") and project_relative_file_exists(project_id, output["subtitles_path"]):
+    if output.get("subtitles_path") and project_relative_file_exists(
+        project_id, output["subtitles_path"]
+    ):
         output["subtitles_url"] = workspace_url(project_id, output["subtitles_path"])
     else:
         output["subtitles_path"] = ""
         output["subtitles_url"] = ""
-    if output.get("subtitles_ass_path") and project_relative_file_exists(project_id, output["subtitles_ass_path"]):
+    if output.get("subtitles_ass_path") and project_relative_file_exists(
+        project_id, output["subtitles_ass_path"]
+    ):
         output["subtitles_ass_url"] = workspace_url(project_id, output["subtitles_ass_path"])
     else:
         output["subtitles_ass_path"] = ""
@@ -606,7 +633,11 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         shot_count = len(shots) if isinstance(shots, list) else 0
         total_shots += shot_count
         generation_meta = normalize_generation_meta(scene.get("generation_meta"))
-        shot_outputs = generation_meta.get("shot_outputs") if isinstance(generation_meta.get("shot_outputs"), list) else []
+        shot_outputs = (
+            generation_meta.get("shot_outputs")
+            if isinstance(generation_meta.get("shot_outputs"), list)
+            else []
+        )
         shot_render_status = [
             {
                 "shot_id": str(output.get("shot_id") or ""),
@@ -627,7 +658,11 @@ def project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
                 "title": str(scene.get("title") or ""),
                 "shot_count": shot_count,
                 "camera_track": deepcopy(scene.get("camera_track") or {}),
-                "render_granularity": str(generation_meta.get("render_granularity") or "scene") if generation_meta else "scene",
+                "render_granularity": (
+                    str(generation_meta.get("render_granularity") or "scene")
+                    if generation_meta
+                    else "scene"
+                ),
                 "shot_render_status": shot_render_status,
             }
         )
@@ -698,7 +733,9 @@ def _save_project_with_scene_event(project: dict[str, Any], scene_order: int) ->
     return saved
 
 
-def _save_project_with_structure_event(project: dict[str, Any], event_type: str, scene_order: int) -> dict[str, Any]:
+def _save_project_with_structure_event(
+    project: dict[str, Any], event_type: str, scene_order: int
+) -> dict[str, Any]:
     saved = save_project(project)
     project_id = str(saved.get("project_id") or "")
     snapshot = _event_project(saved)
@@ -733,7 +770,9 @@ def update_runtime(project_id: str, **updates: Any) -> dict[str, Any]:
 # ─── Scene update logic ──────────────────────────────────────────────────────
 
 
-def _update_scene(project: dict[str, Any], scene_order: int, updates: dict[str, Any]) -> dict[str, Any]:
+def _update_scene(
+    project: dict[str, Any], scene_order: int, updates: dict[str, Any]
+) -> dict[str, Any]:
     for scene in project.get("scenes", []):
         if int(scene.get("order", 0)) != scene_order:
             continue
@@ -763,7 +802,9 @@ def update_project_fields(project_id: str, updates: dict[str, Any]) -> dict[str,
                 if key == "story_text" and isinstance(value, str):
                     current_story = str(project.get("story_text") or "")
                     if value != current_story and is_script_text_garbled(value):
-                        raise ValueError("剧本文本疑似编码损坏：请重新从原始来源粘贴，不要使用已经变成 ? 的内容。")
+                        raise ValueError(
+                            "剧本文本疑似编码损坏：请重新从原始来源粘贴，不要使用已经变成 ? 的内容。"
+                        )
                 project[key] = value
             elif key == "style_id":
                 project["style_id"] = str(value).strip()
@@ -771,14 +812,32 @@ def update_project_fields(project_id: str, updates: dict[str, Any]) -> dict[str,
                 settings = project.setdefault("settings", {})
                 for setting_key, setting_value in value.items():
                     if setting_key == "subtitle_style" and isinstance(setting_value, dict):
-                        current_style = settings.get("subtitle_style") if isinstance(settings.get("subtitle_style"), dict) else {}
-                        settings["subtitle_style"] = normalize_subtitle_style({**current_style, **setting_value})
+                        current_style = (
+                            settings.get("subtitle_style")
+                            if isinstance(settings.get("subtitle_style"), dict)
+                            else {}
+                        )
+                        settings["subtitle_style"] = normalize_subtitle_style(
+                            {**current_style, **setting_value}
+                        )
                     elif setting_key == "audio_style" and isinstance(setting_value, dict):
-                        current_style = settings.get("audio_style") if isinstance(settings.get("audio_style"), dict) else {}
-                        settings["audio_style"] = normalize_audio_style({**current_style, **setting_value})
+                        current_style = (
+                            settings.get("audio_style")
+                            if isinstance(settings.get("audio_style"), dict)
+                            else {}
+                        )
+                        settings["audio_style"] = normalize_audio_style(
+                            {**current_style, **setting_value}
+                        )
                     elif setting_key == "episode_pacing" and isinstance(setting_value, dict):
-                        current_pacing = settings.get("episode_pacing") if isinstance(settings.get("episode_pacing"), dict) else {}
-                        settings["episode_pacing"] = normalize_episode_pacing({**current_pacing, **setting_value})
+                        current_pacing = (
+                            settings.get("episode_pacing")
+                            if isinstance(settings.get("episode_pacing"), dict)
+                            else {}
+                        )
+                        settings["episode_pacing"] = normalize_episode_pacing(
+                            {**current_pacing, **setting_value}
+                        )
                     else:
                         settings[setting_key] = setting_value
             elif key == "characters" and isinstance(value, list):
@@ -787,7 +846,9 @@ def update_project_fields(project_id: str, updates: dict[str, Any]) -> dict[str,
         return _save_project_with_project_event(project)
 
 
-def update_character_fields(project_id: str, char_index: int, updates: dict[str, Any]) -> dict[str, Any]:
+def update_character_fields(
+    project_id: str, char_index: int, updates: dict[str, Any]
+) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
         characters = project.get("characters", [])
@@ -819,7 +880,14 @@ def update_character_fields(project_id: str, char_index: int, updates: dict[str,
                 if character.get(key) != value:
                     changed_fields.append(key)
                 character[key] = value
-        visual_fields = {"name", "description", "meta", "appearance_core", "clothing_style", "negative_constraints"}
+        visual_fields = {
+            "name",
+            "description",
+            "meta",
+            "appearance_core",
+            "clothing_style",
+            "negative_constraints",
+        }
         voice_fields = AUDIO_STALE_FIELDS & set(changed_fields)
         invalidate_fields: list[str] = []
         if visual_fields & set(changed_fields):
@@ -831,11 +899,20 @@ def update_character_fields(project_id: str, char_index: int, updates: dict[str,
         return _save_project_with_project_event(project)
 
 
-def update_scene_fields(project_id: str, scene_order: int, updates: dict[str, Any]) -> dict[str, Any]:
+def update_scene_fields(
+    project_id: str, scene_order: int, updates: dict[str, Any]
+) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
         updates = normalize_scene_pacing_update(updates)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
         before_scene = deepcopy(scene)
@@ -851,7 +928,8 @@ def update_scene_fields(project_id: str, scene_order: int, updates: dict[str, An
         changed = [
             key
             for key in sorted(tracked_fields)
-            if (key not in updates or updates.get(key) is not None) and before_scene.get(key) != scene.get(key)
+            if (key not in updates or updates.get(key) is not None)
+            and before_scene.get(key) != scene.get(key)
         ]
         _invalidate_scene_assets(scene, changed)
         if scene.get("validation_failed") and _scene_validation_resolved(scene):
@@ -865,7 +943,9 @@ def update_scene_fields(project_id: str, scene_order: int, updates: dict[str, An
         if set(changed) & (IMAGE_STALE_FIELDS | AUDIO_STALE_FIELDS | VIDEO_STALE_FIELDS):
             _mark_output_stale(project)
         if changed:
-            _append_scene_history(project, scene_order, "edit", "saved", f"已保存字段：{', '.join(changed)}")
+            _append_scene_history(
+                project, scene_order, "edit", "saved", f"已保存字段：{', '.join(changed)}"
+            )
         return _save_project_with_scene_event(project, scene_order)
 
 
@@ -899,7 +979,11 @@ def _renumber_scenes(project: dict[str, Any]) -> None:
         while True:
             candidate = f"scene_{next_scene_number:03d}"
             next_scene_number += 1
-            if candidate not in existing_scene_ids and candidate not in existing_dir_ids and candidate not in used_scene_ids:
+            if (
+                candidate not in existing_scene_ids
+                and candidate not in existing_dir_ids
+                and candidate not in used_scene_ids
+            ):
                 return candidate
 
     for index, scene in enumerate(project.get("scenes", []), start=1):
@@ -919,7 +1003,9 @@ def split_scene(project_id: str, scene_order: int) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
         scenes = project.get("scenes", [])
-        index = next((i for i, item in enumerate(scenes) if int(item.get("order", 0)) == scene_order), None)
+        index = next(
+            (i for i, item in enumerate(scenes) if int(item.get("order", 0)) == scene_order), None
+        )
         if index is None:
             raise KeyError(f"Scene {scene_order} not found")
         source = scenes[index]
@@ -952,7 +1038,9 @@ def merge_scene_with_next(project_id: str, scene_order: int) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
         scenes = project.get("scenes", [])
-        index = next((i for i, item in enumerate(scenes) if int(item.get("order", 0)) == scene_order), None)
+        index = next(
+            (i for i, item in enumerate(scenes) if int(item.get("order", 0)) == scene_order), None
+        )
         if index is None or index >= len(scenes) - 1:
             raise KeyError(f"Scene {scene_order} has no next scene")
         current = scenes[index]
@@ -960,19 +1048,40 @@ def merge_scene_with_next(project_id: str, scene_order: int) -> dict[str, Any]:
         _capture_scene_snapshot_locked(project_id, scene_order, "merge", project)
 
         current["title"] = " / ".join(
-            part for part in [str(current.get("title") or "").strip(), str(following.get("title") or "").strip()] if part
+            part
+            for part in [
+                str(current.get("title") or "").strip(),
+                str(following.get("title") or "").strip(),
+            ]
+            if part
         )[:80]
         current["visual_prompt"] = "\n".join(
             part
-            for part in [str(current.get("visual_prompt") or "").strip(), str(following.get("visual_prompt") or "").strip()]
+            for part in [
+                str(current.get("visual_prompt") or "").strip(),
+                str(following.get("visual_prompt") or "").strip(),
+            ]
             if part
         )
         current["dialogue"] = "\n".join(
-            part for part in [str(current.get("dialogue") or "").strip(), str(following.get("dialogue") or "").strip()] if part
+            part
+            for part in [
+                str(current.get("dialogue") or "").strip(),
+                str(following.get("dialogue") or "").strip(),
+            ]
+            if part
         )
-        current["characters"] = list(dict.fromkeys([*(current.get("characters") or []), *(following.get("characters") or [])]))
+        current["characters"] = list(
+            dict.fromkeys(
+                [*(current.get("characters") or []), *(following.get("characters") or [])]
+            )
+        )
         try:
-            current["duration_seconds"] = round(float(current.get("duration_seconds") or 0) + float(following.get("duration_seconds") or 0), 1)
+            current["duration_seconds"] = round(
+                float(current.get("duration_seconds") or 0)
+                + float(following.get("duration_seconds") or 0),
+                1,
+            )
         except (TypeError, ValueError):
             current["duration_seconds"] = 6.0
         current["assets"] = _blank_assets()
@@ -995,6 +1104,7 @@ def _scene_history(scene: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _scene_snapshot_dir(project_id: str, scene_id: str) -> "Path":
     from pathlib import Path
+
     return scene_dir(project_id, scene_id) / "snapshots"
 
 
@@ -1006,7 +1116,9 @@ def _scene_snapshot_payload(
     project: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     scene_payload = deepcopy(scene)
-    _apply_scene_graph(scene_payload, _scene_graph_payload(scene_payload, scene_order, project_id=project_id))
+    _apply_scene_graph(
+        scene_payload, _scene_graph_payload(scene_payload, scene_order, project_id=project_id)
+    )
     payload = {
         "project_id": project_id,
         "scene_order": scene_order,
@@ -1019,17 +1131,27 @@ def _scene_snapshot_payload(
     return payload
 
 
-def _capture_scene_snapshot_locked(project_id: str, scene_order: int, action: str, project: dict[str, Any]) -> "Path":
+def _capture_scene_snapshot_locked(
+    project_id: str, scene_order: int, action: str, project: dict[str, Any]
+) -> "Path":
     import time as _time
     from pathlib import Path
-    scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+
+    scene = next(
+        (item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order),
+        None,
+    )
     if scene is None:
         raise KeyError(f"Scene {scene_order} not found")
     directory = _scene_snapshot_dir(project_id, scene["scene_id"])
     directory.mkdir(parents=True, exist_ok=True)
-    filename = f"{_time.strftime('%Y%m%d_%H%M%S', _time.gmtime())}_{uuid.uuid4().hex[:8]}_{action}.json"
+    filename = (
+        f"{_time.strftime('%Y%m%d_%H%M%S', _time.gmtime())}_{uuid.uuid4().hex[:8]}_{action}.json"
+    )
     path = directory / filename
-    atomic_write_json(path, _scene_snapshot_payload(project_id, scene_order, action, scene, project))
+    atomic_write_json(
+        path, _scene_snapshot_payload(project_id, scene_order, action, scene, project)
+    )
     return path
 
 
@@ -1045,7 +1167,10 @@ def _latest_scene_snapshot_locked(
     skip_actions: set[str] | None,
     project: dict[str, Any],
 ) -> dict[str, Any] | None:
-    scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+    scene = next(
+        (item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order),
+        None,
+    )
     if scene is None:
         raise KeyError(f"Scene {scene_order} not found")
     directory = _scene_snapshot_dir(project_id, scene["scene_id"])
@@ -1064,7 +1189,9 @@ def _latest_scene_snapshot_locked(
     return None
 
 
-def latest_scene_snapshot(project_id: str, scene_order: int, skip_actions: set[str] | None = None) -> dict[str, Any] | None:
+def latest_scene_snapshot(
+    project_id: str, scene_order: int, skip_actions: set[str] | None = None
+) -> dict[str, Any] | None:
     with project_lock(project_id):
         project = load_project(project_id)
         return _latest_scene_snapshot_locked(project_id, scene_order, skip_actions, project)
@@ -1073,14 +1200,25 @@ def latest_scene_snapshot(project_id: str, scene_order: int, skip_actions: set[s
 def restore_scene_snapshot(project_id: str, scene_order: int) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
         _capture_scene_snapshot_locked(project_id, scene_order, "restore-backup", project)
-        snapshot = _latest_scene_snapshot_locked(project_id, scene_order, {"restore-backup"}, project)
+        snapshot = _latest_scene_snapshot_locked(
+            project_id, scene_order, {"restore-backup"}, project
+        )
         if snapshot is None:
             raise FileNotFoundError("No snapshot available")
-        if snapshot.get("action") in {"split", "merge"} and isinstance(snapshot.get("scenes"), list):
+        if snapshot.get("action") in {"split", "merge"} and isinstance(
+            snapshot.get("scenes"), list
+        ):
             project["scenes"] = deepcopy(snapshot["scenes"])
             _renumber_scenes(project)
             apply_project_episode_pacing(project, force=True)
@@ -1115,7 +1253,10 @@ def _append_scene_history(
     status: str,
     message: str,
 ) -> dict[str, Any]:
-    scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+    scene = next(
+        (item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order),
+        None,
+    )
     if scene is None:
         raise KeyError(f"Scene {scene_order} not found")
     history = _scene_history(scene)
@@ -1133,7 +1274,9 @@ def _append_scene_history(
     return project
 
 
-def append_scene_history(project_id: str, scene_order: int, action: str, status: str, message: str) -> dict[str, Any]:
+def append_scene_history(
+    project_id: str, scene_order: int, action: str, status: str, message: str
+) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
         _append_scene_history(project, scene_order, action, status, message)
@@ -1143,7 +1286,14 @@ def append_scene_history(project_id: str, scene_order: int, action: str, status:
 def set_scene_status(project_id: str, scene_order: int, status: str) -> dict[str, Any]:
     with project_lock(project_id):
         project = load_project(project_id)
-        scene = next((item for item in project.get("scenes", []) if int(item.get("order", 0)) == scene_order), None)
+        scene = next(
+            (
+                item
+                for item in project.get("scenes", [])
+                if int(item.get("order", 0)) == scene_order
+            ),
+            None,
+        )
         if scene is None:
             raise KeyError(f"Scene {scene_order} not found")
         scene.setdefault("assets", {})["status"] = status

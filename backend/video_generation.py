@@ -6,6 +6,7 @@ This module wraps the existing render_clip pipeline to add:
 3. Cross-scene frame continuity constraints (last-frame → first-frame bridging)
 4. Generation metadata tracking for quality governance
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -19,10 +20,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from backend.config_utils import env_bool as _env_bool, coerce_bool as _coerce_bool
+from backend.config_utils import coerce_bool as _coerce_bool
+from backend.config_utils import env_bool as _env_bool
 
 try:
-    from scripts.video_provider_adapters import render_remote_video_provider as _default_render_remote_video_provider
+    from scripts.video_provider_adapters import (
+        render_remote_video_provider as _default_render_remote_video_provider,
+    )
 except Exception:  # pragma: no cover - adapter import is optional for pure helper tests
     _default_render_remote_video_provider = None
 
@@ -47,6 +51,7 @@ VIDEO_RENDER_GRANULARITIES = {"scene", "shot"}
 @dataclass
 class VideoGenerationResult:
     """Result of a single scene video generation attempt."""
+
     scene_order: int
     provider_id: str
     provider_label: str
@@ -67,7 +72,10 @@ class VideoShotQuotaError(ValueError):
 
     def __init__(self, detail: dict[str, Any]) -> None:
         self.detail = detail
-        message = "; ".join(str(item) for item in detail.get("errors") or []) or "Shot-level render quota exceeded"
+        message = (
+            "; ".join(str(item) for item in detail.get("errors") or [])
+            or "Shot-level render quota exceeded"
+        )
         super().__init__(message)
 
 
@@ -79,12 +87,15 @@ class VideoShotDryRun(RuntimeError):
         estimate = detail.get("estimate") if isinstance(detail, dict) else {}
         calls = estimate.get("provider_call_count") if isinstance(estimate, dict) else 0
         seconds = estimate.get("generated_seconds") if isinstance(estimate, dict) else 0
-        super().__init__(f"Shot-level dry run completed: {calls} provider calls, {seconds} generated seconds.")
+        super().__init__(
+            f"Shot-level dry run completed: {calls} provider calls, {seconds} generated seconds."
+        )
 
 
 # ---------------------------------------------------------------------------
 # Cross-scene continuity
 # ---------------------------------------------------------------------------
+
 
 def video_provider_strict_env_name(provider_id: str) -> str:
     """Return the provider-specific strict-mode environment variable name."""
@@ -126,7 +137,11 @@ def video_render_granularity(
     for value in (
         cli_value,
         request_value,
-        project_settings.get("video_render_granularity") if isinstance(project_settings, dict) else None,
+        (
+            project_settings.get("video_render_granularity")
+            if isinstance(project_settings, dict)
+            else None
+        ),
         os.environ.get("VIDEO_RENDER_GRANULARITY", VIDEO_RENDER_GRANULARITY),
     ):
         normalized = str(value or "").strip().lower()
@@ -239,7 +254,9 @@ def _path_fingerprint(path: Path | str | None) -> dict[str, Any]:
     return payload
 
 
-def build_shot_cache_key(shot_request: dict[str, Any], keyframe_path: Path | str | None = None) -> str:
+def build_shot_cache_key(
+    shot_request: dict[str, Any], keyframe_path: Path | str | None = None
+) -> str:
     """Build a stable cache key for one shot render request.
 
     The digest covers public render inputs only. It intentionally excludes raw
@@ -263,10 +280,16 @@ def build_shot_cache_key(shot_request: dict[str, Any], keyframe_path: Path | str
         "negative_prompt": _clean_short_text(request.get("negative_prompt"), limit=2000),
         "camera": _compact_mapping(request.get("camera"), max_items=16, text_limit=500),
         "intent": _compact_mapping(request.get("intent"), max_items=16, text_limit=500),
-        "visual_content": _compact_mapping(request.get("visual_content"), max_items=16, text_limit=500),
+        "visual_content": _compact_mapping(
+            request.get("visual_content"), max_items=16, text_limit=500
+        ),
         "continuity": _compact_mapping(request.get("continuity"), max_items=16, text_limit=500),
-        "temporal_spec": _compact_mapping(request.get("temporal_spec"), max_items=16, text_limit=500),
-        "consistency_spec": _compact_mapping(request.get("consistency_spec"), max_items=16, text_limit=500),
+        "temporal_spec": _compact_mapping(
+            request.get("temporal_spec"), max_items=16, text_limit=500
+        ),
+        "consistency_spec": _compact_mapping(
+            request.get("consistency_spec"), max_items=16, text_limit=500
+        ),
         "characters": _compact_string_list(request.get("characters")),
         "provider_id": _clean_short_text(provider.get("provider_id"), limit=120),
         "provider_backend": _clean_short_text(provider.get("backend"), limit=120),
@@ -277,7 +300,9 @@ def build_shot_cache_key(shot_request: dict[str, Any], keyframe_path: Path | str
     return f"sha256:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
 
 
-def _shot_output_matches_cache(output: dict[str, Any], shot_request: dict[str, Any], keyframe_path: Path | str | None = None) -> bool:
+def _shot_output_matches_cache(
+    output: dict[str, Any], shot_request: dict[str, Any], keyframe_path: Path | str | None = None
+) -> bool:
     if not _shot_output_reusable(output):
         return False
     existing_key = str(output.get("cache_key") or "").strip()
@@ -349,13 +374,21 @@ def validate_shot_render_quota(
     raise_on_error: bool = True,
 ) -> dict[str, Any]:
     """Validate a shot-level quota estimate and optionally block over-limit runs."""
-    provider_call_count = _coerce_non_negative_int(estimate.get("provider_call_count") if isinstance(estimate, dict) else 0)
-    generated_seconds = _coerce_non_negative_float(estimate.get("generated_seconds") if isinstance(estimate, dict) else 0.0)
+    provider_call_count = _coerce_non_negative_int(
+        estimate.get("provider_call_count") if isinstance(estimate, dict) else 0
+    )
+    generated_seconds = _coerce_non_negative_float(
+        estimate.get("generated_seconds") if isinstance(estimate, dict) else 0.0
+    )
     errors: list[str] = []
     if max_calls is not None and provider_call_count > max_calls:
-        errors.append(f"provider calls {provider_call_count} exceed VIDEO_SHOT_MAX_CALLS={max_calls}")
+        errors.append(
+            f"provider calls {provider_call_count} exceed VIDEO_SHOT_MAX_CALLS={max_calls}"
+        )
     if max_seconds is not None and generated_seconds > max_seconds:
-        errors.append(f"generated seconds {generated_seconds:g} exceed VIDEO_SHOT_MAX_SECONDS={max_seconds:g}")
+        errors.append(
+            f"generated seconds {generated_seconds:g} exceed VIDEO_SHOT_MAX_SECONDS={max_seconds:g}"
+        )
     result = {
         "ok": not errors,
         "dry_run": bool(dry_run),
@@ -400,7 +433,9 @@ def _compact_string_list(value: object, *, limit: int = 12) -> list[str]:
     return items
 
 
-def _compact_mapping(value: object, *, max_items: int = 16, text_limit: int = 500) -> dict[str, Any]:
+def _compact_mapping(
+    value: object, *, max_items: int = 16, text_limit: int = 500
+) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
     compact: dict[str, Any] = {}
@@ -437,8 +472,12 @@ def _compact_mapping(value: object, *, max_items: int = 16, text_limit: int = 50
 def _shot_text_summary(shot: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(shot, dict):
         return {}
-    visual_content = shot.get("visual_content") if isinstance(shot.get("visual_content"), dict) else {}
-    camera_language = shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+    visual_content = (
+        shot.get("visual_content") if isinstance(shot.get("visual_content"), dict) else {}
+    )
+    camera_language = (
+        shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+    )
     summary = {
         "shot_id": _clean_short_text(shot.get("shot_id"), limit=120),
         "shot_order": _coerce_non_negative_int(shot.get("shot_order") or shot.get("index")),
@@ -552,7 +591,9 @@ def _resolve_shot_provider_config(
     }
 
 
-def _visual_content_lines(visual_content: dict[str, Any], shot: dict[str, Any], scene: dict[str, Any]) -> list[str]:
+def _visual_content_lines(
+    visual_content: dict[str, Any], shot: dict[str, Any], scene: dict[str, Any]
+) -> list[str]:
     lines: list[str] = []
     if isinstance(visual_content, dict) and visual_content:
         lines.append("visual_content is the primary visual source")
@@ -584,7 +625,9 @@ def _visual_content_lines(visual_content: dict[str, Any], shot: dict[str, Any], 
 
 
 def _shot_camera_payload(shot: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
-    camera_language = shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+    camera_language = (
+        shot.get("camera_language") if isinstance(shot.get("camera_language"), dict) else {}
+    )
     payload = {
         "camera_movement": _first_non_empty_text(
             shot.get("camera_movement"),
@@ -593,10 +636,16 @@ def _shot_camera_payload(shot: dict[str, Any], scene: dict[str, Any]) -> dict[st
             scene.get("camera"),
             limit=180,
         ),
-        "camera_speed": _coerce_non_negative_float(shot.get("camera_speed") or scene.get("camera_speed") or 1.0),
+        "camera_speed": _coerce_non_negative_float(
+            shot.get("camera_speed") or scene.get("camera_speed") or 1.0
+        ),
         "zoom": _coerce_non_negative_float(shot.get("zoom") or 1.0),
-        "center_x": _coerce_non_negative_float(shot.get("center_x") if shot.get("center_x") is not None else 0.5),
-        "center_y": _coerce_non_negative_float(shot.get("center_y") if shot.get("center_y") is not None else 0.5),
+        "center_x": _coerce_non_negative_float(
+            shot.get("center_x") if shot.get("center_x") is not None else 0.5
+        ),
+        "center_y": _coerce_non_negative_float(
+            shot.get("center_y") if shot.get("center_y") is not None else 0.5
+        ),
         "shot_size": _clean_short_text(shot.get("shot_size"), limit=160),
         "language": _compact_mapping(camera_language, max_items=8, text_limit=240),
     }
@@ -606,10 +655,18 @@ def _shot_camera_payload(shot: dict[str, Any], scene: dict[str, Any]) -> dict[st
 def _shot_intent_payload(shot: dict[str, Any], scene: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "beat_type": _clean_short_text(shot.get("beat_type"), limit=160),
-        "dramatic_intent": _first_non_empty_text(shot.get("dramatic_intent"), scene.get("dramatic_intent"), limit=360),
-        "scene_intent": _first_non_empty_text(shot.get("scene_intent"), scene.get("scene_intent"), limit=240),
-        "subject_focus": _first_non_empty_text(shot.get("subject_focus"), scene.get("subject_focus"), limit=160),
-        "emotion": _first_non_empty_text(shot.get("emotion"), scene.get("emotion_tone"), scene.get("emotion"), limit=160),
+        "dramatic_intent": _first_non_empty_text(
+            shot.get("dramatic_intent"), scene.get("dramatic_intent"), limit=360
+        ),
+        "scene_intent": _first_non_empty_text(
+            shot.get("scene_intent"), scene.get("scene_intent"), limit=240
+        ),
+        "subject_focus": _first_non_empty_text(
+            shot.get("subject_focus"), scene.get("subject_focus"), limit=160
+        ),
+        "emotion": _first_non_empty_text(
+            shot.get("emotion"), scene.get("emotion_tone"), scene.get("emotion"), limit=160
+        ),
         "dialogue": _first_non_empty_text(shot.get("dialogue"), scene.get("dialogue"), limit=500),
         "speaker": _first_non_empty_text(shot.get("speaker"), scene.get("speaker"), limit=160),
     }
@@ -623,10 +680,16 @@ def _scene_continuity_payload(
     next_shot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     bible = scene.get("production_bible") if isinstance(scene.get("production_bible"), dict) else {}
-    current_scene = bible.get("current_scene") if isinstance(bible.get("current_scene"), dict) else {}
-    active_characters = current_scene.get("active_characters") if isinstance(current_scene, dict) else []
+    current_scene = (
+        bible.get("current_scene") if isinstance(bible.get("current_scene"), dict) else {}
+    )
+    active_characters = (
+        current_scene.get("active_characters") if isinstance(current_scene, dict) else []
+    )
     if not isinstance(active_characters, list) or not active_characters:
-        active_characters = scene.get("characters") if isinstance(scene.get("characters"), list) else []
+        active_characters = (
+            scene.get("characters") if isinstance(scene.get("characters"), list) else []
+        )
     payload = {
         "characters": deepcopy(active_characters) if isinstance(active_characters, list) else [],
         "location": _first_non_empty_text(
@@ -656,7 +719,9 @@ def _shot_prompt_text(
     continuity: dict[str, Any],
 ) -> str:
     scene_title = _first_non_empty_text(scene.get("title"), scene.get("scene_id"), limit=180)
-    visual_content = shot.get("visual_content") if isinstance(shot.get("visual_content"), dict) else {}
+    visual_content = (
+        shot.get("visual_content") if isinstance(shot.get("visual_content"), dict) else {}
+    )
     parts = [
         "Generate this planned shot as one continuous real video clip.",
         "Preserve shot boundaries; do not summarize the whole scene.",
@@ -671,11 +736,20 @@ def _shot_prompt_text(
     )
     parts.extend(_visual_content_lines(visual_content, shot, scene))
     if camera:
-        parts.append("camera: " + json.dumps(camera, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        parts.append(
+            "camera: "
+            + json.dumps(camera, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
     if intent:
-        parts.append("intent: " + json.dumps(intent, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        parts.append(
+            "intent: "
+            + json.dumps(intent, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
     if continuity:
-        parts.append("scene_continuity: " + json.dumps(continuity, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        parts.append(
+            "scene_continuity: "
+            + json.dumps(continuity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
     return "\n".join(part for part in parts if str(part).strip())
 
 
@@ -683,8 +757,12 @@ def _shot_negative_prompt(scene: dict[str, Any], shot: dict[str, Any]) -> str:
     parts = [
         "worst quality, low quality, normal quality",
         "bad anatomy, extra limbs, deformed, disfigured, watermark, text, signature",
-        _first_non_empty_text(shot.get("negative_prompt"), shot.get("negative_prompt_compilation"), limit=500),
-        _first_non_empty_text(scene.get("negative_prompt"), scene.get("negative_prompt_compilation"), limit=500),
+        _first_non_empty_text(
+            shot.get("negative_prompt"), shot.get("negative_prompt_compilation"), limit=500
+        ),
+        _first_non_empty_text(
+            scene.get("negative_prompt"), scene.get("negative_prompt_compilation"), limit=500
+        ),
     ]
     return ", ".join(part for part in parts if str(part).strip())
 
@@ -710,7 +788,14 @@ def build_shot_provider_request_inputs(
     shots = shot_plan.get("shots") if isinstance(shot_plan, dict) else []
     if not isinstance(shots, list):
         return []
-    scene_order = _coerce_non_negative_int(scene.get("order") or scene.get("scene") or shot_plan.get("scene_order") if isinstance(shot_plan, dict) else 1, 1)
+    scene_order = _coerce_non_negative_int(
+        (
+            scene.get("order") or scene.get("scene") or shot_plan.get("scene_order")
+            if isinstance(shot_plan, dict)
+            else 1
+        ),
+        1,
+    )
     scene_id = _first_non_empty_text(
         scene.get("scene_id"),
         shot_plan.get("scene_id") if isinstance(shot_plan, dict) else "",
@@ -723,14 +808,22 @@ def build_shot_provider_request_inputs(
     for index, shot in enumerate(valid_shots, start=1):
         previous_shot = valid_shots[index - 2] if index > 1 else None
         next_shot = valid_shots[index] if index < len(valid_shots) else None
-        shot_id = _first_non_empty_text(shot.get("shot_id"), f"{scene_id}_shot_{index:02d}", limit=120)
+        shot_id = _first_non_empty_text(
+            shot.get("shot_id"), f"{scene_id}_shot_{index:02d}", limit=120
+        )
         shot_order = _coerce_non_negative_int(shot.get("shot_order") or index, index)
         start_seconds = _coerce_non_negative_float(shot.get("start_seconds"))
-        duration_seconds = _coerce_non_negative_float(shot.get("duration_seconds") or scene.get("duration_seconds"))
-        end_seconds = _coerce_non_negative_float(shot.get("end_seconds") or (start_seconds + duration_seconds))
+        duration_seconds = _coerce_non_negative_float(
+            shot.get("duration_seconds") or scene.get("duration_seconds")
+        )
+        end_seconds = _coerce_non_negative_float(
+            shot.get("end_seconds") or (start_seconds + duration_seconds)
+        )
         camera = _shot_camera_payload(shot, scene)
         intent = _shot_intent_payload(shot, scene)
-        continuity = _scene_continuity_payload(scene, previous_shot=previous_shot, next_shot=next_shot)
+        continuity = _scene_continuity_payload(
+            scene, previous_shot=previous_shot, next_shot=next_shot
+        )
         provider_config = _resolve_shot_provider_config(
             default_provider=provider_id,
             project_settings=project_settings,
@@ -739,12 +832,19 @@ def build_shot_provider_request_inputs(
         )
         prompt = _shot_prompt_text(
             scene=scene,
-            shot={**shot, "shot_id": shot_id, "duration_seconds": duration_seconds, "start_seconds": start_seconds},
+            shot={
+                **shot,
+                "shot_id": shot_id,
+                "duration_seconds": duration_seconds,
+                "start_seconds": start_seconds,
+            },
             camera=camera,
             intent=intent,
             continuity=continuity,
         )
-        visual_content = shot.get("visual_content") if isinstance(shot.get("visual_content"), dict) else {}
+        visual_content = (
+            shot.get("visual_content") if isinstance(shot.get("visual_content"), dict) else {}
+        )
         request_inputs.append(
             {
                 "version": 1,
@@ -814,7 +914,9 @@ def render_shot_with_provider_policy(
 
     request = shot_request if isinstance(shot_request, dict) else {}
     provider_payload = request.get("provider") if isinstance(request.get("provider"), dict) else {}
-    requested_provider = _first_non_empty_text(video_provider, provider_payload.get("provider_id"), "auto", limit=120)
+    requested_provider = _first_non_empty_text(
+        video_provider, provider_payload.get("provider_id"), "auto", limit=120
+    )
     provider_spec = get_video_provider_spec(requested_provider)
     if max_retries is None:
         max_retries = MAX_VIDEO_RETRIES
@@ -830,8 +932,12 @@ def render_shot_with_provider_policy(
     fps = _coerce_non_negative_int(request.get("fps") or 24, 24) or 24
     prompt = _clean_short_text(request.get("prompt"), limit=6000)
     negative_prompt = _clean_short_text(request.get("negative_prompt"), limit=2000)
-    temporal_spec = request.get("temporal_spec") if isinstance(request.get("temporal_spec"), dict) else {}
-    consistency_spec = request.get("consistency_spec") if isinstance(request.get("consistency_spec"), dict) else {}
+    temporal_spec = (
+        request.get("temporal_spec") if isinstance(request.get("temporal_spec"), dict) else {}
+    )
+    consistency_spec = (
+        request.get("consistency_spec") if isinstance(request.get("consistency_spec"), dict) else {}
+    )
     camera_payload = request.get("camera") if isinstance(request.get("camera"), dict) else {}
     model = _clean_short_text(provider_payload.get("model"), limit=240)
     cache_key = build_shot_cache_key(request, keyframe_path)
@@ -857,7 +963,9 @@ def render_shot_with_provider_policy(
                         width=width,
                         height=height,
                         fps=fps,
-                        camera=_first_non_empty_text(camera_payload.get("camera_movement"), limit=180),
+                        camera=_first_non_empty_text(
+                            camera_payload.get("camera_movement"), limit=180
+                        ),
                         emotion=_first_non_empty_text(request.get("emotion"), limit=180),
                         dialogue=_first_non_empty_text(request.get("dialogue"), limit=1000),
                         characters=tuple(_compact_string_list(request.get("characters"))),
@@ -888,7 +996,11 @@ def render_shot_with_provider_policy(
                 last_error = str(exc)
                 if attempt <= max_retries:
                     error_text = last_error.lower()
-                    backoff = max(retry_delay, 30.0) if ("429" in error_text or "quota" in error_text or "饱和" in error_text) else retry_delay
+                    backoff = (
+                        max(retry_delay, 30.0)
+                        if ("429" in error_text or "quota" in error_text or "饱和" in error_text)
+                        else retry_delay
+                    )
                     if backoff > 0:
                         time.sleep(backoff)
                     retry_delay = min(retry_delay * 2.0, 120.0)
@@ -951,11 +1063,15 @@ def render_shot_with_provider_policy(
 
     fallback_mode = video_fallback_mode(provider_spec.id)
     if fallback_mode == "strict":
-        raise RuntimeError(sanitize_generation_error(last_error) or f"{provider_spec.label} shot render failed")
+        raise RuntimeError(
+            sanitize_generation_error(last_error) or f"{provider_spec.label} shot render failed"
+        )
 
     warnings = []
     if fallback_mode == "report":
-        warnings.append(f"{provider_spec.label} shot render failed after {attempts} attempts; using local fallback.")
+        warnings.append(
+            f"{provider_spec.label} shot render failed after {attempts} attempts; using local fallback."
+        )
     fallback_path = output_path
     if fallback_renderer is not None:
         try:
@@ -973,12 +1089,12 @@ def render_shot_with_provider_policy(
                 path="",
                 duration_seconds=duration,
                 target_duration_seconds=duration,
-            attempts=attempts,
-            fallback_used=False,
-            warnings=warnings,
-            error=str(exc),
-            cache_key=cache_key,
-        )
+                attempts=attempts,
+                fallback_used=False,
+                warnings=warnings,
+                error=str(exc),
+                cache_key=cache_key,
+            )
     else:
         return build_shot_output(
             shot_id=shot_id,
@@ -1106,7 +1222,9 @@ def assemble_shot_clips(
 
     if manifest_path is not None:
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     return output_path, manifest
 
 
@@ -1147,8 +1265,19 @@ def render_scene_shots_with_provider_policy(
             shot_id = str(output.get("shot_id") or "").strip()
             if normalized_force_shot_id and shot_id == normalized_force_shot_id:
                 continue
-            matching_request = next((request for request in requests if str(request.get("shot_id") or "").strip() == shot_id), None)
-            if shot_id and matching_request and _shot_output_matches_cache(output, matching_request, keyframe_path):
+            matching_request = next(
+                (
+                    request
+                    for request in requests
+                    if str(request.get("shot_id") or "").strip() == shot_id
+                ),
+                None,
+            )
+            if (
+                shot_id
+                and matching_request
+                and _shot_output_matches_cache(output, matching_request, keyframe_path)
+            ):
                 reusable_by_id[shot_id] = output
                 reusable_for_quota.append(output)
 
@@ -1173,14 +1302,20 @@ def render_scene_shots_with_provider_policy(
         if shot_id and shot_id in reusable_by_id:
             shot_outputs.append(reusable_by_id[shot_id])
             continue
-        shot_output_path = run_dir / "shots" / f"{shot_id or f'shot_{len(shot_outputs) + 1:03d}'}.mp4"
+        shot_output_path = (
+            run_dir / "shots" / f"{shot_id or f'shot_{len(shot_outputs) + 1:03d}'}.mp4"
+        )
         shot_outputs.append(
             render_shot_with_provider_policy(
                 request,
                 keyframe_path,
                 shot_output_path,
                 run_dir,
-                video_provider=str((request.get("provider") or {}).get("provider_id") if isinstance(request.get("provider"), dict) else video_provider),
+                video_provider=str(
+                    (request.get("provider") or {}).get("provider_id")
+                    if isinstance(request.get("provider"), dict)
+                    else video_provider
+                ),
                 fallback_renderer=fallback_renderer,
                 max_retries=max_retries,
                 retry_delay=retry_delay,
@@ -1211,7 +1346,9 @@ def render_scene_shots_with_provider_policy(
         shot_outputs,
         requested_provider=video_provider,
         fallback_mode=video_fallback_mode(video_provider),
-        duration_seconds=_coerce_non_negative_float(assembly_manifest.get("duration_seconds") or scene.get("duration_seconds")),
+        duration_seconds=_coerce_non_negative_float(
+            assembly_manifest.get("duration_seconds") or scene.get("duration_seconds")
+        ),
     )
     generation_meta["shot_assembly_manifest"] = assembly_manifest
     generation_meta = normalize_generation_meta(generation_meta)
@@ -1223,7 +1360,9 @@ def sanitize_generation_error(value: object, *, limit: int = 500) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    text = re.sub(r"(?i)(api[_-]?key|token|authorization|bearer|secret)=([^&\s]+)", r"\1=<redacted>", text)
+    text = re.sub(
+        r"(?i)(api[_-]?key|token|authorization|bearer|secret)=([^&\s]+)", r"\1=<redacted>", text
+    )
     text = re.sub(r"(?i)(authorization:\s*bearer\s+)[^\s]+", r"\1<redacted>", text)
     text = re.sub(r"https?://[^\s?]+\?[^\s]*", lambda match: match.group(0).split("?", 1)[0], text)
     text = re.sub(r"\s+", " ", text).strip()
@@ -1284,7 +1423,9 @@ def _normalize_shot_output(value: object, fallback_index: int) -> dict[str, Any]
     if "duration_seconds" in output:
         output["duration_seconds"] = _coerce_non_negative_float(output.get("duration_seconds"))
     if "target_duration_seconds" in output:
-        output["target_duration_seconds"] = _coerce_non_negative_float(output.get("target_duration_seconds"))
+        output["target_duration_seconds"] = _coerce_non_negative_float(
+            output.get("target_duration_seconds")
+        )
     if "attempts" in output:
         output["attempts"] = _coerce_non_negative_int(output.get("attempts"))
     if "fallback_used" in output:
@@ -1355,9 +1496,15 @@ def generation_meta_from_shot_outputs(
         if normalized is not None:
             normalized_outputs.append(normalized)
     real_count = sum(1 for item in normalized_outputs if item.get("status") == "real_video")
-    fallback_count = sum(1 for item in normalized_outputs if item.get("status") == "fallback" or item.get("fallback_used") is True)
+    fallback_count = sum(
+        1
+        for item in normalized_outputs
+        if item.get("status") == "fallback" or item.get("fallback_used") is True
+    )
     failed_count = sum(1 for item in normalized_outputs if item.get("status") == "failed")
-    total_attempts = sum(_coerce_non_negative_int(item.get("attempts")) for item in normalized_outputs)
+    total_attempts = sum(
+        _coerce_non_negative_int(item.get("attempts")) for item in normalized_outputs
+    )
     first_output = normalized_outputs[0] if normalized_outputs else {}
     resolved_provider_id = provider_id or str(first_output.get("provider_id") or "")
     resolved_provider_label = provider_label or str(first_output.get("provider_label") or "")
@@ -1413,7 +1560,9 @@ def build_shot_assembly_manifest(
             normalized.get("duration_seconds") or normalized.get("target_duration_seconds")
         )
         child = {
-            "shot_id": _clean_generation_text(normalized.get("shot_id") or f"shot_{index:03d}", limit=120),
+            "shot_id": _clean_generation_text(
+                normalized.get("shot_id") or f"shot_{index:03d}", limit=120
+            ),
             "path": sanitize_generation_error(normalized.get("path")),
             "start_seconds": round(cursor, 3),
             "duration_seconds": round(duration, 3),
@@ -1460,7 +1609,14 @@ def normalize_generation_meta(meta: object) -> dict[str, Any]:
         version = 2
     normalized["version"] = version
 
-    for key in ("provider_id", "provider_label", "backend", "requested_provider", "fallback_mode", "generated_at"):
+    for key in (
+        "provider_id",
+        "provider_label",
+        "backend",
+        "requested_provider",
+        "fallback_mode",
+        "generated_at",
+    ):
         if key in normalized:
             normalized[key] = _clean_generation_text(normalized.get(key), limit=240)
     for key in ("is_real_video", "fallback_used"):
@@ -1469,7 +1625,9 @@ def normalize_generation_meta(meta: object) -> dict[str, Any]:
     if "attempts" in normalized:
         normalized["attempts"] = _coerce_non_negative_int(normalized.get("attempts"))
     if "duration_seconds" in normalized:
-        normalized["duration_seconds"] = _coerce_non_negative_float(normalized.get("duration_seconds"))
+        normalized["duration_seconds"] = _coerce_non_negative_float(
+            normalized.get("duration_seconds")
+        )
     if "error" in normalized:
         normalized["error"] = sanitize_generation_error(normalized.get("error"))
     if "warnings" in normalized:
@@ -1490,9 +1648,15 @@ def normalize_generation_meta(meta: object) -> dict[str, Any]:
         normalized["shot_outputs"] = shot_outputs
 
         computed_real = sum(1 for item in shot_outputs if item.get("status") == "real_video")
-        computed_fallback = sum(1 for item in shot_outputs if item.get("status") == "fallback" or item.get("fallback_used") is True)
+        computed_fallback = sum(
+            1
+            for item in shot_outputs
+            if item.get("status") == "fallback" or item.get("fallback_used") is True
+        )
         computed_failed = sum(1 for item in shot_outputs if item.get("status") == "failed")
-        computed_attempts = sum(_coerce_non_negative_int(item.get("attempts")) for item in shot_outputs)
+        computed_attempts = sum(
+            _coerce_non_negative_int(item.get("attempts")) for item in shot_outputs
+        )
         normalized["real_video_shot_count"] = _coerce_non_negative_int(
             normalized.get("real_video_shot_count"),
             computed_real,
@@ -1524,37 +1688,55 @@ def generation_meta_from_result(
     if not backend:
         backend = "local"
         if result.is_real_video:
-            backend = "remote" if str(result.provider_id or "").lower() not in {"comfyui"} else "comfyui"
-    fallback_used = bool(result.fallback_used or (not result.is_real_video and str(result.provider_id or "").lower() != "local"))
-    return normalize_generation_meta({
-        "version": 1,
-        "provider_id": str(result.provider_id or "").strip(),
-        "provider_label": str(result.provider_label or "").strip(),
-        "backend": backend,
-        "requested_provider": str(requested_provider or "").strip(),
-        "is_real_video": bool(result.is_real_video),
-        "fallback_used": fallback_used,
-        "attempts": int(result.attempts or 0),
-        "duration_seconds": float(result.duration_seconds or 0.0),
-        "error": sanitize_generation_error(result.error),
-        "warnings": [sanitize_generation_error(item, limit=240) for item in warnings if str(item or "").strip()],
-        "fallback_mode": fallback_mode or video_fallback_mode(result.provider_id),
-        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    })
+            backend = (
+                "remote" if str(result.provider_id or "").lower() not in {"comfyui"} else "comfyui"
+            )
+    fallback_used = bool(
+        result.fallback_used
+        or (not result.is_real_video and str(result.provider_id or "").lower() != "local")
+    )
+    return normalize_generation_meta(
+        {
+            "version": 1,
+            "provider_id": str(result.provider_id or "").strip(),
+            "provider_label": str(result.provider_label or "").strip(),
+            "backend": backend,
+            "requested_provider": str(requested_provider or "").strip(),
+            "is_real_video": bool(result.is_real_video),
+            "fallback_used": fallback_used,
+            "attempts": int(result.attempts or 0),
+            "duration_seconds": float(result.duration_seconds or 0.0),
+            "error": sanitize_generation_error(result.error),
+            "warnings": [
+                sanitize_generation_error(item, limit=240)
+                for item in warnings
+                if str(item or "").strip()
+            ],
+            "fallback_mode": fallback_mode or video_fallback_mode(result.provider_id),
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    )
+
 
 def extract_last_frame(video_path: Path, output_path: Path) -> Path | None:
     """Extract the last frame from a video for cross-scene continuity bridging."""
     try:
         from scripts.run_workflow import get_ffmpeg_exe, run_guarded
+
         ffmpeg = get_ffmpeg_exe()
         # Extract last frame using ffmpeg
         run_guarded(
             [
-                ffmpeg, "-y",
-                "-sseof", "-0.1",  # Seek to 0.1s before end
-                "-i", str(video_path),
-                "-frames:v", "1",
-                "-q:v", "2",
+                ffmpeg,
+                "-y",
+                "-sseof",
+                "-0.1",  # Seek to 0.1s before end
+                "-i",
+                str(video_path),
+                "-frames:v",
+                "1",
+                "-q:v",
+                "2",
                 str(output_path),
             ],
             cwd=output_path.parent,
@@ -1588,13 +1770,16 @@ def build_continuity_bridge_prompt(
         }
 
     prev_emotion = str(prev_scene.get("emotion_tone") or prev_scene.get("emotion") or "").strip()
-    curr_emotion = str(current_scene.get("emotion_tone") or current_scene.get("emotion") or "").strip()
+    curr_emotion = str(
+        current_scene.get("emotion_tone") or current_scene.get("emotion") or ""
+    ).strip()
     prev_title = str(prev_scene.get("title") or "").strip()
     prev_characters = prev_scene.get("characters") or []
     curr_characters = current_scene.get("characters") or []
 
     # Determine transition type
     from scripts.run_workflow import _scene_transition
+
     transition = _scene_transition(prev_emotion, curr_emotion)
 
     # Build continuity prefix
@@ -1641,6 +1826,7 @@ def build_continuity_bridge_prompt(
 # Retry-aware video generation
 # ---------------------------------------------------------------------------
 
+
 def generate_scene_video_with_retry(
     scene_obj: Any,
     keyframe_path: Path,
@@ -1662,16 +1848,16 @@ def generate_scene_video_with_retry(
     - Clear result reporting (real video vs 2.5D fallback)
     """
     from scripts.run_workflow import (
-        build_scene_video_prompts,
         build_scene_temporal_spec,
+        build_scene_video_prompts,
         env_float,
         render_scene_video_comfyui,
         scene_consistency_spec,
     )
     from scripts.video_provider_adapters import (
+        VideoProviderError,
         VideoRenderRequest,
         render_remote_video_provider,
-        VideoProviderError,
     )
     from video_providers import get_video_provider_spec
 
@@ -1703,9 +1889,14 @@ def generate_scene_video_with_retry(
             if provider_spec.backend == "comfyui":
                 logger.info(
                     "[video] Scene %s attempt %d/%d via %s",
-                    scene_id, attempt, max_retries + 1, provider_spec.label,
+                    scene_id,
+                    attempt,
+                    max_retries + 1,
+                    provider_spec.label,
                 )
-                render_scene_video_comfyui(scene_obj, keyframe_path, clip_duration, visual_output_path, run_dir)
+                render_scene_video_comfyui(
+                    scene_obj, keyframe_path, clip_duration, visual_output_path, run_dir
+                )
                 return VideoGenerationResult(
                     scene_order=scene_obj.scene,
                     provider_id=provider_spec.id,
@@ -1722,15 +1913,22 @@ def generate_scene_video_with_retry(
             elif provider_spec.backend == "remote":
                 logger.info(
                     "[video] Scene %s attempt %d/%d via %s (remote)",
-                    scene_id, attempt, max_retries + 1, provider_spec.label,
+                    scene_id,
+                    attempt,
+                    max_retries + 1,
+                    provider_spec.label,
                 )
-                prompt_text, negative_text = build_scene_video_prompts(scene_obj, clip_duration, run_dir)
+                prompt_text, negative_text = build_scene_video_prompts(
+                    scene_obj, clip_duration, run_dir
+                )
 
                 # Inject continuity bridge into prompt
                 if continuity_bridge["continuity_prefix"]:
                     prompt_text = f"{continuity_bridge['continuity_prefix']}\n\n{prompt_text}"
 
-                temporal_spec = getattr(scene_obj, "temporal_spec", None) or build_scene_temporal_spec(
+                temporal_spec = getattr(
+                    scene_obj, "temporal_spec", None
+                ) or build_scene_temporal_spec(
                     scene_obj,
                     clip_duration,
                     width=int(env_float("VIDEO_WIDTH", default=1080)),
@@ -1747,7 +1945,9 @@ def generate_scene_video_with_retry(
                         "shared_characters_must_match": True,
                     }
 
-                from scripts.run_workflow import get_ffmpeg_exe, run_guarded as _run_guarded
+                from scripts.run_workflow import get_ffmpeg_exe
+                from scripts.run_workflow import run_guarded as _run_guarded
+
                 ffmpeg = get_ffmpeg_exe()
 
                 render_remote_video_provider(
@@ -1799,7 +1999,9 @@ def generate_scene_video_with_retry(
                     attempts=1,
                     duration_seconds=clip_duration,
                     output_path=str(visual_output_path),
-                    warnings=["Using 2.5D local renderer (no video generation provider configured)"],
+                    warnings=[
+                        "Using 2.5D local renderer (no video generation provider configured)"
+                    ],
                     backend="local",
                     fallback_used=False,
                 )
@@ -1808,7 +2010,9 @@ def generate_scene_video_with_retry(
             last_error = str(exc)
             logger.warning(
                 "[video] Scene %s attempt %d failed: %s",
-                scene_id, attempt, last_error,
+                scene_id,
+                attempt,
+                last_error,
             )
             if attempt <= max_retries:
                 logger.info("[video] Retrying in %.1fs...", retry_delay)
@@ -1833,7 +2037,9 @@ def generate_scene_video_with_retry(
         warnings = []
     logger.warning(
         "[video] Scene %s: all %d attempts failed, falling back to 2.5D. Last error: %s",
-        scene_id, attempts, last_error,
+        scene_id,
+        attempts,
+        last_error,
     )
     return VideoGenerationResult(
         scene_order=scene_obj.scene,
@@ -1854,6 +2060,7 @@ def generate_scene_video_with_retry(
 # ---------------------------------------------------------------------------
 # Batch video generation with cross-scene continuity
 # ---------------------------------------------------------------------------
+
 
 def generate_project_videos_with_continuity(
     project_id: str,
@@ -1898,17 +2105,19 @@ def generate_project_videos_with_continuity(
             if extracted:
                 prev_last_frame = extracted
             prev_scene_data = scene
-            results.append(VideoGenerationResult(
-                scene_order=scene_order,
-                provider_id="cached",
-                provider_label="Cached",
-                success=True,
-                is_real_video=True,
-                attempts=0,
-                duration_seconds=float(scene.get("duration_seconds", 0)),
-                output_path=str(existing_video),
-                last_frame_path=str(prev_last_frame or ""),
-            ))
+            results.append(
+                VideoGenerationResult(
+                    scene_order=scene_order,
+                    provider_id="cached",
+                    provider_label="Cached",
+                    success=True,
+                    is_real_video=True,
+                    attempts=0,
+                    duration_seconds=float(scene.get("duration_seconds", 0)),
+                    output_path=str(existing_video),
+                    last_frame_path=str(prev_last_frame or ""),
+                )
+            )
             continue
 
         # This scene needs generation — pass continuity context

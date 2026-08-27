@@ -13,12 +13,15 @@ from urllib.request import Request, urlopen
 
 from PIL import Image, ImageDraw, ImageFilter
 
-from scripts.rw_models import StoryScene
 from backend.config_utils import env_bool, env_float, env_optional_value, env_value
+from scripts.comfyui_patcher import patch_workflow
+from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
+from scripts.prompt_compiler import PromptCompiler, find_project_root
 from scripts.rw_config import OUTPUTS, WORKFLOWS
 from scripts.rw_ffmpeg import get_ffmpeg_exe, render_timeout, run_guarded
-from scripts.rw_utils import load_json, replace_placeholders, unresolved_placeholders, write_debug_json
 from scripts.rw_image import create_keyframe
+from scripts.rw_models import StoryScene
+from scripts.rw_planning import build_scene_temporal_spec
 from scripts.rw_prompts import (
     ANIME_NEGATIVE_PROMPT_EXTRA,
     anime_video_prompt,
@@ -29,12 +32,13 @@ from scripts.rw_prompts import (
     scene_consistency_spec,
     temporal_spec_prompt_lines,
 )
-from scripts.rw_planning import build_scene_temporal_spec
-from scripts.comfyui_patcher import patch_workflow
-from scripts.comfyui_ssh_tunnel import ensure_comfyui_tunnel
-from scripts.prompt_compiler import PromptCompiler, find_project_root
+from scripts.rw_utils import (
+    load_json,
+    replace_placeholders,
+    unresolved_placeholders,
+    write_debug_json,
+)
 from video_providers import normalize_video_provider as resolve_video_provider_name
-
 
 COMFYUI_STYLE_PRESETS = {
     "anime_fallback": {
@@ -73,7 +77,9 @@ def inject_comfyui_workflow(
         raise ValueError("ComfyUI workflow template must be a JSON object.")
     checkpoint_name = str(checkpoint_name or "").strip()
     if not checkpoint_name:
-        raise ValueError("COMFYUI_CHECKPOINT_NAME / COMFYUI_VIDEO_CHECKPOINT_NAME is required for ComfyUI rendering.")
+        raise ValueError(
+            "COMFYUI_CHECKPOINT_NAME / COMFYUI_VIDEO_CHECKPOINT_NAME is required for ComfyUI rendering."
+        )
 
     graph = deepcopy(template)
     checkpoint_node_id: str | None = None
@@ -156,12 +162,18 @@ def comfyui_auth_headers() -> dict[str, str]:
 
 
 def comfyui_workflow_path() -> Path:
-    raw = env_value("COMFYUI_WORKFLOW_PATH", default=str(WORKFLOWS / "comfyui_keyframe_template.json"))
+    raw = env_value(
+        "COMFYUI_WORKFLOW_PATH", default=str(WORKFLOWS / "comfyui_keyframe_template.json")
+    )
     return Path(raw)
 
 
 def comfyui_video_workflow_path() -> Path:
-    raw = env_value("COMFYUI_VIDEO_WORKFLOW_PATH", "VIDEO_WORKFLOW_PATH", default=str(WORKFLOWS / "comfyui_video_template.json"))
+    raw = env_value(
+        "COMFYUI_VIDEO_WORKFLOW_PATH",
+        "VIDEO_WORKFLOW_PATH",
+        default=str(WORKFLOWS / "comfyui_video_template.json"),
+    )
     return Path(raw)
 
 
@@ -207,12 +219,71 @@ def ensure_default_comfyui_reference_image() -> Path:
     draw = ImageDraw.Draw(base, "RGBA")
 
     draw.ellipse((158, 146, 354, 366), fill=(202, 176, 158, 255))
-    draw.polygon([(158, 166), (182, 122), (234, 94), (286, 92), (334, 120), (356, 168), (350, 206), (322, 182), (288, 170), (228, 170), (190, 182)], fill=(16, 16, 20, 255))
-    draw.polygon([(168, 204), (178, 294), (170, 388), (184, 456), (214, 510), (236, 548), (144, 534), (126, 398), (134, 282)], fill=(16, 16, 20, 240))
-    draw.polygon([(344, 204), (334, 294), (342, 388), (328, 456), (298, 510), (276, 548), (368, 534), (386, 398), (378, 282)], fill=(16, 16, 20, 240))
-    draw.polygon([(174, 136), (202, 108), (230, 96), (258, 92), (290, 98), (318, 118), (300, 134), (270, 126), (236, 124), (198, 132)], fill=(10, 10, 14, 255))
-    draw.polygon([(140, 154), (154, 214), (138, 266), (126, 230), (122, 182)], fill=(10, 10, 14, 220))
-    draw.polygon([(374, 154), (360, 214), (376, 266), (388, 230), (392, 182)], fill=(10, 10, 14, 220))
+    draw.polygon(
+        [
+            (158, 166),
+            (182, 122),
+            (234, 94),
+            (286, 92),
+            (334, 120),
+            (356, 168),
+            (350, 206),
+            (322, 182),
+            (288, 170),
+            (228, 170),
+            (190, 182),
+        ],
+        fill=(16, 16, 20, 255),
+    )
+    draw.polygon(
+        [
+            (168, 204),
+            (178, 294),
+            (170, 388),
+            (184, 456),
+            (214, 510),
+            (236, 548),
+            (144, 534),
+            (126, 398),
+            (134, 282),
+        ],
+        fill=(16, 16, 20, 240),
+    )
+    draw.polygon(
+        [
+            (344, 204),
+            (334, 294),
+            (342, 388),
+            (328, 456),
+            (298, 510),
+            (276, 548),
+            (368, 534),
+            (386, 398),
+            (378, 282),
+        ],
+        fill=(16, 16, 20, 240),
+    )
+    draw.polygon(
+        [
+            (174, 136),
+            (202, 108),
+            (230, 96),
+            (258, 92),
+            (290, 98),
+            (318, 118),
+            (300, 134),
+            (270, 126),
+            (236, 124),
+            (198, 132),
+        ],
+        fill=(10, 10, 14, 255),
+    )
+    draw.polygon(
+        [(140, 154), (154, 214), (138, 266), (126, 230), (122, 182)], fill=(10, 10, 14, 220)
+    )
+    draw.polygon(
+        [(374, 154), (360, 214), (376, 266), (388, 230), (392, 182)], fill=(10, 10, 14, 220)
+    )
 
     draw.arc((194, 210, 242, 238), start=180, end=360, fill=(50, 38, 30, 255), width=4)
     draw.arc((268, 210, 316, 238), start=180, end=360, fill=(50, 38, 30, 255), width=4)
@@ -225,11 +296,24 @@ def ensure_default_comfyui_reference_image() -> Path:
     draw.ellipse((166, 252, 182, 262), fill=(120, 74, 76, 68))
     draw.ellipse((330, 252, 346, 262), fill=(120, 74, 76, 68))
 
-    robe = [(94, 620), (160, 444), (206, 384), (256, 404), (306, 384), (354, 444), (418, 620), (392, 748), (120, 748)]
+    robe = [
+        (94, 620),
+        (160, 444),
+        (206, 384),
+        (256, 404),
+        (306, 384),
+        (354, 444),
+        (418, 620),
+        (392, 748),
+        (120, 748),
+    ]
     draw.polygon(robe, fill=(92, 96, 104, 255))
     collar = [(194, 394), (256, 452), (318, 394), (344, 426), (256, 506), (168, 426)]
     draw.polygon(collar, fill=(176, 172, 160, 255))
-    draw.polygon([(206, 458), (256, 540), (304, 458), (332, 468), (286, 572), (226, 572), (180, 468)], fill=(64, 68, 76, 255))
+    draw.polygon(
+        [(206, 458), (256, 540), (304, 458), (332, 468), (286, 572), (226, 572), (180, 468)],
+        fill=(64, 68, 76, 255),
+    )
 
     for x in range(4):
         draw.line((126 + x * 24, 560, 378 - x * 20, 726), fill=(46, 50, 58, 120), width=3)
@@ -285,7 +369,10 @@ def comfyui_upload_image(source: Path, *, subfolder: str = "comicdrama_refs") ->
     request = Request(
         f"{comfyui_base_url()}/upload/image",
         data=bytes(body),
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", **comfyui_auth_headers()},
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            **comfyui_auth_headers(),
+        },
         method="POST",
     )
     try:
@@ -293,7 +380,9 @@ def comfyui_upload_image(source: Path, *, subfolder: str = "comicdrama_refs") ->
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         body_text = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"ComfyUI image upload failed with HTTP {exc.code}: {body_text}") from exc
+        raise RuntimeError(
+            f"ComfyUI image upload failed with HTTP {exc.code}: {body_text}"
+        ) from exc
 
     name = str(payload.get("name") or filename)
     remote_subfolder = str(payload.get("subfolder") or subfolder).strip("/")
@@ -302,7 +391,9 @@ def comfyui_upload_image(source: Path, *, subfolder: str = "comicdrama_refs") ->
 
 
 def prepare_comfyui_reference_image(scene: StoryScene) -> dict[str, str]:
-    raw_path = (scene.primary_reference_image_abs_path or scene.primary_reference_image_path or "").strip()
+    raw_path = (
+        scene.primary_reference_image_abs_path or scene.primary_reference_image_path or ""
+    ).strip()
     placeholder = False
     if not raw_path:
         source = ensure_default_comfyui_reference_image()
@@ -320,7 +411,12 @@ def prepare_comfyui_reference_image(scene: StoryScene) -> dict[str, str]:
         uploaded["placeholder"] = placeholder
         return uploaded
     if mode == "absolute":
-        return {"source": raw_path or "__generated_default_reference__", "load_image": absolute, "absolute": absolute, "placeholder": placeholder}
+        return {
+            "source": raw_path or "__generated_default_reference__",
+            "load_image": absolute,
+            "absolute": absolute,
+            "placeholder": placeholder,
+        }
 
     input_dir = comfyui_input_dir()
     if not input_dir:
@@ -328,7 +424,12 @@ def prepare_comfyui_reference_image(scene: StoryScene) -> dict[str, str]:
             uploaded = comfyui_upload_image(source)
             uploaded["placeholder"] = placeholder
             return uploaded
-        return {"source": raw_path or "__generated_default_reference__", "load_image": absolute, "absolute": absolute, "placeholder": placeholder}
+        return {
+            "source": raw_path or "__generated_default_reference__",
+            "load_image": absolute,
+            "absolute": absolute,
+            "placeholder": placeholder,
+        }
 
     target_dir = input_dir / "comicdrama_refs"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -336,11 +437,20 @@ def prepare_comfyui_reference_image(scene: StoryScene) -> dict[str, str]:
     target = target_dir / target_name
     shutil.copy2(source, target)
     load_name = f"comicdrama_refs/{target.name}"
-    return {"source": raw_path or "__generated_default_reference__", "load_image": load_name, "absolute": str(target.resolve()), "placeholder": placeholder}
+    return {
+        "source": raw_path or "__generated_default_reference__",
+        "load_image": load_name,
+        "absolute": str(target.resolve()),
+        "placeholder": placeholder,
+    }
 
 
-def _build_consistency_meta(scene: StoryScene, reference_info: dict[str, str], ip_adapter_weight: float) -> dict[str, Any]:
-    primary_meta = scene.primary_reference_meta if isinstance(scene.primary_reference_meta, dict) else {}
+def _build_consistency_meta(
+    scene: StoryScene, reference_info: dict[str, str], ip_adapter_weight: float
+) -> dict[str, Any]:
+    primary_meta = (
+        scene.primary_reference_meta if isinstance(scene.primary_reference_meta, dict) else {}
+    )
     warnings = [str(item) for item in (primary_meta.get("warnings") or []) if str(item).strip()]
     placeholder = bool(reference_info.get("placeholder"))
     if placeholder:
@@ -365,7 +475,9 @@ def _build_consistency_meta(scene: StoryScene, reference_info: dict[str, str], i
 
 
 def _initial_consistency_meta(scene: StoryScene) -> dict[str, Any]:
-    primary_meta = scene.primary_reference_meta if isinstance(scene.primary_reference_meta, dict) else {}
+    primary_meta = (
+        scene.primary_reference_meta if isinstance(scene.primary_reference_meta, dict) else {}
+    )
     warnings = [str(item) for item in (primary_meta.get("warnings") or []) if str(item).strip()]
     reference_path = None
     raw_abs = str(scene.primary_reference_image_abs_path or "").strip()
@@ -458,7 +570,9 @@ def download_comfyui_asset(asset_info: dict, out_path: Path) -> None:
         out_path.write_bytes(response.read())
 
 
-def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration: float, out_path: Path, run_dir: Path) -> Path:
+def render_scene_video_comfyui(
+    scene: StoryScene, keyframe_path: Path, duration: float, out_path: Path, run_dir: Path
+) -> Path:
     workflow_path = comfyui_video_workflow_path()
     if not workflow_path.exists():
         raise FileNotFoundError(f"ComfyUI video workflow template not found: {workflow_path}")
@@ -500,7 +614,9 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
         "__CHARACTER_DESCRIPTIONS__": scene.character_descriptions,
         "__VIDEO_CHECKPOINT_NAME__": comfyui_checkpoint_name(),
         "__VIDEO_LORA_NAME__": comfyui_lora_name(),
-        "__VIDEO_LORA_STRENGTH_MODEL__": env_float("COMFYUI_VIDEO_LORA_STRENGTH_MODEL", default=0.7),
+        "__VIDEO_LORA_STRENGTH_MODEL__": env_float(
+            "COMFYUI_VIDEO_LORA_STRENGTH_MODEL", default=0.7
+        ),
         "__VIDEO_LORA_STRENGTH_CLIP__": env_float("COMFYUI_VIDEO_LORA_STRENGTH_CLIP", default=0.7),
         "__VIDEO_IP_ADAPTER_WEIGHT__": env_float("COMFYUI_VIDEO_IP_ADAPTER_WEIGHT", default=0.65),
     }
@@ -510,7 +626,9 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
     unresolved = unresolved_placeholders(injected)
     if unresolved:
         write_debug_json(debug_dir / f"scene_{scene.scene:02}_video_unresolved.json", unresolved)
-        raise ValueError(f"ComfyUI video workflow has unresolved placeholders: {', '.join(unresolved[:5])}")
+        raise ValueError(
+            f"ComfyUI video workflow has unresolved placeholders: {', '.join(unresolved[:5])}"
+        )
 
     write_debug_json(
         debug_dir / f"scene_{scene.scene:02}_video_request_meta.json",
@@ -532,7 +650,9 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
 
     try:
         submit_response = submit_comfyui_prompt(injected, prompt_id, client_id)
-        write_debug_json(debug_dir / f"scene_{scene.scene:02}_video_submit_response.json", submit_response)
+        write_debug_json(
+            debug_dir / f"scene_{scene.scene:02}_video_submit_response.json", submit_response
+        )
         prompt_id = str(submit_response.get("prompt_id", prompt_id))
         history = poll_comfyui_history(prompt_id, timeout_s=max(300, int(max(30.0, duration) * 60)))
         write_debug_json(debug_dir / f"scene_{scene.scene:02}_video_history.json", history)
@@ -540,7 +660,9 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
         status_str = str(status.get("status_str") or "").lower()
         completed = status.get("completed")
         if completed is False or status_str in {"error", "failed", "failure"}:
-            raise RuntimeError(f"ComfyUI video workflow failed: {json.dumps(status, ensure_ascii=False)}")
+            raise RuntimeError(
+                f"ComfyUI video workflow failed: {json.dumps(status, ensure_ascii=False)}"
+            )
     except Exception as exc:
         raise RuntimeError(f"ComfyUI video generation failed: {exc}") from exc
 
@@ -553,7 +675,11 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
             asset_info = items[0]
             filename = str(asset_info.get("filename") or "")
             suffix = Path(filename).suffix.lower() or ".mp4"
-            download_path = out_path if suffix == out_path.suffix.lower() else out_path.with_name(f"{out_path.stem}_source{suffix}")
+            download_path = (
+                out_path
+                if suffix == out_path.suffix.lower()
+                else out_path.with_name(f"{out_path.stem}_source{suffix}")
+            )
             download_comfyui_asset(asset_info, download_path)
             if download_path != out_path:
                 ffmpeg = get_ffmpeg_exe()
@@ -582,11 +708,18 @@ def render_scene_video_comfyui(scene: StoryScene, keyframe_path: Path, duration:
                 )
             write_debug_json(
                 debug_dir / f"scene_{scene.scene:02}_video_downloaded_asset.json",
-                {"node_id": node_id, "field": field, "asset": asset_info, "output_path": str(out_path)},
+                {
+                    "node_id": node_id,
+                    "field": field,
+                    "asset": asset_info,
+                    "output_path": str(out_path),
+                },
             )
             return out_path
 
-    raise RuntimeError(f"ComfyUI video workflow completed but returned no video media. Debug: {debug_dir}")
+    raise RuntimeError(
+        f"ComfyUI video workflow completed but returned no video media. Debug: {debug_dir}"
+    )
 
 
 def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
@@ -629,7 +762,13 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
         )
         # Prepend quality tags to compiled output
         compiled_with_quality = ", ".join(
-            part for part in [quality_prefix, compiled.positive, "cinematic composition, dramatic lighting"] if str(part).strip()
+            part
+            for part in [
+                quality_prefix,
+                compiled.positive,
+                "cinematic composition, dramatic lighting",
+            ]
+            if str(part).strip()
         )
         prompt_text = anime_visual_prompt(
             compiled_with_quality,
@@ -650,7 +789,9 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
     client_id = f"client-{random.randint(100000, 999999)}"
     ip_adapter_weight = env_float("COMFYUI_IP_ADAPTER_WEIGHT", default=0.65)
     if reference_info.get("placeholder"):
-        ip_adapter_weight = min(ip_adapter_weight, env_float("COMFYUI_PLACEHOLDER_IP_ADAPTER_WEIGHT", default=0.0))
+        ip_adapter_weight = min(
+            ip_adapter_weight, env_float("COMFYUI_PLACEHOLDER_IP_ADAPTER_WEIGHT", default=0.0)
+        )
     checkpoint_name = comfyui_checkpoint_name()
     lora_name = comfyui_lora_name()
     style_preset = comfyui_style_preset()
@@ -709,7 +850,9 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
     unresolved = unresolved_placeholders(filled)
     if unresolved:
         write_debug_json(debug_dir / f"scene_{scene.scene:02}_comfyui_unresolved.json", unresolved)
-        raise ValueError(f"ComfyUI workflow has unresolved placeholders: {', '.join(unresolved[:5])}")
+        raise ValueError(
+            f"ComfyUI workflow has unresolved placeholders: {', '.join(unresolved[:5])}"
+        )
 
     write_debug_json(
         debug_dir / f"scene_{scene.scene:02}_comfyui_request_meta.json",
@@ -732,7 +875,9 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
 
     try:
         submit_response = submit_comfyui_prompt(filled, prompt_id, client_id)
-        write_debug_json(debug_dir / f"scene_{scene.scene:02}_submit_response.json", submit_response)
+        write_debug_json(
+            debug_dir / f"scene_{scene.scene:02}_submit_response.json", submit_response
+        )
         prompt_id = str(submit_response.get("prompt_id", prompt_id))
         history = poll_comfyui_history(prompt_id)
         write_debug_json(debug_dir / f"scene_{scene.scene:02}_history.json", history)
@@ -754,7 +899,9 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
         for node_id, node in filled.items()
         if isinstance(node, dict) and node.get("class_type") == "SaveImage"
     ]
-    ordered_node_ids = save_image_node_ids + [node_id for node_id in outputs.keys() if node_id not in save_image_node_ids]
+    ordered_node_ids = save_image_node_ids + [
+        node_id for node_id in outputs.keys() if node_id not in save_image_node_ids
+    ]
     for node_id in ordered_node_ids:
         node_output = outputs.get(node_id, {})
         images = node_output.get("images") or []
@@ -801,7 +948,7 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
 
 def _generate_keyframe_cloud(scene: StoryScene, run_dir: Path) -> Path:
     """Generate keyframe via cloud text-to-image API."""
-    from backend.keyframe_providers import generate_keyframe_dashscope, build_keyframe_prompt
+    from backend.keyframe_providers import build_keyframe_prompt, generate_keyframe_dashscope
 
     # Build character info for prompt
     characters: list[dict] = []
@@ -842,4 +989,6 @@ def comfyui_checkpoint_name() -> str:
 
 
 def comfyui_lora_name() -> str:
-    return env_optional_value("COMFYUI_LORA_NAME", default=env_optional_value("COMFYUI_VIDEO_LORA_NAME", default=""))
+    return env_optional_value(
+        "COMFYUI_LORA_NAME", default=env_optional_value("COMFYUI_VIDEO_LORA_NAME", default="")
+    )

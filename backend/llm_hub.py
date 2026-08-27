@@ -31,11 +31,27 @@ LLM_DEBUG_DIR = ROOT / "outputs" / "llm_debug"
 
 # Task definitions: key → (label, description) for UI display
 TASK_DEFINITIONS: list[dict[str, str]] = [
-    {"key": "language_model", "label": "语言模型", "desc": "文本改写、剧本拆解、导演解读等语言类任务的独立配置。"},
-    {"key": "character_image", "label": "角色图生成", "desc": "角色设定图、参考图生成的独立模型或兼容接口配置。"},
+    {
+        "key": "language_model",
+        "label": "语言模型",
+        "desc": "文本改写、剧本拆解、导演解读等语言类任务的独立配置。",
+    },
+    {
+        "key": "character_image",
+        "label": "角色图生成",
+        "desc": "角色设定图、参考图生成的独立模型或兼容接口配置。",
+    },
     {"key": "storyboard", "label": "剧本拆解（故事→分镜）", "desc": "从故事大纲生成分镜场景"},
-    {"key": "script_storyboard", "label": "剧本拆解（剧本→分镜）", "desc": "从完整剧本生成分镜场景"},
-    {"key": "director_classify", "label": "导演解读（场景分类）", "desc": "对每个场景进行导演级分类与情绪标注"},
+    {
+        "key": "script_storyboard",
+        "label": "剧本拆解（剧本→分镜）",
+        "desc": "从完整剧本生成分镜场景",
+    },
+    {
+        "key": "director_classify",
+        "label": "导演解读（场景分类）",
+        "desc": "对每个场景进行导演级分类与情绪标注",
+    },
 ]
 
 LANGUAGE_MODEL_TASKS = {"default", "storyboard", "script_storyboard", "director_classify"}
@@ -285,9 +301,7 @@ class LlmClient:
         """Resolve model for a given task (backward compat)."""
         return self._resolve_task_config(task)["model"]
 
-    def _build_request(
-        self, payload: dict[str, Any], use_json_mode: bool
-    ) -> dict[str, Any]:
+    def _build_request(self, payload: dict[str, Any], use_json_mode: bool) -> dict[str, Any]:
         """Build request payload with optional JSON mode."""
         request_payload = {**payload}
         if use_json_mode:
@@ -312,7 +326,12 @@ class LlmClient:
             return response.read().decode("utf-8")
 
     def _request_with_retry(
-        self, base_url: str, api_key: str, payload: dict[str, Any], timeout: int, use_json_mode: bool
+        self,
+        base_url: str,
+        api_key: str,
+        payload: dict[str, Any],
+        timeout: int,
+        use_json_mode: bool,
     ) -> str:
         """Send request with exponential backoff retry on retryable errors."""
         request_payload = self._build_request(payload, use_json_mode)
@@ -329,19 +348,21 @@ class LlmClient:
                         return self._do_request(base_url, api_key, payload, timeout)
                     except HTTPError as retry_exc:
                         retry_detail = retry_exc.read().decode("utf-8", errors="replace")
-                        raise RuntimeError(f"LLM HTTP {retry_exc.code}: {retry_detail}") from retry_exc
+                        raise RuntimeError(
+                            f"LLM HTTP {retry_exc.code}: {retry_detail}"
+                        ) from retry_exc
                     except URLError as retry_exc:
                         raise RuntimeError(f"LLM request failed: {retry_exc}") from retry_exc
 
                 if exc.code in _RETRYABLE_STATUS and attempt < MAX_RETRIES - 1:
-                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    wait = 2**attempt  # 1s, 2s, 4s
                     time.sleep(wait)
                     last_error = RuntimeError(f"LLM HTTP {exc.code}: {detail}")
                     continue
                 raise RuntimeError(f"LLM HTTP {exc.code}: {detail}") from exc
             except URLError as exc:
                 if attempt < MAX_RETRIES - 1:
-                    wait = 2 ** attempt
+                    wait = 2**attempt
                     time.sleep(wait)
                     last_error = RuntimeError(f"LLM request failed: {exc}")
                     continue
@@ -416,17 +437,19 @@ class LlmClient:
             raise
         finally:
             duration_ms = int((time.time() - start_ts) * 1000)
-            _append_usage({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start_ts)),
-                "task": task,
-                "model": resolved_model,
-                "prompt_tokens": usage_info.get("prompt_tokens", 0),
-                "completion_tokens": usage_info.get("completion_tokens", 0),
-                "total_tokens": usage_info.get("total_tokens", 0),
-                "duration_ms": duration_ms,
-                "ok": ok,
-                "error": error_msg if not ok else "",
-            })
+            _append_usage(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start_ts)),
+                    "task": task,
+                    "model": resolved_model,
+                    "prompt_tokens": usage_info.get("prompt_tokens", 0),
+                    "completion_tokens": usage_info.get("completion_tokens", 0),
+                    "total_tokens": usage_info.get("total_tokens", 0),
+                    "duration_ms": duration_ms,
+                    "ok": ok,
+                    "error": error_msg if not ok else "",
+                }
+            )
 
     def chat_raw(
         self,
@@ -473,17 +496,19 @@ class LlmClient:
             raise
         finally:
             duration_ms = int((time.time() - start_ts) * 1000)
-            _append_usage({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start_ts)),
-                "task": task,
-                "model": resolved_model,
-                "prompt_tokens": usage_info.get("prompt_tokens", 0),
-                "completion_tokens": usage_info.get("completion_tokens", 0),
-                "total_tokens": usage_info.get("total_tokens", 0),
-                "duration_ms": duration_ms,
-                "ok": ok,
-                "error": error_msg if not ok else "",
-            })
+            _append_usage(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start_ts)),
+                    "task": task,
+                    "model": resolved_model,
+                    "prompt_tokens": usage_info.get("prompt_tokens", 0),
+                    "completion_tokens": usage_info.get("completion_tokens", 0),
+                    "total_tokens": usage_info.get("total_tokens", 0),
+                    "duration_ms": duration_ms,
+                    "ok": ok,
+                    "error": error_msg if not ok else "",
+                }
+            )
 
 
 # Singleton instance

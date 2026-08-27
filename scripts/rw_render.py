@@ -6,28 +6,28 @@ from pathlib import Path
 
 from PIL import Image
 
-from scripts.rw_config import *  # noqa: F401,F403  - re-exports config constants
-from scripts.rw_models import StoryScene
-from scripts.rw_ffmpeg import render_timeout, concat_timeout, run_guarded
-from scripts.rw_utils import write_text, media_duration, clamp
-from scripts.rw_styles import normalize_subtitle_style, normalize_audio_style
+from backend.config_utils import env_bool, env_float
+from backend.video_generation import VideoGenerationResult, video_fallback_mode
 from scripts.rw_audio import (
-    mix_voice_with_bgm,
-    scene_audio_style,
-    mix_scene_sfx,
-    scene_should_screen_shake,
     apply_scene_grade,
     burn_subtitles_to_video,
+    mix_scene_sfx,
+    mix_voice_with_bgm,
+    scene_audio_style,
+    scene_should_screen_shake,
 )
-from scripts.rw_voice import split_dialogue_speaker
 from scripts.rw_comfyui import generate_keyframe, render_scene_video_comfyui
+from scripts.rw_config import *  # noqa: F401,F403  - re-exports config constants
+from scripts.rw_ffmpeg import concat_timeout, render_timeout, run_guarded
+from scripts.rw_image import apply_crop_box, compose_comic_frame
+from scripts.rw_models import StoryScene
 from scripts.rw_planning import build_scene_beats, build_scene_temporal_spec
 from scripts.rw_prompts import build_scene_video_prompts, scene_consistency_spec
-from scripts.rw_image import apply_crop_box, compose_comic_frame
+from scripts.rw_styles import normalize_audio_style, normalize_subtitle_style
+from scripts.rw_utils import clamp, media_duration, write_text
+from scripts.rw_voice import split_dialogue_speaker
 from scripts.video_provider_adapters import VideoRenderRequest, render_remote_video_provider
 from video_providers import get_video_provider_spec
-from backend.video_generation import VideoGenerationResult, video_fallback_mode
-from backend.config_utils import env_bool, env_float
 
 
 def windows_fontfile() -> str | None:
@@ -204,7 +204,9 @@ def render_silent_visual_segment(
         ),
     ]
     if screen_shake:
-        filter_parts.append("crop=1060:1884:x='10+10*sin(n*1.9)':y='18+14*sin(n*2.7)',scale=1080:1920")
+        filter_parts.append(
+            "crop=1060:1884:x='10+10*sin(n*1.9)':y='18+14*sin(n*2.7)',scale=1080:1920"
+        )
     filter_parts.extend(
         [
             reveal_filter,
@@ -272,13 +274,20 @@ def concat_video_segments(
         run_guarded(cmd, cwd=run_dir, timeout=concat_timeout(len(clips)), stage=stage)
         return out_path
 
-    if len(clips) <= 1 or not durations or len(durations) != len(clips) or not env_bool("COMICDRAMA_ENABLE_XFADE", default=False):
+    if (
+        len(clips) <= 1
+        or not durations
+        or len(durations) != len(clips)
+        or not env_bool("COMICDRAMA_ENABLE_XFADE", default=False)
+    ):
         return _concat_copy()
 
     xfades = ["fade", "smoothleft", "wipeleft", "fadeblack"]
     filter_parts: list[str] = []
     for index, clip in enumerate(clips):
-        filter_parts.append(f"[{index}:v]settb=AVTB,fps=30,setpts=PTS-STARTPTS,format=yuv420p[v{index}]")
+        filter_parts.append(
+            f"[{index}:v]settb=AVTB,fps=30,setpts=PTS-STARTPTS,format=yuv420p[v{index}]"
+        )
     current = "v0"
     current_duration = float(durations[0])
     for index in range(1, len(clips)):
@@ -313,7 +322,12 @@ def concat_video_segments(
         ]
     )
     try:
-        run_guarded(cmd, cwd=run_dir, timeout=concat_timeout(len(clips)) + 120, stage="ffmpeg_concat_video_xfade")
+        run_guarded(
+            cmd,
+            cwd=run_dir,
+            timeout=concat_timeout(len(clips)) + 120,
+            stage="ffmpeg_concat_video_xfade",
+        )
     except Exception as exc:
         print(f"[video] xfade failed for {out_path.name}: {exc}; falling back to concat")
         return _concat_copy(stage="ffmpeg_concat_video_fallback")
@@ -337,7 +351,12 @@ def mux_audio_to_visual(ffmpeg: str, visual_path: Path, voice_path: Path, out_pa
         "192k",
         str(out_path),
     ]
-    run_guarded(cmd, cwd=out_path.parent, timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_audio"], stage="ffmpeg_mux_audio")
+    run_guarded(
+        cmd,
+        cwd=out_path.parent,
+        timeout=DEFAULT_SUBPROCESS_TIMEOUTS["ffmpeg_audio"],
+        stage="ffmpeg_mux_audio",
+    )
     return out_path
 
 
@@ -358,7 +377,11 @@ def render_clip_with_meta(
     style = normalize_subtitle_style(subtitle_style)
     audio_settings = normalize_audio_style(audio_style)
     scene_id = f"{scene.scene:02}"
-    keyframe = keyframe_path if keyframe_path and keyframe_path.exists() else generate_keyframe(scene, run_dir, keyframe_provider)
+    keyframe = (
+        keyframe_path
+        if keyframe_path and keyframe_path.exists()
+        else generate_keyframe(scene, run_dir, keyframe_provider)
+    )
     out = run_dir / f"clip_{scene_id}.mp4"
     muxed = run_dir / f"clip_{scene_id}_muxed.mp4"
     graded = run_dir / f"clip_{scene_id}_graded.mp4"
@@ -373,7 +396,9 @@ def render_clip_with_meta(
         scene_audio_style(scene, audio_settings, project_root=project_root),
         project_root=project_root,
     )
-    scene_audio = mix_scene_sfx(ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=project_root)
+    scene_audio = mix_scene_sfx(
+        ffmpeg, scene_audio, scene, run_dir, clip_duration, project_root=project_root
+    )
 
     visual_generated = False
     provider_spec = get_video_provider_spec(video_provider)
@@ -396,8 +421,12 @@ def render_clip_with_meta(
             fallback_used = True
             used_backend = "local"
             if fallback_mode == "report":
-                warnings.append(f"{provider_spec.label} video provider failed; using local 2.5D fallback.")
-            print(f"[video] {provider_spec.label} video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}")
+                warnings.append(
+                    f"{provider_spec.label} video provider failed; using local 2.5D fallback."
+                )
+            print(
+                f"[video] {provider_spec.label} video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}"
+            )
     elif provider_spec.backend == "remote":
         max_retries = int(env_float("VIDEO_MAX_RETRIES", default=2))
         retry_delay = env_float("VIDEO_RETRY_DELAY_SECONDS", default=5.0)
@@ -405,8 +434,12 @@ def render_clip_with_meta(
         for attempt in range(1, max_retries + 2):
             attempts = attempt
             try:
-                print(f"[video] Rendering scene {scene_id} with {provider_spec.label} remote video provider (attempt {attempt}/{max_retries + 1})")
-                prompt_text, negative_text = build_scene_video_prompts(scene, clip_duration, run_dir)
+                print(
+                    f"[video] Rendering scene {scene_id} with {provider_spec.label} remote video provider (attempt {attempt}/{max_retries + 1})"
+                )
+                prompt_text, negative_text = build_scene_video_prompts(
+                    scene, clip_duration, run_dir
+                )
                 temporal_spec = scene.temporal_spec or build_scene_temporal_spec(
                     scene,
                     clip_duration,
@@ -450,10 +483,14 @@ def render_clip_with_meta(
                     error_str = str(exc).lower()
                     if "429" in error_str or "quota" in error_str or "饱和" in error_str:
                         backoff = max(retry_delay, 30.0)  # At least 30s for quota issues
-                        print(f"[video] {provider_spec.label} attempt {attempt} rate-limited for scene {scene_id}. Waiting {backoff:.0f}s...")
+                        print(
+                            f"[video] {provider_spec.label} attempt {attempt} rate-limited for scene {scene_id}. Waiting {backoff:.0f}s..."
+                        )
                     else:
                         backoff = retry_delay
-                        print(f"[video] {provider_spec.label} attempt {attempt} failed for scene {scene_id}: {exc}. Retrying in {backoff:.0f}s...")
+                        print(
+                            f"[video] {provider_spec.label} attempt {attempt} failed for scene {scene_id}: {exc}. Retrying in {backoff:.0f}s..."
+                        )
                     time.sleep(backoff)
                     retry_delay = min(retry_delay * 2.0, 120.0)
                 else:
@@ -465,7 +502,9 @@ def render_clip_with_meta(
                         warnings.append(
                             f"{provider_spec.label} remote video provider failed after {attempt} attempts; using local 2.5D fallback."
                         )
-                    print(f"[video] {provider_spec.label} remote video provider failed for scene {scene_id} after {attempt} attempts; falling back to 2.5D clip: {exc}")
+                    print(
+                        f"[video] {provider_spec.label} remote video provider failed for scene {scene_id} after {attempt} attempts; falling back to 2.5D clip: {exc}"
+                    )
     elif provider_spec.backend != "local":
         raise ValueError(f"Unsupported video provider backend: {provider_spec.backend}")
 
@@ -479,7 +518,9 @@ def render_clip_with_meta(
             base_image = apply_crop_box(source.convert("RGBA"), scene.crop_box)
         beat_segments: list[Path] = []
         for idx, beat in enumerate(beat_specs, start=1):
-            frame_path = compose_comic_frame(base_image, scene, beat, run_dir, scene_id, idx, len(beat_specs))
+            frame_path = compose_comic_frame(
+                base_image, scene, beat, run_dir, scene_id, idx, len(beat_specs)
+            )
             segment_path = run_dir / f"scene_{scene_id}_beat_{idx}.mp4"
             render_silent_visual_segment(
                 ffmpeg,
@@ -513,10 +554,20 @@ def render_clip_with_meta(
         print(f"[video] Cinematic grade failed for scene {scene_id}: {exc}")
         graded = muxed
 
-    subtitle_source = subtitle_ass_path if subtitle_ass_path.exists() and subtitle_ass_path.read_text(encoding="utf-8").strip() else subtitle_path
-    if style.get("burn_in", True) and subtitle_source.exists() and subtitle_source.read_text(encoding="utf-8").strip():
+    subtitle_source = (
+        subtitle_ass_path
+        if subtitle_ass_path.exists() and subtitle_ass_path.read_text(encoding="utf-8").strip()
+        else subtitle_path
+    )
+    if (
+        style.get("burn_in", True)
+        and subtitle_source.exists()
+        and subtitle_source.read_text(encoding="utf-8").strip()
+    ):
         try:
-            burn_subtitles_to_video(ffmpeg, graded, subtitle_source, out, style, timeout_s=render_timeout(clip_duration))
+            burn_subtitles_to_video(
+                ffmpeg, graded, subtitle_source, out, style, timeout_s=render_timeout(clip_duration)
+            )
         except Exception as exc:
             print(f"[video] Subtitle burn failed for scene {scene_id}: {exc}")
             if graded != out:
@@ -534,7 +585,11 @@ def render_clip_with_meta(
         provider_id=provider_spec.id,
         provider_label=provider_spec.label,
         success=True,
-        is_real_video=bool(visual_generated and provider_spec.backend in {"comfyui", "remote"} and not fallback_used),
+        is_real_video=bool(
+            visual_generated
+            and provider_spec.backend in {"comfyui", "remote"}
+            and not fallback_used
+        ),
         attempts=attempts,
         duration_seconds=clip_duration,
         output_path=str(out),
@@ -635,7 +690,9 @@ def _scene_transition(prev_emotion: str, next_emotion: str) -> str:
     return "cut"
 
 
-def _concat_cut_pair(ffmpeg: str, first: Path, second: Path, out_path: Path, run_dir: Path, stage: str) -> None:
+def _concat_cut_pair(
+    ffmpeg: str, first: Path, second: Path, out_path: Path, run_dir: Path, stage: str
+) -> None:
     filter_complex = ";".join(
         [
             "[0:v]setpts=PTS-STARTPTS,fps=30,format=yuv420p[v0]",
@@ -689,7 +746,9 @@ def _concat_xfade_pair(
         print(
             f"[video] xfade skipped for short segment ({float(first_duration):.3f}s); falling back to cut"
         )
-        _concat_cut_pair(ffmpeg, first, second, out_path, run_dir, "ffmpeg_concat_video_xfade_short_fallback")
+        _concat_cut_pair(
+            ffmpeg, first, second, out_path, run_dir, "ffmpeg_concat_video_xfade_short_fallback"
+        )
         return False
     offset = max(0.0, float(first_duration) - fade_duration - 0.05)
     filter_complex = ";".join(
@@ -729,7 +788,9 @@ def _concat_xfade_pair(
         "192k",
         str(out_path),
     ]
-    run_guarded(cmd, cwd=run_dir, timeout=concat_timeout(2) + 120, stage="ffmpeg_concat_video_xfade")
+    run_guarded(
+        cmd, cwd=run_dir, timeout=concat_timeout(2) + 120, stage="ffmpeg_concat_video_xfade"
+    )
     return True
 
 
@@ -781,7 +842,9 @@ def _concat_black_pair(
         "192k",
         str(out_path),
     ]
-    run_guarded(cmd, cwd=run_dir, timeout=concat_timeout(2) + 120, stage="ffmpeg_concat_video_black")
+    run_guarded(
+        cmd, cwd=run_dir, timeout=concat_timeout(2) + 120, stage="ffmpeg_concat_video_black"
+    )
 
 
 def concat_clips(
@@ -811,7 +874,9 @@ def concat_clips(
             "copy",
             str(out),
         ]
-        run_guarded(cmd, cwd=run_dir, timeout=concat_timeout(len(clips)), stage="ffmpeg_concat_clips")
+        run_guarded(
+            cmd, cwd=run_dir, timeout=concat_timeout(len(clips)), stage="ffmpeg_concat_clips"
+        )
         return out
 
     current_path = clips[0]
@@ -832,16 +897,28 @@ def concat_clips(
         stage_out = run_dir / f"transition_{index:02d}.mp4"
         try:
             if transition == "xfade":
-                used_xfade = _concat_xfade_pair(ffmpeg, current_path, next_clip, stage_out, run_dir, current_duration)
+                used_xfade = _concat_xfade_pair(
+                    ffmpeg, current_path, next_clip, stage_out, run_dir, current_duration
+                )
                 if used_xfade:
                     current_duration = max(0.0, current_duration + next_duration - 0.2)
                 else:
                     current_duration = current_duration + next_duration
             elif transition == "black":
-                _concat_black_pair(ffmpeg, current_path, next_clip, stage_out, run_dir, current_duration, next_duration)
+                _concat_black_pair(
+                    ffmpeg,
+                    current_path,
+                    next_clip,
+                    stage_out,
+                    run_dir,
+                    current_duration,
+                    next_duration,
+                )
                 current_duration = current_duration + next_duration
             else:
-                _concat_cut_pair(ffmpeg, current_path, next_clip, stage_out, run_dir, "ffmpeg_concat_clips_cut")
+                _concat_cut_pair(
+                    ffmpeg, current_path, next_clip, stage_out, run_dir, "ffmpeg_concat_clips_cut"
+                )
                 current_duration = current_duration + next_duration
         except Exception as exc:
             if transition != "cut":
@@ -853,7 +930,14 @@ def concat_clips(
                     stage_out.unlink()
                 except OSError:
                     pass
-            _concat_cut_pair(ffmpeg, current_path, next_clip, stage_out, run_dir, "ffmpeg_concat_clips_cut_fallback")
+            _concat_cut_pair(
+                ffmpeg,
+                current_path,
+                next_clip,
+                stage_out,
+                run_dir,
+                "ffmpeg_concat_clips_cut_fallback",
+            )
             current_duration = current_duration + next_duration
 
         current_path = stage_out

@@ -12,9 +12,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.llm_hub import llm_client
 from backend.logger import get_logger
 from backend.project_models import validate_project_id
-from backend.llm_hub import llm_client
 from scripts.run_workflow import extract_json_object
 
 logger = get_logger(__name__)
@@ -193,7 +193,11 @@ def _normalize_asset(raw: object, asset_type: AssetType) -> Asset | None:
         return None
     now = utc_iso()
     raw_status = payload.get("status")
-    status = raw_status if isinstance(raw_status, AssetStatus) else AssetStatus(str(raw_status or AssetStatus.PENDING.value))
+    status = (
+        raw_status
+        if isinstance(raw_status, AssetStatus)
+        else AssetStatus(str(raw_status or AssetStatus.PENDING.value))
+    )
     return Asset(
         id=str(payload.get("id") or uuid.uuid4().hex[:8]).strip() or uuid.uuid4().hex[:8],
         asset_type=asset_type,
@@ -205,7 +209,11 @@ def _normalize_asset(raw: object, asset_type: AssetType) -> Asset | None:
         appearance=str(payload.get("appearance") or "").strip(),
         personality=str(payload.get("personality") or "").strip(),
         voice_id=str(payload.get("voice_id") or "").strip(),
-        thumbnail=str(payload.get("thumbnail")).strip() if payload.get("thumbnail") not in (None, "") else None,
+        thumbnail=(
+            str(payload.get("thumbnail")).strip()
+            if payload.get("thumbnail") not in (None, "")
+            else None
+        ),
         status=status,
         first_scene=_coerce_first_scene(payload.get("first_scene")),
         created_at=str(payload.get("created_at") or now).strip(),
@@ -270,7 +278,11 @@ def list_project_assets(project_id: str) -> AssetStore:
 
 
 def create_project_asset(project_id: str, payload: AssetCreateRequest | dict[str, Any]) -> Asset:
-    request = payload if isinstance(payload, AssetCreateRequest) else AssetCreateRequest.model_validate(payload)
+    request = (
+        payload
+        if isinstance(payload, AssetCreateRequest)
+        else AssetCreateRequest.model_validate(payload)
+    )
     with project_lock(project_id):
         store = load_asset_store(project_id)
         now = utc_iso()
@@ -295,8 +307,14 @@ def create_project_asset(project_id: str, payload: AssetCreateRequest | dict[str
         return asset
 
 
-def update_project_asset(project_id: str, asset_id: str, payload: AssetUpdateRequest | dict[str, Any]) -> Asset:
-    request = payload if isinstance(payload, AssetUpdateRequest) else AssetUpdateRequest.model_validate(payload)
+def update_project_asset(
+    project_id: str, asset_id: str, payload: AssetUpdateRequest | dict[str, Any]
+) -> Asset:
+    request = (
+        payload
+        if isinstance(payload, AssetUpdateRequest)
+        else AssetUpdateRequest.model_validate(payload)
+    )
     with project_lock(project_id):
         store = load_asset_store(project_id)
         bucket, index, asset = _find_asset(store, asset_id)
@@ -502,7 +520,9 @@ def create_asset_endpoint(project_id: str, payload: AssetCreateRequest) -> dict[
 
 
 @asset_router.put("/{asset_id}")
-def update_asset_endpoint(project_id: str, asset_id: str, payload: AssetUpdateRequest) -> dict[str, Any]:
+def update_asset_endpoint(
+    project_id: str, asset_id: str, payload: AssetUpdateRequest
+) -> dict[str, Any]:
     try:
         asset = update_project_asset(project_id, asset_id, payload)
     except FileNotFoundError:
@@ -584,7 +604,9 @@ def generate_all_assets_endpoint(project_id: str) -> dict[str, Any]:
             for bucket in ASSET_BUCKETS.values():
                 items = getattr(store, bucket)
                 for index, asset in enumerate(items):
-                    replacement = asset.model_copy(update={"status": AssetStatus.GENERATING, "updated_at": utc_iso()})
+                    replacement = asset.model_copy(
+                        update={"status": AssetStatus.GENERATING, "updated_at": utc_iso()}
+                    )
                     items[index] = replacement
             save_asset_store(project_id, store)
     except FileNotFoundError:

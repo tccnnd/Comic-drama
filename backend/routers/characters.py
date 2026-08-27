@@ -68,7 +68,9 @@ def patch_character(project_id: str, char_index: int, payload: CharacterPatchReq
 
 
 @router.post("/api/projects/{project_id}/characters/{char_index}/reference-image")
-def upload_character_reference_image(project_id: str, char_index: int, payload: CharacterImageUploadRequest) -> dict:
+def upload_character_reference_image(
+    project_id: str, char_index: int, payload: CharacterImageUploadRequest
+) -> dict:
     try:
         source_path = write_data_url_image(project_id, payload.filename, payload.data_url)
         project = update_character_reference_image(project_id, char_index, source_path)
