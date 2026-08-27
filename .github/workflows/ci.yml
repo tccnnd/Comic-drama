@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 20
     env:
       PYTHONUNBUFFERED: "1"
-      COVERAGE_THRESHOLD: "30"
+      COVERAGE_THRESHOLD: "43"
       VIDEO_FALLBACK_MODE: "report"
       VIDEO_PROVIDER: "local"
       KEYFRAME_PROVIDER: "local"
@@ -78,7 +78,9 @@ jobs:
       - name: Run pytest with coverage
         run: |
           python -m pytest -p no:cacheprovider --basetemp "${{ runner.temp }}/cd_pytest" \
-            --cov=. \
+            --cov=backend \
+            --cov=scripts \
+            --cov=video_providers.py \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml:coverage.xml \
             --cov-fail-under="$COVERAGE_THRESHOLD" \
