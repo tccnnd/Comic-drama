@@ -123,6 +123,37 @@ jobs:
           node tests/test_frontend_imports.mjs
           node tests/test_review_console_helpers.mjs
 
+  lint:
+    name: Python lint (black / isort / mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: black --check
+        run: |
+          python -m black --check backend scripts tests video_providers.py
+
+      - name: isort --check-only
+        run: |
+          python -m isort --check-only backend scripts tests video_providers.py
+
+      - name: mypy (progressive core modules)
+        run: |
+          python -m mypy
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

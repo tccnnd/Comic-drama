@@ -94,3 +94,11 @@
 - **沙箱坑（复用 #4）**：mypy INTERNAL ERROR 的根因是 `.mypy_cache` 写入被 safe-delete shim 拦截（非 mypy 自身 bug）；`--cache-dir` 指向 OS tmp 即恢复。本地跑 mypy 建议 `CODEBUDDY_SAFE_DELETE_SANDBOX=0` + 自定义 cache-dir。
 - **验收**：`mypy`（按 pyproject 配置）→ `Success: no issues found in 3 source files`；全量 **511 passed / 10 warnings / exit=0**（tuple 注解无语义变化）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T1.8 CI 增量增强（lint 作业）
+
+- **新增 `lint` job**（`ci.yml`）：`ubuntu-latest` + Python 3.11，安装 `requirements-dev.txt`（顺带验证 dev 锁定文件在干净环境自洽），依次跑 `black --check` / `isort --check-only` / `mypy`（读 pyproject 配置，仅 3 核心模块）。
+- **职责边界**（按 I7 修正）：仅新增 lint 作业，未动 backend/frontend/docker 三个现有 job 的任何步骤；未新增安全工具（归 T2.5）。
+- **触发**：`on.pull_request`（main）与 `push: **` 原有配置未改，PR 触发完整流水线（backend+frontend+lint）。
+- **验证**：YAML 结构合法性（pyyaml 解析 OK：jobs=[backend, frontend, lint, docker]）；lint 命令与本地已实测通过的命令完全一致（black 100 文件 unchanged / isort exit=0 / mypy Success 3 files）。
+- **commit**：本地提交，未推 GitHub。
