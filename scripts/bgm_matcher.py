@@ -241,7 +241,7 @@ def _resolve_path(raw: str, *, bgm_root: Path, project_root: Path | None) -> Pat
 def _stable_pick(candidates: list[Path], seed: str) -> Path:
     if len(candidates) == 1:
         return candidates[0]
-    digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(seed.encode("utf-8"), usedforsecurity=False).hexdigest()
     return candidates[int(digest[:8], 16) % len(candidates)]
 
 

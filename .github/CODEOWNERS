@@ -1,0 +1,27 @@
+# CODEOWNERS（T2.3 I8：文件所有权用 CODEOWNERS/CI，不靠提交消息字符串）
+# 高风险文件变更时 GitHub 要求 owner 审核。
+
+# 视频 provider 契约与渲染核心
+video_providers.py            @codex
+scripts/video_provider_adapters.py @codex
+backend/video_generation.py   @codex
+
+# 流水线编排核心
+scripts/run_workflow.py       @codex
+scripts/rw_*.py               @codex
+
+# 后端 API 与数据模型
+backend/app.py                @codex
+backend/routers/              @codex
+backend/project_models.py     @codex
+backend/project_runtime.py    @codex
+
+# CI / 安全 / 治理
+.github/workflows/            @codex
+.pre-commit-config.yaml       @codex
+hooks/                        @codex
+requirements*.in              @codex
+pyproject.toml                @codex
+
+# 前端（暂由 codex 统一 owner，后续可拆分）
+frontend/                     @codex

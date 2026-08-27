@@ -1,8 +1,10 @@
 """Start SSH tunnel for OmniVoice TTS (port 9880 -> local 9880)."""
-import paramiko
+
+import socket
 import threading
 import time
-import socket
+
+import paramiko
 
 HOST = "hn01-ssh.gpuhome.cc"
 PORT = 30560
@@ -11,6 +13,7 @@ PASS = "tcc000000"
 REMOTE_PORT = 9880
 LOCAL_PORT = 9880
 
+
 def forward_tunnel(local_port, remote_host, remote_port, transport):
     """Forward local_port to remote_host:remote_port via SSH transport."""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,7 +21,7 @@ def forward_tunnel(local_port, remote_host, remote_port, transport):
     server.bind(("127.0.0.1", local_port))
     server.listen(5)
     print(f"  Tunnel listening on 127.0.0.1:{local_port} -> remote:{remote_port}")
-    
+
     while True:
         client_socket, addr = server.accept()
         channel = transport.open_channel("direct-tcpip", (remote_host, remote_port), addr)
@@ -31,6 +34,7 @@ def forward_tunnel(local_port, remote_host, remote_port, transport):
         t1.start()
         t2.start()
 
+
 def _pipe(src, dst):
     try:
         while True:
@@ -41,10 +45,15 @@ def _pipe(src, dst):
     except:
         pass
     finally:
-        try: src.close()
-        except: pass
-        try: dst.close()
-        except: pass
+        try:
+            src.close()
+        except:
+            pass
+        try:
+            dst.close()
+        except:
+            pass
+
 
 # Check if tunnel already exists
 try:
@@ -54,8 +63,9 @@ try:
     s.close()
     print(f"Port {LOCAL_PORT} already in use - tunnel may already be active")
     # Test if it's actually the TTS service
-    from urllib.request import urlopen
     import json
+    from urllib.request import urlopen
+
     d = json.loads(urlopen(f"http://127.0.0.1:{LOCAL_PORT}/health", timeout=3).read())
     print(f"  ✓ OmniVoice TTS already accessible: {d}")
     exit(0)
@@ -78,8 +88,9 @@ tunnel_thread.start()
 # Wait and verify
 time.sleep(2)
 try:
-    from urllib.request import urlopen
     import json
+    from urllib.request import urlopen
+
     d = json.loads(urlopen(f"http://127.0.0.1:{LOCAL_PORT}/health", timeout=5).read())
     print(f"  ✓ Tunnel active! OmniVoice TTS: {d}")
 except Exception as e:

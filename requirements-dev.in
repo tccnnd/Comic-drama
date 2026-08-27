@@ -6,4 +6,6 @@ pytest-cov==6.0.0
 black
 isort
 mypy
+bandit
+pre-commit
 pip-tools

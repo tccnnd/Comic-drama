@@ -34,7 +34,9 @@ def connect() -> paramiko.SSHClient:
         )
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.WarningPolicy())
+    client.set_missing_host_key_policy(
+        paramiko.WarningPolicy()
+    )  # nosec B507 开发隧道显式容忍未知 host key
     client.connect(
         hostname=host,
         port=port,

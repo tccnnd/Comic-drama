@@ -168,3 +168,17 @@
 - **测试**：新增 `tests/test_health_detailed.py`（4 个）——components 形状、storage 不可写降级（纯 monkeypatch 模拟，不触碰真实文件系统，规避 basetemp 与 shim tmp 判定路径不匹配的 teardown 问题）、comfyui blocker 降级、原 /api/health 不变。
 - **验收**：实测 HTTP 200 `status=ok`、三组件齐全、storage 全可写；全量 **515 passed / 10 warnings / exit=0**（较 T2.1 +4）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T2.3 pre-commit hook + CODEOWNERS
+
+- **新增 `.pre-commit-config.yaml`**（4 个 local hooks，全部复用项目 venv）：
+  - `black --check`、`isort --check-only`（isort 9.0 无 `-m` 入口，entry 用 `Scripts/isort.exe`）
+  - `bandit -lll`（仅 High+ 阻塞；Medium 保留报告待 T2.5 收紧）
+  - `secret-scan`：自定义 `hooks/check_secrets.py`——检测 AWS key/私钥/GitHub token/OpenAI key/JWT/generic API key 高置信模式
+- **修复 4 个 bandit High**：
+  - `bgm_matcher.py:244` SHA1（B324，确定性选择器非安全用途）→ `usedforsecurity=False`
+  - 3 处 paramiko `WarningPolicy()`（B507，SSH 隧道显式容忍未知 host key）→ `# nosec B507` 标注（开发工具既有行为，T2.5 再评估）
+- **新增 `.github/CODEOWNERS`**（I8：所有权用 CODEOWNERS 而非提交消息字符串）——video_providers.py/run_workflow.py/rw_*/backend/routers/CI/依赖文件等高风险路径 owner 审核（占位 @codex，可替换）
+- **⚠️ 坑（复用 #6）**：`language: system` 的 entry 若写 `python` 会解析到系统解释器（非 venv）→ 一律用 `.venv/Scripts/...` 相对路径；secret-scan 初版 rglob 扫入 `tools/`（38029 文件）导致超时 → 排除列表补 tools/.vscode/.idea/.github；`.env` 本地真实 key 误报 → 排除。
+- **验收**：`pre-commit run --all-files` 4 hooks 全 Passed（exit=0）；secret 违规拦截实测（构造 `sk-` key 文件 → exit=1 阻止）；bandit High 4→0；全量 **515 passed / 10 warnings / exit=0**。
+- **commit**：本地提交，未推 GitHub。

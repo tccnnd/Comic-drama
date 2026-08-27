@@ -13,6 +13,7 @@
   3. outputs/ 顶层历史测试文件（png/zip/safetensors/mp4/webm 等）列入清理。
   4. 未知目录与未匹配文件（如正在使用的临时目录）保持原样，仅提示。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,8 +30,20 @@ KEEP_DIRS_DEFAULT = ("gateB_check",)
 
 # 顶层历史测试产物的扩展名（非 run_* 产物）
 CLEANABLE_EXT = {
-    ".png", ".jpg", ".jpeg", ".zip", ".safetensors", ".mp4", ".webm", ".mov", ".gif",
-    ".wav", ".mp3", ".log", ".json", ".txt",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".zip",
+    ".safetensors",
+    ".mp4",
+    ".webm",
+    ".mov",
+    ".gif",
+    ".wav",
+    ".mp3",
+    ".log",
+    ".json",
+    ".txt",
 }
 
 
@@ -46,8 +59,11 @@ def plan_cleanup(keep_runs: int, keep_dirs: tuple[str, ...]) -> tuple[list[Path]
     freed = 0
 
     # run_* 目录：按 mtime 排序，保留最近 N 个
-    runs = sorted([p for p in OUTPUTS.iterdir() if p.is_dir() and p.name.startswith("run_")],
-                  key=_dir_mtime, reverse=True)
+    runs = sorted(
+        [p for p in OUTPUTS.iterdir() if p.is_dir() and p.name.startswith("run_")],
+        key=_dir_mtime,
+        reverse=True,
+    )
     for p in runs[keep_runs:]:
         size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
         cleanable.append(p)
@@ -73,8 +89,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="outputs/ 保留策略清理（dry-run 默认）")
     ap.add_argument("--apply", action="store_true", help="实际执行删除；缺省为 dry-run")
     ap.add_argument("--keep-runs", type=int, default=2, help="保留最近 N 个 run_* 目录（默认 2）")
-    ap.add_argument("--keep-dirs", default=",".join(KEEP_DIRS_DEFAULT),
-                    help="永不删除的目录白名单（逗号分隔，默认 gateB_check）")
+    ap.add_argument(
+        "--keep-dirs",
+        default=",".join(KEEP_DIRS_DEFAULT),
+        help="永不删除的目录白名单（逗号分隔，默认 gateB_check）",
+    )
     ap.add_argument("--json", action="store_true", help="输出 JSON 摘要")
     args = ap.parse_args()
 
@@ -83,14 +102,23 @@ def main() -> int:
 
     size_mb = freed / 1024 / 1024
     if args.json:
-        print(json.dumps({            "mode": "apply" if args.apply else "dry-run",
-            "items": len(cleanable),
-            "freed_mb": round(size_mb, 1),
-            "paths": [str(p.relative_to(ROOT)) for p in cleanable],
-        }, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "mode": "apply" if args.apply else "dry-run",
+                    "items": len(cleanable),
+                    "freed_mb": round(size_mb, 1),
+                    "paths": [str(p.relative_to(ROOT)) for p in cleanable],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
-        print(f"[{'APPLY' if args.apply else 'DRY-RUN'}] 可清理 {len(cleanable)} 项，"
-              f"预计释放 {size_mb:.1f} MB")
+        print(
+            f"[{'APPLY' if args.apply else 'DRY-RUN'}] 可清理 {len(cleanable)} 项，"
+            f"预计释放 {size_mb:.1f} MB"
+        )
         for p in cleanable:
             rel = p.relative_to(ROOT)
             print(f"  - {rel}")

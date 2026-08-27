@@ -1,0 +1,37 @@
+# pre-commit 配置（T2.3）
+# 全部使用 local hook + 项目 venv 解释器（Windows 本地开发路径）。
+# 注意：entry 用 .venv/Scripts/python.exe（仓库根相对路径）；Linux/macOS 可改为
+# .venv/bin/python。CI 已由 GitHub Actions lint job 独立覆盖，无需 pre-commit。
+# 安装：pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: black
+        name: black
+        entry: .venv/Scripts/python.exe -m black --check
+        language: system
+        types: [python]
+        exclude: "(_external/|outputs/|data/|workspace/|tools/|docs/)"
+
+      - id: isort
+        name: isort
+        # isort 9.0 无 -m 入口，用 Scripts/isort.exe
+        entry: .venv/Scripts/isort.exe --check-only
+        language: system
+        types: [python]
+        exclude: "(_external/|outputs/|data/|workspace/|tools/|docs/)"
+
+      - id: bandit
+        name: bandit
+        # -lll: 仅 High+ severity 阻塞（Medium 保留为报告项，T2.5 收紧）
+        entry: .venv/Scripts/python.exe -m bandit -q -lll -r backend scripts video_providers.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: secret-scan
+        name: secret-scan
+        entry: .venv/Scripts/python.exe hooks/check_secrets.py
+        language: system
+        pass_filenames: false
+        always_run: true

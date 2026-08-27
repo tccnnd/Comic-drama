@@ -1,4 +1,5 @@
 """/api/health/detailed 详细健康检查端点测试（T2.2）。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,9 +40,7 @@ def test_health_detailed_storage_marks_unwritable(monkeypatch):
     monkeypatch.setattr("backend.routers.system.ROOT", fake_root)
     for name in ("data", "outputs", "workspace"):
         monkeypatch.setattr(f"backend.routers.system.Path.is_dir", lambda self: True)
-    with (
-        patch("backend.routers.system.Path.write_text", side_effect=OSError("read-only fs")),
-    ):
+    with (patch("backend.routers.system.Path.write_text", side_effect=OSError("read-only fs")),):
         from backend.routers.system import _check_storage
 
         result = _check_storage()
