@@ -114,3 +114,36 @@
   2. **Write 工具写 .ps1 可能未落盘**：`scripts/dev.ps1` 经 Write 工具两次报成功但文件不存在；改用 bash heredoc 写入 + git index 恢复（`git show :scripts/dev.ps1 > scripts/dev.ps1`）才落盘。文件入 git index 后即使工作区被沙箱清理，内容也已固化。
 - **Docker 路径**：本机 `docker` 命令不可用 → 按计划标记 **NOT_EVALUATED**（Dockerfile 已存在；docker-compose.yml 未创建，待有 docker 环境时补）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — P1-PROD v0.5.0 director interpretation（验收 + E4 映射）
+
+**结论**：v0.5.0 功能主体已随 P2 合入落地（README 标注 "implementation pending" 已过时），本轮完成 Gate D 实测验收与 E4 requirement→test 映射记录，**无需新增代码**。
+
+**实现现状（P2 已带）**：
+- `scripts/director_classifier.py`：`build_director_plan`（FR-1，含 deterministic fallback）、`build_shot_visual_content`（FR-2，含 freeform gap 记录）、`VISUAL_CONTENT_FIELDS`
+- `scripts/rw_planning.py`：`normalize_shot_plan_visual_content`（合成/补齐 shot_size/dramatic_intent/camera_language/visual_content，legacy 标记 `_source="legacy"`）
+- `scripts/rw_prompts.py`：`_shot_visual_content_prompt_lines` + `build_scene_video_prompts`（FR-3：visual_content 为主要视觉源；无则回退 legacy visual）
+- `scripts/run_workflow.py` L422：storyboard 场景写入 `director_plan`
+- `backend/project_runtime.py` L391-392：加载时对缺失 `director_plan` 的场景合成兜底（FR-5 向后兼容）
+
+**Gate D 实测（PASS 5/5）**：
+1. sample story 生成 director_plan ✅（`outputs/gateB_check/storyboard.json`：5 场景全有 director_plan，含 dramatic_intent/emotional_target）
+2. 每 shot 有 visual_content ✅（实测每 shot 有 shot_description + shot_size + camera_language dict）
+3. provider prompt 消费 visual_content ✅（测试断言：visual_content 全字段入 positive、`SECRET_DIALOGUE_SHOULD_NOT_DRIVE_VISUALS` 被排除）
+4. 旧项目无该字段仍加载/渲染/导出 ✅（legacy fallback 测试 + snapshot normalize 测试）
+5. mock provider success/failure/fallback ✅（`test_render_shot_with_provider_policy_*` 三路径：real_video_output / report_failure_uses_fallback / strict_failure_raises）
+
+**E4 requirement→test 映射**：
+| Requirement | Test |
+|---|---|
+| FR-1.1/1.3 director_plan 字段+fallback | `test_build_director_plan_uses_classified_scene_fields` / `test_build_director_plan_defaults_for_legacy_scene` |
+| FR-2.1/2.2 visual_content 字段 | `test_build_shot_visual_content_maps_environment_and_camera_language` / `_handles_empty_shot` |
+| FR-2.3 无解释时合成 | `test_build_shot_visual_content_records_freeform_gap_when_no_prototype_matches` |
+| FR-2.4 shot 形状 additive | `test_build_shot_plan_attaches_visual_content_to_each_shot` |
+| FR-4.1/4.3 持久化+snapshot | `test_load_project_and_snapshot_normalize_legacy_director_interpretation` |
+| FR-3.1/3.2 prompt 消费 visual_content | `test_build_scene_video_prompts_uses_visual_content_as_primary_source` |
+| FR-3.3/FR-5.1 legacy 回退 | `test_build_scene_video_prompts_legacy_fallback_without_visual_content` |
+| Gate D-5 mock provider 三路径 | `test_render_shot_with_provider_policy_{returns_real_video_output,report_failure_uses_fallback,strict_failure_raises}` |
+
+**验收**：AC-8 通过（py_compile 5 模块 OK）；全量 **511 passed / 10 warnings / exit=0**。
+**commit**：本地提交，未推 GitHub。
