@@ -359,7 +359,7 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | T0.5 | _external/ 规范化 | 0 | completed（方案A：submodule正式化） |
 | T0.6 | 分支清理 | 0 | completed（删5已合入分支；剩 main + 2 未合入，mainline保留待决策） |
 | T0.7 | 工作区终验 | 0 | completed |
-| T1.1 | P2 分支合入 | 1 | planned |
+| T1.1 | P2 分支合入 | 1 | completed（509 passed/10 warnings/exit=0；13 rw_* 落位；run_workflow.py 411 行；py_compile+node --check 通过） |
 | T1.2 | 测试基线+覆盖率阶梯 | 1 | planned |
 | T1.3 | 依赖现代化 | 1 | planned |
 | T1.4 | app.py 路由拆分 | 1 | planned |
