@@ -367,7 +367,7 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | T1.6 | 格式化 | 1 | completed（black 81 文件 reformat/isort 全修；--check 回填通过；全量 511 passed/exit=0） |
 | T1.7 | mypy 渐进 | 1 | completed（mypy 2.3.1；3 核心模块零错误；其余 ignore_errors + 收紧计划已记录） |
 | T1.8 | CI 增量增强 | 1 | completed（新增 lint job：black/isort/mypy；PR 触发已有；现有 job 未动） |
-| T1.9 | 快速启动 | 1 | planned |
+| T1.9 | 快速启动 | 1 | completed（setup.ps1/dev.ps1 落位并实测 /api/health ok；Docker 路径 NOT_EVALUATED：本机无 docker） |
 | P1-PROD | v0.5.0 director interpretation | 1 | planned |
 | T2.1 | 数据目录治理 | 2 | planned |
 | T2.2 | 健康检查完善 | 2 | planned |

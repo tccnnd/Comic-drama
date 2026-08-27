@@ -102,3 +102,15 @@
 - **触发**：`on.pull_request`（main）与 `push: **` 原有配置未改，PR 触发完整流水线（backend+frontend+lint）。
 - **验证**：YAML 结构合法性（pyyaml 解析 OK：jobs=[backend, frontend, lint, docker]）；lint 命令与本地已实测通过的命令完全一致（black 100 文件 unchanged / isort exit=0 / mypy Success 3 files）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T1.9 快速启动（脚本必做路径）
+
+- **新增**：
+  - `scripts/setup.ps1`：venv 创建（无则建）→ `pip install -r requirements-dev.txt` → 核心依赖 import 验证；`-SkipInstall` 可跳过安装。实测 exit=0。
+  - `scripts/dev.ps1`：后台启动 uvicorn（`$BindHost`/`$Port` 参数，默认 127.0.0.1:8000），轮询 `/api/health` ≤30s 至 `status=ok`，PID 写入 `dev_server.pid`。实测：uvicorn 启动 → `/api/health` HTTP 200 `{"status":"ok"}`。
+- **约定遵守**：参数名 `$BindHost`/`$pytestArgs` 显式，禁用 `$Host`/`$args` 自动变量；命令全 venv 前缀。
+- **⚠️ 沙箱坑（复用 #5）**：
+  1. **ps1 必须 UTF-8 BOM**：Windows PowerShell 5.1 对无 BOM 的 UTF-8 按 ANSI/GBK 读，中文注释会解码成乱码导致 `ParseFile` 报「意外的标记」。test.ps1 此前能过是内容恰好兼容。新脚本一律加 BOM。
+  2. **Write 工具写 .ps1 可能未落盘**：`scripts/dev.ps1` 经 Write 工具两次报成功但文件不存在；改用 bash heredoc 写入 + git index 恢复（`git show :scripts/dev.ps1 > scripts/dev.ps1`）才落盘。文件入 git index 后即使工作区被沙箱清理，内容也已固化。
+- **Docker 路径**：本机 `docker` 命令不可用 → 按计划标记 **NOT_EVALUATED**（Dockerfile 已存在；docker-compose.yml 未创建，待有 docker 环境时补）。
+- **commit**：本地提交，未推 GitHub。
