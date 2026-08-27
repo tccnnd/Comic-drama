@@ -147,3 +147,12 @@
 
 **验收**：AC-8 通过（py_compile 5 模块 OK）；全量 **511 passed / 10 warnings / exit=0**。
 **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T2.1 数据目录治理
+
+- **outputs/ 保留策略**：新增 `scripts/cleanup_outputs.py`（dry-run 默认，`--apply` 执行；`--keep-runs` 默认保留最近 2 个 `run_*`；`--keep-dirs` 白名单默认 `gateB_check`；`--json` 输出摘要）。策略：白名单目录 + 最近 N 个 run_* 保留，其余历史测试/冒烟目录与顶层测试文件（png/zip/safetensors/mp4/wav/log 等）列入清理。
+- **执行结果**：`outputs/` **1.9G → 114M**（删除 70 项；保留 gateB_check 验收产物 + run_20260624/run_20260713 两个最新 run）。达标 <500MB。
+- **data/ 拆 fixtures**：`data/asset-tab-preview*.png`（2 个，无代码引用的历史预览资产）git mv 至 `data/fixtures/`（版本化）。⚠️ 归类修正：`data/styles.json` 初判为 fixture 移入，实为 **backend/styles.py 运行时读取的配置**（缺失时自动写回默认值）→ 移回 `data/` 根、`git rm --cached` 停止跟踪、`.gitignore` 新增 `data/styles.json`（运行时数据不入 git）。
+- **tmp_pytest 遗留**：data/ 从 80M → 9M；删除 17 个 `data/tmp_pytest*` 目录，剩 10 个被目录 ACL 守卫拦截（Permission denied，同 T0.1 环境守卫）→ gitignored，不影响 git/测试。
+- **验收**：outputs/ <500MB ✓；fixtures 版本化（git mv R 状态）✓；运行时数据不入 git（styles.json/tmp_pytest/outputs 全 ignored）✓；py_compile cleanup_outputs.py OK；styles 测试 23 passed；全量 **511 passed / exit=0**。
+- **commit**：本地提交，未推 GitHub。
