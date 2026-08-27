@@ -156,3 +156,15 @@
 - **tmp_pytest 遗留**：data/ 从 80M → 9M；删除 17 个 `data/tmp_pytest*` 目录，剩 10 个被目录 ACL 守卫拦截（Permission denied，同 T0.1 环境守卫）→ gitignored，不影响 git/测试。
 - **验收**：outputs/ <500MB ✓；fixtures 版本化（git mv R 状态）✓；运行时数据不入 git（styles.json/tmp_pytest/outputs 全 ignored）✓；py_compile cleanup_outputs.py OK；styles 测试 23 passed；全量 **511 passed / exit=0**。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T2.2 健康检查完善（/api/health/detailed）
+
+- **新增端点** `backend/routers/system.py`：`GET /api/health/detailed` 返回三组件：
+  - `video_provider`：复用 `get_video_provider_status()`（provider spec/readiness/configured_count/missing_env）
+  - `comfyui`：复用 `check_comfyui_health()`（ready/blockers/warnings）
+  - `storage`：新增 `_check_storage()`——探测 data/outputs/workspace 可写性（写入 `.health_probe_<pid>.tmp`）
+  - 总体 `status`：comfyui 无 blocker 且 storage 可写 → `ok`，否则 `degraded`；带 UTC timestamp
+- **设计修正（实测暴露）**：初版探测后 `probe.unlink()` 被 WorkBuddy safe-delete shim 的 bulk-guard 拦截（turn 内删除计数）导致端点崩溃 → **writable 由写入成功判定，清理删除尽力而为（try/except 吞掉）**，避免健康检查端点自身受沙箱删除策略影响。
+- **测试**：新增 `tests/test_health_detailed.py`（4 个）——components 形状、storage 不可写降级（纯 monkeypatch 模拟，不触碰真实文件系统，规避 basetemp 与 shim tmp 判定路径不匹配的 teardown 问题）、comfyui blocker 降级、原 /api/health 不变。
+- **验收**：实测 HTTP 200 `status=ok`、三组件齐全、storage 全可写；全量 **515 passed / 10 warnings / exit=0**（较 T2.1 +4）。
+- **commit**：本地提交，未推 GitHub。

@@ -370,7 +370,7 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | T1.9 | 快速启动 | 1 | completed（setup.ps1/dev.ps1 落位并实测 /api/health ok；Docker 路径 NOT_EVALUATED：本机无 docker） |
 | P1-PROD | v0.5.0 director interpretation | 1 | completed（P2 已带实现，Gate D 实测 5/5 PASS + E4 映射记录；511 passed/exit=0） |
 | T2.1 | 数据目录治理 | 2 | completed（outputs 1.9G→114M；data/fixtures 版本化；styles.json 运行时数据出 git） |
-| T2.2 | 健康检查完善 | 2 | planned |
+| T2.2 | 健康检查完善 | 2 | completed（/api/health/detailed 三组件：video_provider/comfyui/storage；Docker healthcheck 可复用） |
 | T2.3 | pre-commit hook | 2 | planned |
 | T2.4 | 日志规范化 | 2 | planned |
 | T2.5 | 安全扫描配置 | 2 | planned |
