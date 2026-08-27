@@ -154,6 +154,34 @@ jobs:
         run: |
           python -m mypy
 
+  security:
+    name: Security scan (bandit / pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # T2.5 唯一安全作业责任方（I7：T1.8 不碰安全工具）
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: bandit (HIGH+ blocks)
+        run: |
+          python -m bandit -lll -r backend scripts video_providers.py
+
+      - name: pip-audit (dependency vulns; any finding blocks)
+        run: |
+          python -m pip_audit -r requirements.txt --progress-spinner off --timeout 60
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

@@ -1,0 +1,4 @@
+[bandit]
+# T2.5 安全扫描配置：HIGH+ severity 阻塞（CI/pre-commit 用 -lll 执行）
+# 排除非源码与第三方目录；源码目录 backend/ scripts/ video_providers.py 全量扫描
+exclude_dirs = .venv, tests, _external, outputs, data, workspace, tools, docs, hooks, node_modules, .git, .workbuddy, logs

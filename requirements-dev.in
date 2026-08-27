@@ -8,4 +8,6 @@ isort
 mypy
 bandit
 pre-commit
+# 依赖漏洞扫描：pip-audit（免费无登录墙；safety 2.x 需账号，见 CHANGELOG T2.5）
+pip-audit
 pip-tools

@@ -1,0 +1,10 @@
+# T2.5 Safety 依赖漏洞策略（safety check --policy-file .safety-policy.yml）
+# 规则：CVSS >= 7.0（HIGH/CRITICAL）默认阻塞；已知豁免见 ignore-vulnerabilities。
+version: '2.0'
+security:
+  # 只阻塞 HIGH/CRITICAL；MEDIUM 及以下仅报告
+  ignore-cvss-severity-below: 7.0
+  # CVSS 未知的漏洞按阻塞处理（宁严勿松）
+  ignore-cvss-unknown-severity: false
+  # 豁免清单：id = 漏洞数据库 id，reason 说明为什么接受
+  ignore-vulnerabilities: []

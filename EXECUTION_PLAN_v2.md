@@ -373,7 +373,7 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | T2.2 | 健康检查完善 | 2 | completed（/api/health/detailed 三组件：video_provider/comfyui/storage；Docker healthcheck 可复用） |
 | T2.3 | pre-commit hook | 2 | completed（black/isort/bandit/secret-scan 4 hooks；CODEOWNERS 高风险文件；违规拦截实测） |
 | T2.4 | 日志规范化 | 2 | completed（backend/logger.py 统一配置：WARNING+ 落 logs/backend.log；12 处直接 logging 改走 get_logger） |
-| T2.5 | 安全扫描配置 | 2 | planned |
+| T2.5 | 安全扫描配置 | 2 | completed（.bandit + .safety-policy.yml + CI security job；bandit 无 HIGH+；pip-audit 替代 safety（登录墙）；依赖扫描本地 NOT_EVALUATED（网络）） |
 | P3.1-3.3 | 指标/追踪/插件 | 3 | planned |
 | 评估 A/B | 队列/数据库 | 3 | optional |
 

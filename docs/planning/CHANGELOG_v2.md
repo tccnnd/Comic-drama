@@ -191,3 +191,15 @@
 - **测试**：新增 `tests/test_logger.py`（3 个）——handlers 与格式断言、WARNING+ 落盘而 INFO 不落、文件 handler 单例。
 - **验收**：实测 WARNING/ERROR 写入 backend.log（INFO 仅控制台）；py_compile 12 文件 OK；全量 **518 passed / 10 warnings / exit=0**（+3）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-28 — T2.5 安全扫描配置（Phase 2 收官）
+
+- **`.bandit` 配置**：HIGH+ severity 阻塞（CI/pre-commit 用 `-lll`）；排除非源码目录（.venv/tests/_external/outputs/data/workspace/tools/docs/hooks 等）。
+- **`.safety-policy.yml`**：CVSS >= 7.0 阻塞、未知 CVSS 从严、豁免清单空。⚠️ 工具替换：**safety 2.x 的 `check` 已废弃、`scan` 强制注册登录**（无 key 无法运行）→ 实际依赖扫描改用 **pip-audit**（PyPA 官方、免费无登录墙、等效能力）；.safety-policy.yml 保留为参考（未来有 safety key 可用）。
+- **CI `security` job**（T2.5 唯一安全责任方，I7）：bandit `-lll -r backend scripts video_providers.py` + `pip_audit -r requirements.txt`（发现漏洞即阻塞）。YAML 校验 OK（jobs=[backend, frontend, lint, security, docker]）。
+- **依赖**：pip-audit==2.10.1 入 `requirements-dev.in` 并重新锁定；safety 不入锁（登录墙不可用）。
+- **验收三态**：
+  - Bandit 无 HIGH+：**PASS**（`-lll` 实测 exit=0）
+  - Safety/pip-audit 无 CRITICAL：**NOT_EVALUATED**（本地 pypi.org/OSV 网络超时；CI 环境网络正常可跑，配置已就绪）
+  - PR 被阻塞验证：**PASS**（security job 存在且失败即阻塞；pre-commit bandit hook 同策略）
+- **commit**：本地提交，未推 GitHub。
