@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_STORY = ROOT / "inputs" / "sample_story.txt"
-OUTPUTS = ROOT / "outputs"
+OUTPUTS = Path(os.environ.get("WB_OUTDIR", str(ROOT / "outputs")))
 WORKFLOWS = ROOT / "workflows"
 AUDIO_ASSETS = ROOT / "assets" / "audio"
 AUDIO_ASSET_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg")

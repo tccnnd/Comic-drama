@@ -1,0 +1,20 @@
+# Comic Drama Workflow - 直接依赖（抽象约束，由 pip-compile 锁定为 requirements.txt）
+#
+# 版本基准：venv 已验证环境（509 tests passed / coverage 43.92% / py_compile + node --check 全绿）。
+# 说明：
+# - pydantic 统一到 venv 实际 2.13.4（原手写 requirements.txt 误锁 2.11.5，存在 minor 漂移）
+# - paramiko 为补声明遗漏：scripts/comfyui_ssh_tunnel.py 等直接 import，原 requirements 未收录
+# - python-multipart 保留（FastAPI 文件上传可选依赖，当前代码未用 Form()，无害）
+#   注意：原手写 requirements.txt 误写 ==1.0.2（PyPI 不存在），此处放开版本由 pip-compile 解析正确版本
+# - face_crop.py 的 cv2/numpy 为 try/except 可选依赖（_HAS_CV2 兜底），不在此强制收录
+pillow==12.2.0
+imageio-ffmpeg==0.6.0
+pyttsx3==2.99
+edge-tts==7.2.8
+fastapi==0.136.1
+uvicorn==0.47.0
+httpx==0.28.1
+websockets==16.0
+pydantic==2.13.4
+python-multipart
+paramiko==5.0.0

@@ -1,0 +1,11 @@
+[project]
+name = "comic-drama-workflow"
+version = "0.5.0"
+requires-python = ">=3.11"
+description = "AI 漫画/视频生成流水线（script -> roles -> video provider -> timeline -> review）"
+# 运行时依赖由 requirements.txt（pip-tools 锁定）管理，此处保持空以避免与 pip-tools 重复锁定。
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

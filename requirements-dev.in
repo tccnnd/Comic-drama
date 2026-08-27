@@ -1,0 +1,6 @@
+# 开发 / 测试 / 构建依赖（pip-compile 锁定为 requirements-dev.txt）
+# 包含运行时全部依赖 + 开发工具，可用于完整开发环境同步。
+-r requirements.in
+pytest==9.0.3
+pytest-cov==6.0.0
+pip-tools
