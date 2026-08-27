@@ -177,9 +177,7 @@ export const voiceEngines = [
   ["silent", "静音"],
 ];
 
-export const voiceSamples = [
-  ["", "无（使用预设）"],
-];
+export const voiceSamples = [["", "无（使用预设）"]];
 
 export const voiceProfiles = [
   ["", "无"],
@@ -254,7 +252,4 @@ export const reviewStatusOptions = [
   ["blocked", "阻塞"],
 ];
 
-export const reviewFilterOptions = [
-  ["all", "全部"],
-  ...reviewStatusOptions,
-];
+export const reviewFilterOptions = [["all", "全部"], ...reviewStatusOptions];

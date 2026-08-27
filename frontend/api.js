@@ -1,6 +1,14 @@
 // ─── API Communication ───────────────────────────────────────────────────────
 
-import { state, API, appRoot, voiceCatalogList, assetTabs, DEFAULT_CROP_BOX, MIN_SCENE_DURATION } from "./state.js";
+import {
+  state,
+  API,
+  appRoot,
+  voiceCatalogList,
+  assetTabs,
+  DEFAULT_CROP_BOX,
+  MIN_SCENE_DURATION,
+} from "./state.js";
 import {
   asNumber,
   characterKey,
@@ -32,8 +40,12 @@ import {
 
 // Forward reference for render - will be set by events.js
 let _render = () => {};
-export function setRenderFn(fn) { _render = fn; }
-function render() { _render(); }
+export function setRenderFn(fn) {
+  _render = fn;
+}
+function render() {
+  _render();
+}
 
 export async function apiJson(url, options = {}) {
   const init = {
@@ -81,7 +93,10 @@ export function renderVoiceCatalogDatalist() {
   if (!voiceCatalogList) return;
   voiceCatalogList.innerHTML = state.voiceCatalog
     .slice(0, 180)
-    .map((item) => `<option value="${h(item.short_name || item.ShortName || "")}">${h(item.friendly_name || item.FriendlyName || "")}</option>`)
+    .map(
+      (item) =>
+        `<option value="${h(item.short_name || item.ShortName || "")}">${h(item.friendly_name || item.FriendlyName || "")}</option>`
+    )
     .join("");
 }
 
@@ -165,7 +180,9 @@ function startFallbackProjectPoll(projectId) {
   if (!projectId || state.fallbackPollTimer) return;
   state.fallbackPollTimer = window.setInterval(() => {
     if (state.sseConnected || state.currentProjectId !== projectId) return;
-    refreshCurrentProject().catch((error) => console.warn("[project-events] fallback refresh failed", error));
+    refreshCurrentProject().catch((error) =>
+      console.warn("[project-events] fallback refresh failed", error)
+    );
   }, PROJECT_EVENT_FALLBACK_INTERVAL);
 }
 
@@ -197,11 +214,19 @@ function handleProjectEvent(event) {
     if (data.project) {
       setCurrentProject(data.project);
       render();
-      if (payload.type === "project_updated" && state.activeTab === "assets" && state.currentProjectId) {
-        loadAssets(state.currentProjectId, { force: true, silent: true }).catch((error) => console.warn("[asset-events] refresh failed", error));
+      if (
+        payload.type === "project_updated" &&
+        state.activeTab === "assets" &&
+        state.currentProjectId
+      ) {
+        loadAssets(state.currentProjectId, { force: true, silent: true }).catch((error) =>
+          console.warn("[asset-events] refresh failed", error)
+        );
       }
     } else {
-      refreshCurrentProject().catch((error) => console.warn("[project-events] refresh failed", error));
+      refreshCurrentProject().catch((error) =>
+        console.warn("[project-events] refresh failed", error)
+      );
     }
     return;
   }
@@ -224,7 +249,9 @@ function applySceneEvent(sceneOrder, scene) {
   const scenes = state.project.scenes || [];
   const idx = scenes.findIndex((item) => Number(item.order) === Number(sceneOrder));
   if (idx < 0) {
-    refreshCurrentProject().catch((error) => console.warn("[project-events] refresh failed", error));
+    refreshCurrentProject().catch((error) =>
+      console.warn("[project-events] refresh failed", error)
+    );
     return;
   }
   scenes[idx] = scene;
@@ -256,7 +283,10 @@ function recomputeProjectSummary(project) {
 export async function loadProjects(selectNewest = true) {
   const projects = await apiJson(API.projects);
   state.projects = Array.isArray(projects) ? projects : [];
-  if (state.currentProjectId && !state.projects.some((project) => project.project_id === state.currentProjectId)) {
+  if (
+    state.currentProjectId &&
+    !state.projects.some((project) => project.project_id === state.currentProjectId)
+  ) {
     unsubscribeProjectEvents();
     state.currentProjectId = "";
     state.project = null;
@@ -324,13 +354,19 @@ export async function loadTtsProviders() {
   }
 }
 
-export async function loadVideoProviderStatus(provider = state.project?.settings?.video_provider || "auto") {
+export async function loadVideoProviderStatus(
+  provider = state.project?.settings?.video_provider || "auto"
+) {
   state.videoProviderStatusLoading = true;
   state.videoProviderStatusError = "";
   try {
     const providersPayload = await apiJson("/api/video-providers");
-    state.videoProviders = Array.isArray(providersPayload?.providers) ? providersPayload.providers : [];
-    state.videoProviderStatus = await apiJson(`/api/video-providers/status?provider=${encodeURIComponent(provider || "auto")}`);
+    state.videoProviders = Array.isArray(providersPayload?.providers)
+      ? providersPayload.providers
+      : [];
+    state.videoProviderStatus = await apiJson(
+      `/api/video-providers/status?provider=${encodeURIComponent(provider || "auto")}`
+    );
   } catch (error) {
     state.videoProviderStatus = null;
     state.videoProviderStatusError = error.message || String(error);
@@ -400,7 +436,10 @@ function buildFallbackAssetPayloads(project = state.project) {
       asset_type: "character",
       name,
       description: String(raw?.summary || raw?.description || "").trim(),
-      visual_prompt: [raw?.appearance_core, raw?.clothing_style, raw?.description].filter(Boolean).map((item) => String(item).trim()).join(" "),
+      visual_prompt: [raw?.appearance_core, raw?.clothing_style, raw?.description]
+        .filter(Boolean)
+        .map((item) => String(item).trim())
+        .join(" "),
       age: String(raw?.meta?.age || "").trim(),
       gender: String(raw?.meta?.gender || raw?.meta?.sex || "").trim(),
       appearance: String(raw?.appearance_core || "").trim(),
@@ -429,14 +468,23 @@ export async function handleAssetExtract(projectId = state.currentProjectId) {
   state.assets.loading = true;
   render();
   try {
-    const payload = await apiJson(`${API.projects}/${encodeURIComponent(projectId)}/assets/extract`, { method: "POST", body: "{}" });
+    const payload = await apiJson(
+      `${API.projects}/${encodeURIComponent(projectId)}/assets/extract`,
+      { method: "POST", body: "{}" }
+    );
     const assets = payload?.assets || {};
-    state.assets.characters = Array.isArray(assets.characters) ? assets.characters : state.assets.characters;
-    state.assets.scene_bgs = Array.isArray(assets.scene_bgs) ? assets.scene_bgs : state.assets.scene_bgs;
+    state.assets.characters = Array.isArray(assets.characters)
+      ? assets.characters
+      : state.assets.characters;
+    state.assets.scene_bgs = Array.isArray(assets.scene_bgs)
+      ? assets.scene_bgs
+      : state.assets.scene_bgs;
     state.assets.props = Array.isArray(assets.props) ? assets.props : state.assets.props;
     state.assets.loadedFor = projectId;
     const added = payload?.added_counts || {};
-    showToast(`资产提取完成：角色 ${added.characters || 0} / 场景 ${added.scene_bgs || 0} / 道具 ${added.props || 0}`);
+    showToast(
+      `资产提取完成：角色 ${added.characters || 0} / 场景 ${added.scene_bgs || 0} / 道具 ${added.props || 0}`
+    );
   } catch {
     const fallback = buildFallbackAssetPayloads(state.project);
     const existing = new Set([
@@ -482,7 +530,10 @@ export async function handleAssetGenerate(projectId = state.currentProjectId, as
   updateLocalAsset(assetId, { status: "generating" });
   render();
   try {
-    const payload = await apiJson(`${API.projects}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/generate`, { method: "POST", body: "{}" });
+    const payload = await apiJson(
+      `${API.projects}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/generate`,
+      { method: "POST", body: "{}" }
+    );
     if (payload?.asset) updateLocalAsset(assetId, payload.asset);
     showToast(payload?.message || "资产已生成");
   } catch (error) {
@@ -496,19 +547,31 @@ export async function handleAssetGenerate(projectId = state.currentProjectId, as
 export async function handleAssetGenerateAll(projectId = state.currentProjectId) {
   if (!projectId) return;
   for (const bucket of ["characters", "scene_bgs", "props"]) {
-    state.assets[bucket] = state.assets[bucket].map((asset) => ({ ...asset, status: "generating" }));
+    state.assets[bucket] = state.assets[bucket].map((asset) => ({
+      ...asset,
+      status: "generating",
+    }));
   }
   render();
   try {
-    const payload = await apiJson(`${API.projects}/${encodeURIComponent(projectId)}/assets/generate-all`, { method: "POST", body: "{}" });
+    const payload = await apiJson(
+      `${API.projects}/${encodeURIComponent(projectId)}/assets/generate-all`,
+      { method: "POST", body: "{}" }
+    );
     const assets = payload?.assets || {};
-    state.assets.characters = Array.isArray(assets.characters) ? assets.characters : state.assets.characters;
-    state.assets.scene_bgs = Array.isArray(assets.scene_bgs) ? assets.scene_bgs : state.assets.scene_bgs;
+    state.assets.characters = Array.isArray(assets.characters)
+      ? assets.characters
+      : state.assets.characters;
+    state.assets.scene_bgs = Array.isArray(assets.scene_bgs)
+      ? assets.scene_bgs
+      : state.assets.scene_bgs;
     state.assets.props = Array.isArray(assets.props) ? assets.props : state.assets.props;
     showToast(payload?.message || "资产已批量生成");
   } catch (error) {
     for (const bucket of ["characters", "scene_bgs", "props"]) {
-      state.assets[bucket] = state.assets[bucket].map((asset) => asset.status === "generating" ? { ...asset, status: "failed" } : asset);
+      state.assets[bucket] = state.assets[bucket].map((asset) =>
+        asset.status === "generating" ? { ...asset, status: "failed" } : asset
+      );
     }
     throw error;
   } finally {
@@ -584,7 +647,9 @@ export function selectAssetCard(assetType, assetName) {
 export function focusFinalPreview() {
   requestAnimationFrame(() => {
     document.querySelector(".content")?.scrollTo({ top: 0, left: 0 });
-    document.getElementById("finalPreviewSection")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    document
+      .getElementById("finalPreviewSection")
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
   });
 }
 
@@ -597,9 +662,21 @@ export function sceneShotOverridesPayload(scene) {
       label: String(shot.label || shot.beat_type || `SHOT ${order}`).trim(),
       caption: String(shot.caption || "").trim(),
       bubble: String(shot.bubble || "").trim(),
-      duration_seconds: Math.max(0.25, asNumber(getValue(shotEditorId(order, "Duration"), shot.duration_seconds ?? 1), 1)),
-      camera_movement: getValue(shotEditorId(order, "Camera"), shot.camera_movement || scene?.camera_movement || "slow_push_in"),
-      camera_speed: Math.max(0.1, asNumber(getValue(shotEditorId(order, "Speed"), shot.camera_speed ?? scene?.camera_speed ?? 1), 1)),
+      duration_seconds: Math.max(
+        0.25,
+        asNumber(getValue(shotEditorId(order, "Duration"), shot.duration_seconds ?? 1), 1)
+      ),
+      camera_movement: getValue(
+        shotEditorId(order, "Camera"),
+        shot.camera_movement || scene?.camera_movement || "slow_push_in"
+      ),
+      camera_speed: Math.max(
+        0.1,
+        asNumber(
+          getValue(shotEditorId(order, "Speed"), shot.camera_speed ?? scene?.camera_speed ?? 1),
+          1
+        )
+      ),
       zoom: Math.max(1, asNumber(getValue(shotEditorId(order, "Zoom"), shot.zoom ?? 1), 1)),
       hold_in_ratio: asNumber(shot.hold_in_ratio, 0),
       hold_out_ratio: asNumber(shot.hold_out_ratio, 0),
@@ -610,13 +687,21 @@ export function sceneShotOverridesPayload(scene) {
 }
 
 export function sceneAudioManifestPayload(scene) {
-  const current = scene?.audio_manifest && typeof scene.audio_manifest === "object" ? scene.audio_manifest : {};
-  const currentTrigger = current.sfx_trigger && typeof current.sfx_trigger === "object" ? current.sfx_trigger : {};
+  const current =
+    scene?.audio_manifest && typeof scene.audio_manifest === "object" ? scene.audio_manifest : {};
+  const currentTrigger =
+    current.sfx_trigger && typeof current.sfx_trigger === "object" ? current.sfx_trigger : {};
   const triggerFile = getValue("sceneSfxFileInput", currentTrigger.file || "");
   const trigger = {
     file: triggerFile,
-    timestamp_ms: Math.max(0, Math.round(asNumber(getValue("sceneSfxTimestampInput", currentTrigger.timestamp_ms || 0), 0))),
-    volume: Math.max(0, asNumber(getValue("sceneSfxVolumeInput", currentTrigger.volume ?? 0.65), 0.65)),
+    timestamp_ms: Math.max(
+      0,
+      Math.round(asNumber(getValue("sceneSfxTimestampInput", currentTrigger.timestamp_ms || 0), 0))
+    ),
+    volume: Math.max(
+      0,
+      asNumber(getValue("sceneSfxVolumeInput", currentTrigger.volume ?? 0.65), 0.65)
+    ),
   };
   return {
     ...current,
@@ -624,7 +709,11 @@ export function sceneAudioManifestPayload(scene) {
     bgm_file: getValue("sceneBgmFileInput", current.bgm_file || ""),
     bgm_gain_db: getValue("sceneBgmGainInput", current.bgm_gain_db ?? ""),
     sfx_trigger: trigger,
-    sfx_triggers: triggerFile ? [trigger] : Array.isArray(current.sfx_triggers) ? current.sfx_triggers : [],
+    sfx_triggers: triggerFile
+      ? [trigger]
+      : Array.isArray(current.sfx_triggers)
+        ? current.sfx_triggers
+        : [],
   };
 }
 
@@ -650,7 +739,10 @@ export function scenePatchPayload() {
     camera_movement: getValue("sceneCameraInput"),
     camera_speed: asNumber(getValue("sceneCameraSpeedInput"), scene?.camera_speed ?? 1),
     duration_seconds: Math.max(MIN_SCENE_DURATION, asNumber(getValue("sceneDurationInput"), 4)),
-    characters: getValue("sceneCharactersInput").split(/[,，\n]/).map((item) => item.trim()).filter(Boolean),
+    characters: getValue("sceneCharactersInput")
+      .split(/[,，\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
     crop_box: cropBox,
     sfx_type: getValue("sceneSfxTypeInput", scene?.sfx_type || "auto"),
     audio_manifest: sceneAudioManifestPayload(scene),
@@ -660,17 +752,25 @@ export function scenePatchPayload() {
 
 export function projectPatchPayload() {
   const storyText =
-    getValue("scriptTextInput") ||
-    getValue("projectStoryInput", state.project?.story_text || "");
+    getValue("scriptTextInput") || getValue("projectStoryInput", state.project?.story_text || "");
   return {
     title: getValue("projectTitleInput", state.project?.title || ""),
     story_text: storyText,
     settings: {
       planner: getValue("projectPlannerInput", state.project?.settings?.planner || "auto"),
       scene_count: Math.max(1, Math.round(asNumber(getValue("projectSceneCountInput"), 5))),
-      keyframe_provider: getValue("projectKeyframeInput", state.project?.settings?.keyframe_provider || "auto"),
-      voice_provider: getValue("projectVoiceInput", state.project?.settings?.voice_provider || "auto"),
-      global_style: getValue("projectGlobalStyleInput", state.project?.settings?.global_style || ""),
+      keyframe_provider: getValue(
+        "projectKeyframeInput",
+        state.project?.settings?.keyframe_provider || "auto"
+      ),
+      voice_provider: getValue(
+        "projectVoiceInput",
+        state.project?.settings?.voice_provider || "auto"
+      ),
+      global_style: getValue(
+        "projectGlobalStyleInput",
+        state.project?.settings?.global_style || ""
+      ),
       subtitle_style: {
         font_name: getValue("subtitleFontNameInput", "Microsoft YaHei"),
         font_size: Math.round(asNumber(getValue("subtitleFontSizeInput"), 34)),
@@ -769,16 +869,33 @@ export function collectScriptPreviewDraft() {
   const scenes = Array.isArray(preview.scenes) ? preview.scenes : [];
   const draftedScenes = scenes.map((scene, index) => {
     const order = Number(scene.order || scene.index || index + 1);
-    const characters = splitPreviewCharacters(getValue(previewSceneFieldId(order, "Characters"), (scene.characters || []).join(", ")));
+    const characters = splitPreviewCharacters(
+      getValue(previewSceneFieldId(order, "Characters"), (scene.characters || []).join(", "))
+    );
     return {
       ...scene,
       order,
       title: getValue(previewSceneFieldId(order, "Title"), scene.title || ""),
       speaker: getValue(previewSceneFieldId(order, "Speaker"), scene.speaker || ""),
-      camera_movement: getValue(previewSceneFieldId(order, "Camera"), scene.camera_movement || scene.camera || "slow_push_in"),
+      camera_movement: getValue(
+        previewSceneFieldId(order, "Camera"),
+        scene.camera_movement || scene.camera || "slow_push_in"
+      ),
       emotion: getValue(previewSceneFieldId(order, "Emotion"), scene.emotion || ""),
-      duration_seconds: Math.max(MIN_SCENE_DURATION, asNumber(getValue(previewSceneFieldId(order, "Duration"), scene.duration_seconds ?? scene.duration ?? 4), 4)),
-      visual_prompt: getValue(previewSceneFieldId(order, "Visual"), scene.visual_prompt || scene.visual || ""),
+      duration_seconds: Math.max(
+        MIN_SCENE_DURATION,
+        asNumber(
+          getValue(
+            previewSceneFieldId(order, "Duration"),
+            scene.duration_seconds ?? scene.duration ?? 4
+          ),
+          4
+        )
+      ),
+      visual_prompt: getValue(
+        previewSceneFieldId(order, "Visual"),
+        scene.visual_prompt || scene.visual || ""
+      ),
       dialogue: getValue(previewSceneFieldId(order, "Dialogue"), scene.dialogue || ""),
       characters,
     };
@@ -789,7 +906,10 @@ export function collectScriptPreviewDraft() {
     story_text: currentScriptText,
     planner: getValue("scriptPlannerInput", "auto"),
     planner_used: preview.planner_used || getValue("scriptPlannerInput", "auto"),
-    max_scenes: Math.max(1, Math.min(24, Math.round(asNumber(getValue("scriptMaxScenesInput"), scenes.length || 12)))),
+    max_scenes: Math.max(
+      1,
+      Math.min(24, Math.round(asNumber(getValue("scriptMaxScenesInput"), scenes.length || 12)))
+    ),
     analysis: preview.analysis || {},
     scenes: draftedScenes,
   };
@@ -799,10 +919,13 @@ export async function createProject() {
   if (state.scriptPreview) {
     setBusy(true, "应用脚本预览");
     try {
-      const project = await apiJson(`${API.applyScriptPreview}/${state.currentProjectId}/apply-script-preview`, {
-        method: "POST",
-        body: JSON.stringify(collectScriptPreviewDraft()),
-      });
+      const project = await apiJson(
+        `${API.applyScriptPreview}/${state.currentProjectId}/apply-script-preview`,
+        {
+          method: "POST",
+          body: JSON.stringify(collectScriptPreviewDraft()),
+        }
+      );
       state.scriptPreview = null;
       setCurrentProject(project);
       state.activeTab = "storyboard";
@@ -816,7 +939,10 @@ export async function createProject() {
     title: getValue("newProjectTitle"),
     story_text: getValue("newProjectStory"),
     planner: getValue("newProjectPlanner", "auto"),
-    scene_count: Math.max(1, Math.min(12, Math.round(asNumber(getValue("newProjectSceneCount"), 5)))),
+    scene_count: Math.max(
+      1,
+      Math.min(12, Math.round(asNumber(getValue("newProjectSceneCount"), 5)))
+    ),
     keyframe_provider: getValue("newProjectKeyframe", "auto"),
     voice_provider: getValue("newProjectVoice", "auto"),
   };
@@ -836,7 +962,10 @@ export async function saveProject() {
   const payload = projectPatchPayload();
   setBusy(true, "保存项目");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}`, { method: "PATCH", body: JSON.stringify(payload) });
+    const project = await apiJson(`${API.projects}/${state.currentProjectId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
     setCurrentProject(project);
     showToast("项目已保存");
   } finally {
@@ -847,9 +976,15 @@ export async function saveProject() {
 export async function deleteProject(projectId) {
   const targetId = projectId || state.currentProjectId;
   if (!targetId) return;
-  const project = state.projects.find((item) => item.project_id === targetId) || (state.project?.project_id === targetId ? state.project : null);
+  const project =
+    state.projects.find((item) => item.project_id === targetId) ||
+    (state.project?.project_id === targetId ? state.project : null);
   const title = project?.title || targetId;
-  if (!window.confirm(`确认删除项目「${title}」？\n\n这会删除 workspace 中的项目文件夹，无法在应用内撤销。`)) {
+  if (
+    !window.confirm(
+      `确认删除项目「${title}」？\n\n这会删除 workspace 中的项目文件夹，无法在应用内撤销。`
+    )
+  ) {
     return;
   }
   setBusy(true, "删除项目");
@@ -870,7 +1005,10 @@ export async function deleteProject(projectId) {
 }
 
 export async function patchScene(order, payload) {
-  const project = await apiJson(`${API.projects}/${state.currentProjectId}/scenes/${order}`, { method: "PATCH", body: JSON.stringify(payload) });
+  const project = await apiJson(`${API.projects}/${state.currentProjectId}/scenes/${order}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
   setCurrentProject(project);
 }
 
@@ -909,7 +1047,9 @@ export async function saveSceneReview() {
 export async function saveCropBox(cropBox = null) {
   const order = state.selectedSceneOrder;
   const scene = selectedScene();
-  const payload = { crop_box: normalizeCropBox(cropBox || cropBoxFromInputs(normalizeCropBox(scene?.crop_box))) };
+  const payload = {
+    crop_box: normalizeCropBox(cropBox || cropBoxFromInputs(normalizeCropBox(scene?.crop_box))),
+  };
   setBusy(true, "保存取景框");
   try {
     await patchScene(order, payload);
@@ -945,7 +1085,11 @@ export async function saveSceneSfxTimestamp(order, timestampMs) {
   const nextManifest = {
     ...manifest,
     sfx_trigger: trigger,
-    sfx_triggers: trigger.file ? [trigger] : Array.isArray(manifest.sfx_triggers) ? manifest.sfx_triggers : [],
+    sfx_triggers: trigger.file
+      ? [trigger]
+      : Array.isArray(manifest.sfx_triggers)
+        ? manifest.sfx_triggers
+        : [],
   };
   await patchScene(order, {
     audio_manifest: nextManifest,
@@ -960,7 +1104,10 @@ export async function saveCharacter() {
   const payload = characterPatchPayload();
   setBusy(true, "保存角色");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}/characters/${state.selectedCharacterIndex}`, { method: "PATCH", body: JSON.stringify(payload) });
+    const project = await apiJson(
+      `${API.projects}/${state.currentProjectId}/characters/${state.selectedCharacterIndex}`,
+      { method: "PATCH", body: JSON.stringify(payload) }
+    );
     setCurrentProject(project);
     showToast("角色已保存");
   } finally {
@@ -973,14 +1120,22 @@ export async function previewVoice(source = "manual") {
   if (source === "character" && state.currentProjectId && state.selectedCharacterIndex) {
     const charPayload = characterPatchPayload();
     try {
-      const project = await apiJson(`${API.projects}/${state.currentProjectId}/characters/${state.selectedCharacterIndex}`, { method: "PATCH", body: JSON.stringify(charPayload) });
+      const project = await apiJson(
+        `${API.projects}/${state.currentProjectId}/characters/${state.selectedCharacterIndex}`,
+        { method: "PATCH", body: JSON.stringify(charPayload) }
+      );
       setCurrentProject(project);
-    } catch (e) { /* proceed with preview even if save fails */ }
+    } catch (e) {
+      /* proceed with preview even if save fails */
+    }
   }
   const payload = voicePreviewPayload(source);
   setBusy(true, "生成试听");
   try {
-    state.voicePreview = await apiJson(API.voicePreview, { method: "POST", body: JSON.stringify(payload) });
+    state.voicePreview = await apiJson(API.voicePreview, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
     render();
     showToast("试听已生成");
   } finally {
@@ -1000,11 +1155,17 @@ export async function previewScript() {
     script_text: scriptText,
     script_hint: getValue("scriptHintInput"),
     planner: getValue("scriptPlannerInput", "auto"),
-    max_scenes: Math.max(1, Math.min(24, Math.round(asNumber(getValue("scriptMaxScenesInput"), 12)))),
+    max_scenes: Math.max(
+      1,
+      Math.min(24, Math.round(asNumber(getValue("scriptMaxScenesInput"), 12)))
+    ),
   };
   setBusy(true, "识别预览");
   try {
-    state.scriptPreview = await apiJson(`${API.projects}/${state.currentProjectId}/recognize-script/preview`, { method: "POST", body: JSON.stringify(payload) });
+    state.scriptPreview = await apiJson(
+      `${API.projects}/${state.currentProjectId}/recognize-script/preview`,
+      { method: "POST", body: JSON.stringify(payload) }
+    );
     render();
     showToast("识别预览完成");
   } finally {
@@ -1024,11 +1185,17 @@ export async function applyScript() {
     script_text: scriptText,
     script_hint: getValue("scriptHintInput"),
     planner: getValue("scriptPlannerInput", "auto"),
-    max_scenes: Math.max(1, Math.min(24, Math.round(asNumber(getValue("scriptMaxScenesInput"), 12)))),
+    max_scenes: Math.max(
+      1,
+      Math.min(24, Math.round(asNumber(getValue("scriptMaxScenesInput"), 12)))
+    ),
   };
   setBusy(true, "应用脚本");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}/recognize-script`, { method: "POST", body: JSON.stringify(payload) });
+    const project = await apiJson(`${API.projects}/${state.currentProjectId}/recognize-script`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
     state.scriptPreview = null;
     setCurrentProject(project);
     state.activeTab = "storyboard";
@@ -1042,7 +1209,10 @@ export async function repairStoryText() {
   if (!state.currentProjectId) return;
   setBusy(true, "重建剧本");
   try {
-    const project = await apiJson(`${API.repairStoryText}/${state.currentProjectId}/repair-story-text`, { method: "POST", body: "{}" });
+    const project = await apiJson(
+      `${API.repairStoryText}/${state.currentProjectId}/repair-story-text`,
+      { method: "POST", body: "{}" }
+    );
     setCurrentProject(project);
     state.scriptPreview = null;
     render();
@@ -1129,7 +1299,9 @@ function collectTaskOverrides() {
   const overrides = {};
   const overrideKeys = [...new Set([...profileKeys, ...taskDefs.map((td) => td.key)])];
   for (const key of overrideKeys) {
-    const checkbox = document.querySelector(`input[data-action="task-override-toggle"][data-task-key="${key}"]`);
+    const checkbox = document.querySelector(
+      `input[data-action="task-override-toggle"][data-task-key="${key}"]`
+    );
     const isProfile = profileKeys.includes(key);
     if (!isProfile && (!checkbox || !checkbox.checked)) continue;
 
@@ -1243,10 +1415,13 @@ export async function fillMissingAssets(kinds, label) {
   if (!state.currentProjectId) return;
   setBusy(true, label || "补齐资产");
   try {
-    const project = await apiJson(`${API.fillMissingAssets}/${state.currentProjectId}/fill-missing-assets`, {
-      method: "POST",
-      body: JSON.stringify({ kinds }),
-    });
+    const project = await apiJson(
+      `${API.fillMissingAssets}/${state.currentProjectId}/fill-missing-assets`,
+      {
+        method: "POST",
+        body: JSON.stringify({ kinds }),
+      }
+    );
     setCurrentProject(project);
     showToast("缺口补齐任务已提交");
     await refreshUntilProjectSettles();
@@ -1276,7 +1451,10 @@ export async function sceneAction(action) {
   if (!endpoint) return;
   setBusy(true, "分镜任务");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}/scenes/${state.selectedSceneOrder}/${endpoint}`, { method: "POST", body: "{}" });
+    const project = await apiJson(
+      `${API.projects}/${state.currentProjectId}/scenes/${state.selectedSceneOrder}/${endpoint}`,
+      { method: "POST", body: "{}" }
+    );
     setCurrentProject(project);
     showToast("分镜任务已完成");
   } finally {
@@ -1294,7 +1472,10 @@ export async function runSceneAction(action, sceneOrder) {
   };
   const endpoint = endpointMap[action];
   if (!endpoint) return null;
-  const project = await apiJson(`${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/${endpoint}`, { method: "POST", body: "{}" });
+  const project = await apiJson(
+    `${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/${endpoint}`,
+    { method: "POST", body: "{}" }
+  );
   setCurrentProject(project);
   return project;
 }
@@ -1303,7 +1484,7 @@ export async function runShotRerender(sceneOrder, shotId) {
   if (!state.currentProjectId || !sceneOrder || !shotId) return null;
   const project = await apiJson(
     `${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/shots/${encodeURIComponent(shotId)}/rerender-video`,
-    { method: "POST", body: "{}" },
+    { method: "POST", body: "{}" }
   );
   setCurrentProject(project);
   return project;
@@ -1313,7 +1494,10 @@ export async function buildProject() {
   if (!state.currentProjectId) return;
   setBusy(true, "整集生成");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}/build`, { method: "POST", body: "{}" });
+    const project = await apiJson(`${API.projects}/${state.currentProjectId}/build`, {
+      method: "POST",
+      body: "{}",
+    });
     setCurrentProject(project);
     showToast("已提交整集生成");
     await refreshUntilProjectSettles(60000, 2000);
@@ -1330,7 +1514,10 @@ export async function exportProject() {
   if (!state.currentProjectId) return;
   setBusy(true, "导出成片");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}/export`, { method: "POST", body: "{}" });
+    const project = await apiJson(`${API.projects}/${state.currentProjectId}/export`, {
+      method: "POST",
+      body: "{}",
+    });
     setCurrentProject(project);
     state.activeTab = "produce";
     showToast("导出完成");
@@ -1351,10 +1538,13 @@ export async function uploadCharacterReferenceImage(file) {
   });
   setBusy(true, "上传参考图");
   try {
-    const project = await apiJson(`${API.projects}/${state.currentProjectId}/characters/${state.selectedCharacterIndex}/reference-image`, {
-      method: "POST",
-      body: JSON.stringify({ filename: file.name || "reference.png", data_url: dataUrl }),
-    });
+    const project = await apiJson(
+      `${API.projects}/${state.currentProjectId}/characters/${state.selectedCharacterIndex}/reference-image`,
+      {
+        method: "POST",
+        body: JSON.stringify({ filename: file.name || "reference.png", data_url: dataUrl }),
+      }
+    );
     setCurrentProject(project);
     showToast("参考图已上传");
   } finally {

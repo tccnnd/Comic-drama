@@ -47,7 +47,9 @@ export function renderStoryboardReviewCanvas(project) {
   if (!scenes.length) return `<div class="empty-state">暂无 canonical timeline。</div>`;
   const triage = activeReviewTriageState();
   const visibleScenes = applyReviewTriage(scenes, triage);
-  const selected = visibleScenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || selectedTimelineScene(project);
+  const selected =
+    visibleScenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) ||
+    selectedTimelineScene(project);
   const filter = triage.review_status;
   const summary = scenes.reduce((acc, scene) => {
     const meta = sceneReviewMeta(scene);
@@ -71,9 +73,13 @@ export function renderStoryboardReviewCanvas(project) {
         ${blocked ? `<span class="danger-text">治理阻塞 ${h(blocked)}</span>` : ""}
       </div>
       <div class="review-filter-bar">
-        ${reviewFilterOptions.map(([value, label]) => `
+        ${reviewFilterOptions
+          .map(
+            ([value, label]) => `
           <button class="filter-chip ${filter === value ? "is-active" : ""}" type="button" data-action="review-filter" data-review-filter="${h(value)}">${h(label)}</button>
-        `).join("")}
+        `
+          )
+          .join("")}
       </div>
       <div class="storyboard-review-list">
         ${visibleScenes.length ? visibleScenes.map(renderStoryboardReviewCard).join("") : `<div class="empty-state">当前筛选下没有分镜。</div>`}
@@ -103,9 +109,13 @@ function renderProviderReadinessBanner(project) {
       </div>
     `;
   }
-  const status = state.videoProviderStatus && typeof state.videoProviderStatus === "object" ? state.videoProviderStatus : {};
+  const status =
+    state.videoProviderStatus && typeof state.videoProviderStatus === "object"
+      ? state.videoProviderStatus
+      : {};
   const provider = status.provider && typeof status.provider === "object" ? status.provider : {};
-  const readiness = status.readiness && typeof status.readiness === "object" ? status.readiness : {};
+  const readiness =
+    status.readiness && typeof status.readiness === "object" ? status.readiness : {};
   const backend = String(provider.backend || "").toLowerCase();
   if (!backend || backend === "local" || readiness.ready === true) return "";
   const label = provider.label || provider.id || project.settings?.video_provider || "auto";
@@ -122,12 +132,19 @@ function renderProviderReadinessBanner(project) {
 // Pick the currently selected scene from the timeline (or fall back to the first).
 function selectedTimelineScene(project = state.project) {
   const scenes = timelineSceneItems(project);
-  return scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || scenes[0] || null;
+  return (
+    scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) ||
+    scenes[0] ||
+    null
+  );
 }
 
 // Read the live triage state from global state, applying defaults for missing keys.
 function activeReviewTriageState() {
-  const triage = state.reviewTriageState && typeof state.reviewTriageState === "object" ? state.reviewTriageState : {};
+  const triage =
+    state.reviewTriageState && typeof state.reviewTriageState === "object"
+      ? state.reviewTriageState
+      : {};
   return {
     review_status: triage.review_status || state.reviewFilter || "all",
     governance_status: triage.governance_status || "all",
@@ -157,7 +174,7 @@ function renderReviewOverviewHeader(project) {
       ${renderReviewMetric("review_status", "blocked", "Review blocked", review.blocked || 0)}
       ${renderReviewMetric("provenance", "real", "Real video", provenance.real || 0)}
       ${renderReviewMetric("provenance", "fallback", "Fallback", provenance.fallback || 0)}
-      ${renderReviewMetric("governance_status", "fail", "Continuity fail", continuity.fail || 0, (continuity.fail || 0) ? "is-danger" : "")}
+      ${renderReviewMetric("governance_status", "fail", "Continuity fail", continuity.fail || 0, continuity.fail || 0 ? "is-danger" : "")}
       ${renderReviewMetric("deliverable", "blocked", "Export blocked", readiness.blocked || 0, readiness.blocked ? "is-danger" : "")}
       <div class="review-overview-progress">
         <span>Reviewed ${h(reviewed)} / ${h(overview.total_scenes)}</span>
@@ -215,7 +232,10 @@ function renderTriageSelect(field, options, value) {
 
 // Batch rerender controls + progress tail of the last 4 results.
 function renderBatchRerenderBar(visibleCount) {
-  const batch = state.reviewBatchRerender && typeof state.reviewBatchRerender === "object" ? state.reviewBatchRerender : {};
+  const batch =
+    state.reviewBatchRerender && typeof state.reviewBatchRerender === "object"
+      ? state.reviewBatchRerender
+      : {};
   const running = Boolean(batch.running);
   const results = Array.isArray(batch.results) ? batch.results : [];
   const latest = results.slice(-4);
@@ -228,12 +248,16 @@ function renderBatchRerenderBar(visibleCount) {
         ${renderBatchButton("rerender-video", "Video", visibleCount, running)}
         ${renderBatchButton("rebuild-scene", "Full", visibleCount, running)}
       </div>
-      ${running || results.length ? `
+      ${
+        running || results.length
+          ? `
         <div class="review-batch-progress">
           <span>${running ? "Running" : "Last batch"} ${h(batch.completed || 0)} / ${h(batch.total || 0)}</span>
           ${latest.map((item) => `<span class="${item.status === "failed" ? "danger-text" : "muted"}">#${h(item.order)} ${h(item.status)}${item.message ? `: ${h(item.message)}` : ""}</span>`).join("")}
         </div>
-      ` : ""}
+      `
+          : ""
+      }
     </div>
   `;
 }
@@ -245,7 +269,9 @@ function renderBatchButton(action, label, visibleCount, running) {
 
 // Normalize scene.generation_meta to an object (legacy scenes may be missing it).
 function sceneGenerationMeta(scene) {
-  return scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
+  return scene?.generation_meta && typeof scene.generation_meta === "object"
+    ? scene.generation_meta
+    : {};
 }
 
 // Map a generation_meta to a CSS class for the badge.
@@ -313,13 +339,17 @@ function renderShotRenderDetail(scene) {
     return `<div class="shot-render-detail is-unknown"><strong>Shot render status</strong><span>No shot data</span></div>`;
   }
   const rendered = entries.filter((entry) => entry.status !== "planned");
-  const title = meta.render_granularity === "shot" || rendered.length ? "Shot render status" : "Planned shots";
+  const title =
+    meta.render_granularity === "shot" || rendered.length ? "Shot render status" : "Planned shots";
   return `
     <div class="shot-render-detail ${rendered.length ? "" : "is-planned"}">
       <strong>${h(title)}</strong>
       <span>${h(rendered.length || entries.length)} / ${h(entries.length)} shot(s)${meta.render_granularity ? ` · ${h(meta.render_granularity)}` : ""}</span>
       <div class="shot-render-list">
-        ${entries.slice(0, 6).map((entry) => renderShotRenderRow(entry, scene, false)).join("")}
+        ${entries
+          .slice(0, 6)
+          .map((entry) => renderShotRenderRow(entry, scene, false))
+          .join("")}
       </div>
     </div>
   `;
@@ -335,7 +365,10 @@ function renderShotRenderDetailWithActions(scene) {
       <strong>Shot render status</strong>
       <span>${h(rendered.length || entries.length)} / ${h(entries.length)} shot(s) · ${h(meta.render_granularity)}</span>
       <div class="shot-render-list">
-        ${entries.slice(0, 6).map((entry) => renderShotRenderRow(entry, scene, true)).join("")}
+        ${entries
+          .slice(0, 6)
+          .map((entry) => renderShotRenderRow(entry, scene, true))
+          .join("")}
       </div>
     </div>
   `;
@@ -347,7 +380,9 @@ function renderShotRenderRow(entry, scene, includeActions = false) {
     provider,
     entry.attempts ? `${entry.attempts} attempt(s)` : "",
     entry.duration_seconds ? formatSeconds(entry.duration_seconds) : "",
-  ].filter(Boolean).join(" · ");
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const meta = sceneGenerationMeta(scene);
   const canRerender = includeActions && entry.shot_id && meta.render_granularity === "shot";
   return `
@@ -364,7 +399,8 @@ function renderShotRenderRow(entry, scene, includeActions = false) {
 function renderGovernanceBadge(scene) {
   const status = governanceStatus(scene);
   const governance = sceneGovernance(scene);
-  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const policy =
+    governance.policy && typeof governance.policy === "object" ? governance.policy : {};
   const blocked = policy.mode === "block" && governance.deliverable === false;
   return `<div class="governance-badge ${governanceStatusClass(status)}${blocked ? " is-blocked" : ""}">${h(governanceStatusLabel(status))}${blocked ? " · blocked" : ""}</div>`;
 }
@@ -373,17 +409,24 @@ function renderGovernanceBadge(scene) {
 function renderGovernanceDetail(scene) {
   const governance = sceneGovernance(scene);
   const status = governanceStatus(scene);
-  const dimensions = governance.dimensions && typeof governance.dimensions === "object" ? governance.dimensions : {};
+  const dimensions =
+    governance.dimensions && typeof governance.dimensions === "object" ? governance.dimensions : {};
   const dimensionRows = ["character", "lighting", "environment", "prop", "camera"]
     .map((dimension) => {
-      const data = dimensions[dimension] && typeof dimensions[dimension] === "object" ? dimensions[dimension] : {};
+      const data =
+        dimensions[dimension] && typeof dimensions[dimension] === "object"
+          ? dimensions[dimension]
+          : {};
       const dimStatus = String(data.status || "not_evaluated");
       const score = Number.isFinite(Number(data.score)) ? Number(data.score).toFixed(2) : "0.00";
       return `<span class="governance-dimension ${governanceStatusClass(dimStatus)}" title="${h(data.reason || "")}">${h(dimension)} ${h(dimStatus)} ${h(score)}</span>`;
     })
     .join("");
-  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
-  const offenders = Array.isArray(governance.offending_dimensions) ? governance.offending_dimensions : [];
+  const policy =
+    governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const offenders = Array.isArray(governance.offending_dimensions)
+    ? governance.offending_dimensions
+    : [];
   return `
     <div class="governance-detail ${governanceStatusClass(status)}">
       <strong>${h(governanceStatusLabel(status))}</strong>
@@ -397,7 +440,11 @@ function renderGovernanceDetail(scene) {
 // First non-empty prototype entry; prefers locked over freeform.
 function firstPrototypeEntry(scene) {
   const entries = scenePrototypeEntries(scene);
-  return entries.find((entry) => entry.mode === "prototype_lock" && entry.id) || entries.find((entry) => entry.mode === "freeform") || null;
+  return (
+    entries.find((entry) => entry.mode === "prototype_lock" && entry.id) ||
+    entries.find((entry) => entry.mode === "freeform") ||
+    null
+  );
 }
 
 // Compact prototype badge showing locked id or freeform gap.
@@ -423,7 +470,10 @@ function renderPrototypeDetail(scene) {
       <strong>Director prototypes</strong>
       <span>${h(locked)} lock / ${h(freeform)} freeform / ${h(entries.length)} shot(s)</span>
       <div class="prototype-shot-list">
-        ${entries.slice(0, 4).map((entry) => renderPrototypeShotRow(entry)).join("")}
+        ${entries
+          .slice(0, 4)
+          .map((entry) => renderPrototypeShotRow(entry))
+          .join("")}
       </div>
     </div>
   `;
@@ -558,16 +608,24 @@ function renderReviewCompare(scene) {
         ${assets.audio_url ? `<a href="${h(assets.audio_url)}" target="_blank" rel="noreferrer">音频</a>` : `<span>无音频</span>`}
         ${assets.video_url ? `<a href="${h(assets.video_url)}" target="_blank" rel="noreferrer">视频</a>` : `<span>无视频</span>`}
       </div>
-      ${history.length ? `
+      ${
+        history.length
+          ? `
         <div class="review-history">
-          ${history.map((item) => `
+          ${history
+            .map(
+              (item) => `
             <div>
               <strong>${h(item.label || item.action || "记录")}</strong>
               <span>${h(item.status || "")} · ${h(item.ts || "")}</span>
             </div>
-          `).join("")}
+          `
+            )
+            .join("")}
         </div>
-      ` : `<div class="muted">暂无历史版本记录。</div>`}
+      `
+          : `<div class="muted">暂无历史版本记录。</div>`
+      }
     </div>
   `;
 }
@@ -575,14 +633,17 @@ function renderReviewCompare(scene) {
 // Compact asset gap summary used in the workbench header.
 function renderAssetQueueSummary(project) {
   const scenes = project?.scenes || [];
-  const counts = scenes.reduce((acc, scene) => {
-    for (const gap of sceneAssetGaps(scene)) {
-      if (gap === "图片") acc.image += 1;
-      if (gap === "音频") acc.audio += 1;
-      if (gap === "视频") acc.video += 1;
-    }
-    return acc;
-  }, { image: 0, audio: 0, video: 0 });
+  const counts = scenes.reduce(
+    (acc, scene) => {
+      for (const gap of sceneAssetGaps(scene)) {
+        if (gap === "图片") acc.image += 1;
+        if (gap === "音频") acc.audio += 1;
+        if (gap === "视频") acc.video += 1;
+      }
+      return acc;
+    },
+    { image: 0, audio: 0, video: 0 }
+  );
   const total = counts.image + counts.audio + counts.video;
   return total ? `${total} 项缺口` : "全部就绪";
 }
@@ -605,13 +666,17 @@ function renderAssetQueue(project) {
         <button class="ghost-button" type="button" data-action="fill-missing-video">补视频</button>
       </div>
       <div class="preview-list">
-        ${items.map(({ scene, gaps }) => `
+        ${items
+          .map(
+            ({ scene, gaps }) => `
           <div class="preview-card">
             <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
             <div class="item-meta">${h(gaps.join(" / "))}</div>
             <div class="item-meta">${h(scene.speaker || "角色")} · ${formatSeconds(scene.duration_seconds)}</div>
           </div>
-        `).join("")}
+        `
+          )
+          .join("")}
       </div>
     </div>
   `;

@@ -62,7 +62,8 @@ export function looksGarbledScriptText(value) {
 }
 
 export function statusClass(status) {
-  if (["completed", "done", "idle", "draft"].includes(String(status || "").toLowerCase())) return "ok";
+  if (["completed", "done", "idle", "draft"].includes(String(status || "").toLowerCase()))
+    return "ok";
   if (["failed", "error"].includes(String(status || "").toLowerCase())) return "danger";
   return "warn";
 }
@@ -80,7 +81,11 @@ export function splitPreviewCharacters(value) {
 
 export function selectedScene(project = state.project) {
   const scenes = project?.scenes || [];
-  return scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || scenes[0] || null;
+  return (
+    scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) ||
+    scenes[0] ||
+    null
+  );
 }
 
 export function canonicalTimeline(project = state.project) {
@@ -91,7 +96,9 @@ export function canonicalTimeline(project = state.project) {
 export function canonicalPictureTrack(project = state.project) {
   const timeline = canonicalTimeline(project);
   const tracks = Array.isArray(timeline?.tracks) ? timeline.tracks : [];
-  return tracks.find((track) => track?.track_id === "picture" || track?.track_type === "video") || null;
+  return (
+    tracks.find((track) => track?.track_id === "picture" || track?.track_type === "video") || null
+  );
 }
 
 export function timelineSceneItems(project = state.project) {
@@ -104,11 +111,29 @@ export function timelineSceneItems(project = state.project) {
     const order = Number(clip.scene_order || index + 1);
     const scene = sceneByOrder.get(order) || {};
     const assets = { ...(scene.assets || {}) };
-    const media = clip.media_reference && typeof clip.media_reference === "object" ? clip.media_reference : {};
+    const media =
+      clip.media_reference && typeof clip.media_reference === "object" ? clip.media_reference : {};
     const clipMetadata = clip.metadata && typeof clip.metadata === "object" ? clip.metadata : {};
-    const clipGeneration = clipMetadata.generation && typeof clipMetadata.generation === "object" ? clipMetadata.generation : null;
-    if (media.url && !assets.video_url && String(media.path || "").toLowerCase().endsWith(".mp4")) assets.video_url = media.url;
-    if (media.url && !assets.image_url && !String(media.path || "").toLowerCase().endsWith(".mp4")) assets.image_url = media.url;
+    const clipGeneration =
+      clipMetadata.generation && typeof clipMetadata.generation === "object"
+        ? clipMetadata.generation
+        : null;
+    if (
+      media.url &&
+      !assets.video_url &&
+      String(media.path || "")
+        .toLowerCase()
+        .endsWith(".mp4")
+    )
+      assets.video_url = media.url;
+    if (
+      media.url &&
+      !assets.image_url &&
+      !String(media.path || "")
+        .toLowerCase()
+        .endsWith(".mp4")
+    )
+      assets.image_url = media.url;
     return {
       ...scene,
       order,
@@ -119,7 +144,9 @@ export function timelineSceneItems(project = state.project) {
       end_seconds: asNumber(clip.end_seconds, 0),
       timeline_clip_id: clip.clip_id || "",
       timeline_media_reference: media,
-      shot_timeline: Array.isArray(clip.shot_timeline) ? clip.shot_timeline : scene.shot_timeline || [],
+      shot_timeline: Array.isArray(clip.shot_timeline)
+        ? clip.shot_timeline
+        : scene.shot_timeline || [],
       generation_meta: scene.generation_meta || clipGeneration || {},
       assets,
     };
@@ -128,11 +155,15 @@ export function timelineSceneItems(project = state.project) {
 
 export function selectedCharacter(project = state.project) {
   const characters = project?.characters || [];
-  return characters[Math.max(0, Number(state.selectedCharacterIndex || 1) - 1)] || characters[0] || null;
+  return (
+    characters[Math.max(0, Number(state.selectedCharacterIndex || 1) - 1)] || characters[0] || null
+  );
 }
 
 export function characterKey(value) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 export function characterNamesFromFieldValue(value) {
@@ -143,7 +174,9 @@ export function characterNamesFromFieldValue(value) {
 }
 
 export function sceneCharacterNames(scene) {
-  return Array.isArray(scene?.characters) ? scene.characters.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
+  return Array.isArray(scene?.characters)
+    ? scene.characters.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : [];
 }
 
 export function getValue(id, fallback = "") {
@@ -160,7 +193,10 @@ export function titleFromFilename(filename) {
     .replace(/\.[^.]+$/, "")
     .trim();
   if (!base) return "";
-  return base.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  return base
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export async function readTextFile(file) {
@@ -207,16 +243,23 @@ export function normalizeExternalUrl(raw, fallback = "") {
 }
 
 export function comfyuiEditorUrl() {
-  return normalizeExternalUrl(getValue("comfyuiBaseUrlInput", storedValue("comfyuiBaseUrl", "http://127.0.0.1:8188")), "http://127.0.0.1:8188");
+  return normalizeExternalUrl(
+    getValue("comfyuiBaseUrlInput", storedValue("comfyuiBaseUrl", "http://127.0.0.1:8188")),
+    "http://127.0.0.1:8188"
+  );
 }
 
 export function sceneAudioManifest(scene) {
-  return scene?.audio_manifest && typeof scene.audio_manifest === "object" ? scene.audio_manifest : {};
+  return scene?.audio_manifest && typeof scene.audio_manifest === "object"
+    ? scene.audio_manifest
+    : {};
 }
 
 export function sceneSfxTrigger(scene) {
   const manifest = sceneAudioManifest(scene);
-  return manifest.sfx_trigger && typeof manifest.sfx_trigger === "object" ? manifest.sfx_trigger : {};
+  return manifest.sfx_trigger && typeof manifest.sfx_trigger === "object"
+    ? manifest.sfx_trigger
+    : {};
 }
 
 export function sceneShots(scene) {
@@ -231,8 +274,14 @@ export function sceneDirectorShots(scene) {
 
 export function scenePrototypeEntries(scene) {
   return sceneDirectorShots(scene).map((shot, index) => {
-    const prototype = shot?.visual_prototype && typeof shot.visual_prototype === "object" ? shot.visual_prototype : {};
-    const constraints = prototype.constraints && typeof prototype.constraints === "object" ? prototype.constraints : {};
+    const prototype =
+      shot?.visual_prototype && typeof shot.visual_prototype === "object"
+        ? shot.visual_prototype
+        : {};
+    const constraints =
+      prototype.constraints && typeof prototype.constraints === "object"
+        ? prototype.constraints
+        : {};
     const gap = prototype.gap && typeof prototype.gap === "object" ? prototype.gap : {};
     const id = String(prototype.id || "").trim();
     const mode = String(prototype.mode || (id ? "prototype_lock" : "unknown"));
@@ -245,7 +294,9 @@ export function scenePrototypeEntries(scene) {
       constraints: {
         hard: Array.isArray(constraints.hard) ? constraints.hard.map(String).filter(Boolean) : [],
         soft: Array.isArray(constraints.soft) ? constraints.soft.map(String).filter(Boolean) : [],
-        guidelines: Array.isArray(constraints.guidelines) ? constraints.guidelines.map(String).filter(Boolean) : [],
+        guidelines: Array.isArray(constraints.guidelines)
+          ? constraints.guidelines.map(String).filter(Boolean)
+          : [],
       },
       gap: {
         reason: String(gap.reason || ""),
@@ -287,7 +338,8 @@ export function derivePrototypeOverview(scenes) {
 }
 
 export function sceneTemporalShots(scene) {
-  const spec = scene?.temporal_spec && typeof scene.temporal_spec === "object" ? scene.temporal_spec : {};
+  const spec =
+    scene?.temporal_spec && typeof scene.temporal_spec === "object" ? scene.temporal_spec : {};
   return Array.isArray(spec.shots) && spec.shots.length ? spec.shots : sceneShots(scene);
 }
 
@@ -314,7 +366,9 @@ export function sceneDurationMs(scene) {
 }
 
 export function shotBeatClass(value) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "");
 }
 
 export function shotEditorId(order, field) {
@@ -343,7 +397,11 @@ export function projectHasAssetGaps(project = state.project) {
 export function projectIsBusy(project = state.project) {
   const status = String(project?.runtime?.status || "").toLowerCase();
   const stage = String(project?.runtime?.stage || "").toLowerCase();
-  return ["queued", "running", "repairing"].includes(status) || stage === "repairing" || stage.startsWith("scene_");
+  return (
+    ["queued", "running", "repairing"].includes(status) ||
+    stage === "repairing" ||
+    stage.startsWith("scene_")
+  );
 }
 
 export function sceneReviewMeta(scene) {
@@ -386,18 +444,24 @@ export function governanceStatusLabel(status) {
 }
 
 function sceneGovernanceStatus(scene) {
-  const governance = scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
+  const governance =
+    scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
   return String(governance.status || "not_evaluated");
 }
 
 function sceneGovernanceBlocked(scene) {
-  const governance = scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
-  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const governance =
+    scene?.governance && typeof scene.governance === "object" ? scene.governance : {};
+  const policy =
+    governance.policy && typeof governance.policy === "object" ? governance.policy : {};
   return policy.mode === "block" && governance.deliverable === false;
 }
 
 function sceneGenerationKind(scene) {
-  const meta = scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
+  const meta =
+    scene?.generation_meta && typeof scene.generation_meta === "object"
+      ? scene.generation_meta
+      : {};
   if (!Object.keys(meta).length) return "unknown";
   if (meta.fallback_used) return "fallback";
   if (meta.is_real_video) return "real";
@@ -405,7 +469,10 @@ function sceneGenerationKind(scene) {
 }
 
 export function sceneShotRenderEntries(scene) {
-  const meta = scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
+  const meta =
+    scene?.generation_meta && typeof scene.generation_meta === "object"
+      ? scene.generation_meta
+      : {};
   const outputs = Array.isArray(meta.shot_outputs) ? meta.shot_outputs : [];
   if (outputs.length) {
     return outputs
@@ -427,7 +494,11 @@ export function sceneShotRenderEntries(scene) {
   }
   const timelineShots = Array.isArray(scene?.shot_timeline) ? scene.shot_timeline : [];
   const timelineGenerated = timelineShots
-    .map((shot, index) => ({ shot, generation: shot?.generation && typeof shot.generation === "object" ? shot.generation : null, index }))
+    .map((shot, index) => ({
+      shot,
+      generation: shot?.generation && typeof shot.generation === "object" ? shot.generation : null,
+      index,
+    }))
     .filter((entry) => entry.generation);
   if (timelineGenerated.length) {
     return timelineGenerated.map(({ shot, generation, index }) => ({
@@ -439,10 +510,15 @@ export function sceneShotRenderEntries(scene) {
       backend: String(generation.backend || ""),
       attempts: asNumber(generation.attempts, 0),
       fallback_used: Boolean(generation.fallback_used),
-      duration_seconds: asNumber(generation.duration_seconds || generation.target_duration_seconds || shot?.duration_seconds, 0),
+      duration_seconds: asNumber(
+        generation.duration_seconds || generation.target_duration_seconds || shot?.duration_seconds,
+        0
+      ),
       path: String(generation.path || ""),
       error: String(generation.error || ""),
-      warnings: Array.isArray(generation.warnings) ? generation.warnings.map(String).filter(Boolean) : [],
+      warnings: Array.isArray(generation.warnings)
+        ? generation.warnings.map(String).filter(Boolean)
+        : [],
     }));
   }
   const shotPlan = scene?.shot_plan && typeof scene.shot_plan === "object" ? scene.shot_plan : {};
@@ -492,7 +568,8 @@ function sceneHasPrototypeMode(scene, mode) {
   if (mode === "all") return true;
   const entries = scenePrototypeEntries(scene);
   if (!entries.length) return mode === "unknown";
-  if (mode === "unknown") return entries.some((entry) => entry.mode !== "prototype_lock" && entry.mode !== "freeform");
+  if (mode === "unknown")
+    return entries.some((entry) => entry.mode !== "prototype_lock" && entry.mode !== "freeform");
   return entries.some((entry) => entry.mode === mode);
 }
 
@@ -509,8 +586,12 @@ function governanceSeverity(status) {
 
 export function deriveReviewOverview(project = state.project) {
   const scenes = timelineSceneItems(project);
-  const ledger = project?.continuity_ledger && typeof project.continuity_ledger === "object" ? project.continuity_ledger : {};
-  const ledgerCounts = ledger.status_counts && typeof ledger.status_counts === "object" ? ledger.status_counts : {};
+  const ledger =
+    project?.continuity_ledger && typeof project.continuity_ledger === "object"
+      ? project.continuity_ledger
+      : {};
+  const ledgerCounts =
+    ledger.status_counts && typeof ledger.status_counts === "object" ? ledger.status_counts : {};
   const overview = {
     total_scenes: scenes.length,
     review: {
@@ -555,14 +636,22 @@ export function deriveReviewOverview(project = state.project) {
     if (sceneAssetGaps(scene).length) overview.readiness.asset_gaps += 1;
   }
 
-  const continuityTotal = overview.continuity.pass + overview.continuity.warn + overview.continuity.fail + overview.continuity.not_evaluated;
+  const continuityTotal =
+    overview.continuity.pass +
+    overview.continuity.warn +
+    overview.continuity.fail +
+    overview.continuity.not_evaluated;
   if (!continuityTotal && scenes.length) overview.continuity.not_evaluated = scenes.length;
   return overview;
 }
 
 export function applyReviewTriage(scenes, triage = {}) {
   const source = Array.isArray(scenes) ? scenes : [];
-  const reviewStatus = triageValue(triage, "review_status", triageValue(triage, "reviewFilter", "all"));
+  const reviewStatus = triageValue(
+    triage,
+    "review_status",
+    triageValue(triage, "reviewFilter", "all")
+  );
   const governanceStatus = triageValue(triage, "governance_status");
   const provenance = triageValue(triage, "provenance");
   const deliverable = triageValue(triage, "deliverable");
@@ -574,7 +663,8 @@ export function applyReviewTriage(scenes, triage = {}) {
   const filtered = source.filter((scene) => {
     const review = sceneReviewMeta(scene);
     if (reviewStatus !== "all" && review.status !== reviewStatus) return false;
-    if (governanceStatus !== "all" && sceneGovernanceStatus(scene) !== governanceStatus) return false;
+    if (governanceStatus !== "all" && sceneGovernanceStatus(scene) !== governanceStatus)
+      return false;
     if (provenance !== "all" && sceneGenerationKind(scene) !== provenance) return false;
     if (minRating > 0 && review.rating < minRating) return false;
     if (deliverable === "blocked" && !sceneGovernanceBlocked(scene)) return false;
@@ -592,7 +682,8 @@ export function applyReviewTriage(scenes, triage = {}) {
       if (diff) return diff;
     }
     if (sort === "governance_severity") {
-      const diff = governanceSeverity(sceneGovernanceStatus(b)) - governanceSeverity(sceneGovernanceStatus(a));
+      const diff =
+        governanceSeverity(sceneGovernanceStatus(b)) - governanceSeverity(sceneGovernanceStatus(a));
       if (diff) return diff;
     }
     if (sort === "fallback_first") {
@@ -617,7 +708,9 @@ export function reviewStatusClass(status) {
 }
 
 export function cameraClassName(camera) {
-  const value = String(camera || "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  const value = String(camera || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "");
   if (["dramatic_push", "melancholy_pan", "establishing_tilt"].includes(value)) return value;
   if (value.includes("pan")) return "melancholy_pan";
   if (value.includes("tilt")) return "establishing_tilt";
@@ -652,7 +745,10 @@ export function fieldTextarea(id, label, value = "", rows = 4, placeholder = "")
 
 export function fieldSelect(id, label, options, value = "") {
   return `<label class="field"><span>${h(label)}</span><select id="${h(id)}">${options
-    .map(([optionValue, optionLabel]) => `<option value="${h(optionValue)}" ${String(optionValue) === String(value) ? "selected" : ""}>${h(optionLabel)}</option>`)
+    .map(
+      ([optionValue, optionLabel]) =>
+        `<option value="${h(optionValue)}" ${String(optionValue) === String(value) ? "selected" : ""}>${h(optionLabel)}</option>`
+    )
     .join("")}</select></label>`;
 }
 
@@ -670,4 +766,3 @@ export function snapTemporalShotDuration(value, shiftKey = false) {
   const snapped = Math.round(value / step) * step;
   return Number(Math.max(0.25, snapped).toFixed(2));
 }
-

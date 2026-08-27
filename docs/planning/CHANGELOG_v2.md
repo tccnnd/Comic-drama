@@ -65,3 +65,15 @@
 - **新增测试**：`tests/test_tasks_stream_connectivity.py` —— 验证 `/api/tasks/{task_id}/stream` 握手成功并受控关闭（1000/1008），证明端点可达且遵循契约。
 - **验收**：全量 **511 passed / 10 warnings / exit=0**（较合并前 +2，即新增连通测试）；`import backend.app` 向后兼容；`node --check` 前端此前已通过（T1.2）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-27 — T1.5 前端工具链（lint/format:check）
+
+- **现状**：`frontend/` 无 `package.json`、无 lint/format 配置；Node v22.22.2 / npm 10.9.7。
+- **新增**：`frontend/package.json`（type=module、engines.node>=20、scripts: lint/format/format:check）、`frontend/eslint.config.js`（flat config，env browser/es2022，no-undef/duplicate-imports 为 error）、`frontend/.prettierrc.json`（printWidth 100/双引号）。`npm install` 生成 `frontend/package-lock.json`（1134 行）。
+- **修复真实 bug**：`frontend/events.js` 对 `./state.js` 重复 import（no-duplicate-imports error）→ 合并到首个 import 块。
+- **验收**：
+  - `npm install` 成功（88 包，0 漏洞）；
+  - `npm run lint` → **0 error / 36 warnings / exit=0**（warnings 为未使用绑定，多为跨文件死导入，非阻塞，已记录待后续清理）；
+  - `npm run format:check` → All matched files use Prettier code style（exit=0）；
+  - `index.html` 仍引用 `/frontend/app.js`、`/frontend/styles.css`，静态访问路径不受影响。
+- **commit**：本地提交，未推 GitHub。

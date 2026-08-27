@@ -1,6 +1,13 @@
 // ─── Event Handling & Interactions ───────────────────────────────────────────
 
-import { state, appRoot, TIMELINE_PX_PER_SECOND, MIN_SCENE_DURATION, DEFAULT_CROP_BOX } from "./state.js";
+import {
+  state,
+  appRoot,
+  TIMELINE_PX_PER_SECOND,
+  MIN_SCENE_DURATION,
+  DEFAULT_CROP_BOX,
+  API,
+} from "./state.js";
 import {
   asNumber,
   normalizeCropBox,
@@ -83,12 +90,7 @@ import {
 } from "./api.js";
 import { render } from "./render.js";
 
-import {
-  playTemporalPreview,
-  pauseTemporalPreview,
-  resetTemporalPreview,
-} from "./timeline.js";
-import { API } from "./state.js";
+import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
 
 // Wire up the render function into api.js to break the circular dependency
 setRenderFn(render);
@@ -102,14 +104,20 @@ function syncCharacterPickerField(fieldId, nextNames) {
   if (field) {
     field.value = nextNames.join(", ");
   }
-  const picker = document.querySelector(`[data-character-picker-field="${CSS?.escape ? CSS.escape(fieldId) : fieldId}"]`);
+  const picker = document.querySelector(
+    `[data-character-picker-field="${CSS?.escape ? CSS.escape(fieldId) : fieldId}"]`
+  );
   if (picker) {
-    picker.querySelectorAll(`[data-character-toggle][data-character-field-id="${CSS?.escape ? CSS.escape(fieldId) : fieldId}"]`).forEach((input) => {
-      const chip = input.closest(".character-tag");
-      if (chip) {
-        chip.classList.toggle("is-selected", input.checked);
-      }
-    });
+    picker
+      .querySelectorAll(
+        `[data-character-toggle][data-character-field-id="${CSS?.escape ? CSS.escape(fieldId) : fieldId}"]`
+      )
+      .forEach((input) => {
+        const chip = input.closest(".character-tag");
+        if (chip) {
+          chip.classList.toggle("is-selected", input.checked);
+        }
+      });
     const meta = picker.querySelector(".item-meta");
     if (meta) {
       meta.textContent = `已选择 ${nextNames.length} 个角色。`;
@@ -119,9 +127,11 @@ function syncCharacterPickerField(fieldId, nextNames) {
 
 function setCharacterPickerSelection(fieldId, nextNames) {
   const target = new Set(nextNames.map(characterKey));
-  document.querySelectorAll(`[data-character-toggle][data-character-field-id="${fieldId}"]`).forEach((input) => {
-    input.checked = target.has(characterKey(input.dataset.characterName || input.value));
-  });
+  document
+    .querySelectorAll(`[data-character-toggle][data-character-field-id="${fieldId}"]`)
+    .forEach((input) => {
+      input.checked = target.has(characterKey(input.dataset.characterName || input.value));
+    });
   syncCharacterPickerField(fieldId, nextNames);
 }
 
@@ -132,7 +142,9 @@ function handleCharacterPickerChange(target) {
   if (!picker) return false;
   const nextNames = Array.from(
     picker.querySelectorAll(`[data-character-toggle][data-character-field-id="${fieldId}"]:checked`)
-  ).map((input) => String(input.dataset.characterName || input.value || "").trim()).filter(Boolean);
+  )
+    .map((input) => String(input.dataset.characterName || input.value || "").trim())
+    .filter(Boolean);
   syncCharacterPickerField(fieldId, nextNames);
   return true;
 }
@@ -186,11 +198,16 @@ async function switchTab(tab, section) {
     if (content && target) {
       const contentRect = content.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      content.scrollTo({ top: Math.max(0, content.scrollTop + targetRect.top - contentRect.top - 12), left: 0 });
+      content.scrollTo({
+        top: Math.max(0, content.scrollTop + targetRect.top - contentRect.top - 12),
+        left: 0,
+      });
     } else {
       content?.scrollTo({ top: 0, left: 0 });
     }
-    document.querySelectorAll(".window-body, .panel-body").forEach((element) => element.scrollTo({ top: 0, left: 0 }));
+    document
+      .querySelectorAll(".window-body, .panel-body")
+      .forEach((element) => element.scrollTo({ top: 0, left: 0 }));
   });
 }
 
@@ -242,7 +259,10 @@ function handleTimelineMove(event) {
   event.preventDefault?.();
   const step = event.shiftKey ? 0.1 : 0.5;
   const deltaSeconds = (event.clientX - drag.startX) / TIMELINE_PX_PER_SECOND;
-  const nextDuration = Math.max(MIN_SCENE_DURATION, Math.round((drag.startDuration + deltaSeconds) / step) * step);
+  const nextDuration = Math.max(
+    MIN_SCENE_DURATION,
+    Math.round((drag.startDuration + deltaSeconds) / step) * step
+  );
   drag.activeDuration = Number(nextDuration.toFixed(1));
   drag.clip.style.width = `${Math.max(92, Math.round(drag.activeDuration * TIMELINE_PX_PER_SECOND))}px`;
   const label = drag.clip.querySelector(`[data-clip-duration="${drag.sceneOrder}"]`);
@@ -271,8 +291,11 @@ function setSceneShotDuration(scene, order, duration) {
   if (sceneShot) {
     sceneShot.duration_seconds = duration;
   }
-  const spec = scene?.temporal_spec && typeof scene.temporal_spec === "object" ? scene.temporal_spec : null;
-  const temporalShot = spec ? findShotByOrder(Array.isArray(spec.shots) ? spec.shots : [], order) : null;
+  const spec =
+    scene?.temporal_spec && typeof scene.temporal_spec === "object" ? scene.temporal_spec : null;
+  const temporalShot = spec
+    ? findShotByOrder(Array.isArray(spec.shots) ? spec.shots : [], order)
+    : null;
   if (temporalShot) {
     temporalShot.duration_seconds = duration;
   }
@@ -294,7 +317,9 @@ function startTemporalShotDrag(event, handle) {
   event.stopPropagation();
   pauseTemporalPreview();
   const shots = sceneTemporalShots(scene);
-  const total = shots.reduce((sum, item) => sum + Math.max(0.25, asNumber(item.duration_seconds, 0.25)), 0) || 1;
+  const total =
+    shots.reduce((sum, item) => sum + Math.max(0.25, asNumber(item.duration_seconds, 0.25)), 0) ||
+    1;
   const stripWidth = Math.max(160, strip.getBoundingClientRect().width);
   const pointerId = "pointerId" in event ? event.pointerId : "mouse";
   state.temporalShotDrag = {
@@ -331,7 +356,9 @@ function updateTemporalShotStrip(drag) {
     if (label) label.textContent = `${item.start.toFixed(1)}s`;
     node.title = `${String(item.shot.label || item.shot.beat_type || `SHOT ${item.index + 1}`).trim()} · ${item.start.toFixed(1)}s → ${item.end.toFixed(1)}s`;
   });
-  const rulerNodes = drag.strip.previousElementSibling?.classList?.contains("temporal-preview-ruler")
+  const rulerNodes = drag.strip.previousElementSibling?.classList?.contains(
+    "temporal-preview-ruler"
+  )
     ? drag.strip.previousElementSibling.querySelectorAll("[data-temporal-ruler]")
     : [];
   if (rulerNodes?.length) {
@@ -380,7 +407,10 @@ function finishTemporalShotDrag(event) {
 function startSfxDrag(event, anchor) {
   const track = anchor.closest(".sfx-track");
   const sceneOrder = Number(anchor.dataset.sceneOrder || state.selectedSceneOrder || 0);
-  const durationMs = Math.max(250, asNumber(anchor.dataset.durationMs, sceneDurationMs(selectedScene())));
+  const durationMs = Math.max(
+    250,
+    asNumber(anchor.dataset.durationMs, sceneDurationMs(selectedScene()))
+  );
   if (!track || !sceneOrder) return;
   event.preventDefault();
   event.stopPropagation();
@@ -522,7 +552,8 @@ async function handleClick(event) {
     }
     if (action === "asset-extract") return handleAssetExtract(state.currentProjectId);
     if (action === "asset-add") return openAssetAddModal();
-    if (action === "asset-generate") return handleAssetGenerate(state.currentProjectId, button.dataset.assetId);
+    if (action === "asset-generate")
+      return handleAssetGenerate(state.currentProjectId, button.dataset.assetId);
     if (action === "asset-generate-all") return handleAssetGenerateAll(state.currentProjectId);
     if (action === "modal-close-overlay") return closeModal();
     if (action === "modal-close") return closeModal();
@@ -541,10 +572,13 @@ async function handleClick(event) {
     if (action === "style-confirm") {
       const styleId = button.dataset.styleId || state.modal?.data?.tempSelected || "";
       if (!styleId || !state.currentProjectId) return;
-      const payload = await apiJson(`${API.projects}/${encodeURIComponent(state.currentProjectId)}/style`, {
-        method: "POST",
-        body: JSON.stringify({ style_id: styleId }),
-      });
+      const payload = await apiJson(
+        `${API.projects}/${encodeURIComponent(state.currentProjectId)}/style`,
+        {
+          method: "POST",
+          body: JSON.stringify({ style_id: styleId }),
+        }
+      );
       if (payload?.project) {
         setCurrentProject(payload.project);
       } else if (state.project) {
@@ -558,7 +592,13 @@ async function handleClick(event) {
     if (action === "create-project") return createProject();
     if (action === "delete-project") return deleteProject(button.dataset.projectId);
     if (action === "refresh-all") {
-      await Promise.all([loadVoiceCatalog(), loadTtsProviders(), loadVideoProviderStatus(), loadComfyUIStatus(), loadProjects(false)]);
+      await Promise.all([
+        loadVoiceCatalog(),
+        loadTtsProviders(),
+        loadVideoProviderStatus(),
+        loadComfyUIStatus(),
+        loadProjects(false),
+      ]);
       return showToast("已刷新");
     }
     if (action === "refresh-project") return refreshCurrentProject();
@@ -596,13 +636,25 @@ async function handleClick(event) {
     if (action === "temporal-preview-reset") return resetTemporalPreview();
     if (action === "build-project") return buildProject();
     if (action === "export-project") return exportProject();
-    if (action === "fill-missing-assets") return fillMissingAssets(["image", "audio", "video"], "补齐全部缺口");
+    if (action === "fill-missing-assets")
+      return fillMissingAssets(["image", "audio", "video"], "补齐全部缺口");
     if (action === "fill-missing-images") return fillMissingAssets(["image"], "补图");
     if (action === "fill-missing-audio") return fillMissingAssets(["audio"], "补音频");
     if (action === "fill-missing-video") return fillMissingAssets(["video"], "补视频");
     if (action === "timeline-resize") return;
-    if (["split-scene", "merge-scene", "rerender-image", "rerender-audio", "rerender-video", "rebuild-scene", "restore-scene"].includes(action)) {
-      if (button.dataset.sceneOrder) state.selectedSceneOrder = Number(button.dataset.sceneOrder || state.selectedSceneOrder);
+    if (
+      [
+        "split-scene",
+        "merge-scene",
+        "rerender-image",
+        "rerender-audio",
+        "rerender-video",
+        "rebuild-scene",
+        "restore-scene",
+      ].includes(action)
+    ) {
+      if (button.dataset.sceneOrder)
+        state.selectedSceneOrder = Number(button.dataset.sceneOrder || state.selectedSceneOrder);
       return sceneAction(action);
     }
   } catch (error) {
@@ -626,7 +678,8 @@ function defaultReviewTriageState() {
 function setReviewTriageField(field, value) {
   if (!field) return;
   const next = { ...defaultReviewTriageState(), ...(state.reviewTriageState || {}) };
-  next[field] = field === "min_rating" ? Math.max(0, Math.min(5, asNumber(value, 0))) : String(value || "all");
+  next[field] =
+    field === "min_rating" ? Math.max(0, Math.min(5, asNumber(value, 0))) : String(value || "all");
   state.reviewTriageState = next;
   if (field === "review_status") state.reviewFilter = next.review_status;
 }
@@ -646,11 +699,21 @@ function reviewBatchActionLabel(action) {
 
 async function runReviewBatchRerender(action) {
   if (!state.currentProjectId || !state.project) return;
-  const scenes = applyReviewTriage(timelineSceneItems(state.project), state.reviewTriageState || defaultReviewTriageState());
-  const supported = new Set(["rerender-image", "rerender-audio", "rerender-video", "rebuild-scene"]);
+  const scenes = applyReviewTriage(
+    timelineSceneItems(state.project),
+    state.reviewTriageState || defaultReviewTriageState()
+  );
+  const supported = new Set([
+    "rerender-image",
+    "rerender-audio",
+    "rerender-video",
+    "rebuild-scene",
+  ]);
   if (!supported.has(action) || !scenes.length) return;
   const label = reviewBatchActionLabel(action);
-  const confirmed = window.confirm(`Run ${label} rerender for ${scenes.length} filtered scene(s)? This may take time and provider quota.`);
+  const confirmed = window.confirm(
+    `Run ${label} rerender for ${scenes.length} filtered scene(s)? This may take time and provider quota.`
+  );
   if (!confirmed) return;
 
   state.reviewBatchRerender = {
@@ -670,14 +733,23 @@ async function runReviewBatchRerender(action) {
         await runSceneAction(action, order);
         state.reviewBatchRerender.results.push({ order, status: "ok", message: "completed" });
       } catch (error) {
-        state.reviewBatchRerender.results.push({ order, status: "failed", message: error.message || String(error) });
+        state.reviewBatchRerender.results.push({
+          order,
+          status: "failed",
+          message: error.message || String(error),
+        });
       } finally {
         state.reviewBatchRerender.completed += 1;
         render();
       }
     }
-    const failures = state.reviewBatchRerender.results.filter((item) => item.status === "failed").length;
-    showToast(failures ? `Batch finished with ${failures} failure(s)` : "Batch rerender completed", failures ? "danger" : "ok");
+    const failures = state.reviewBatchRerender.results.filter(
+      (item) => item.status === "failed"
+    ).length;
+    showToast(
+      failures ? `Batch finished with ${failures} failure(s)` : "Batch rerender completed",
+      failures ? "danger" : "ok"
+    );
   } finally {
     state.reviewBatchRerender.running = false;
     setBusy(false);
@@ -688,7 +760,9 @@ async function runReviewShotRerender(sceneOrderValue, shotId) {
   const sceneOrder = Number(sceneOrderValue || state.selectedSceneOrder || 0);
   const normalizedShotId = String(shotId || "").trim();
   if (!state.currentProjectId || !sceneOrder || !normalizedShotId) return;
-  const confirmed = window.confirm(`Rerender shot ${normalizedShotId}? This may use provider quota.`);
+  const confirmed = window.confirm(
+    `Rerender shot ${normalizedShotId}? This may use provider quota.`
+  );
   if (!confirmed) return;
   state.selectedSceneOrder = sceneOrder;
   setBusy(true, "Rerender shot");
@@ -723,11 +797,17 @@ function handleChange(event) {
     return;
   }
   // Auto-fill reference text when selecting a voice sample
-  if (event.target?.id === "characterReferenceAudioInput" || event.target?.id === "sceneReferenceAudioInput") {
+  if (
+    event.target?.id === "characterReferenceAudioInput" ||
+    event.target?.id === "sceneReferenceAudioInput"
+  ) {
     const samplePath = event.target.value;
     const refTextMap = {};
     const refText = refTextMap[samplePath] || "";
-    const textFieldId = event.target.id === "characterReferenceAudioInput" ? "characterReferenceTextInput" : "sceneReferenceTextInput";
+    const textFieldId =
+      event.target.id === "characterReferenceAudioInput"
+        ? "characterReferenceTextInput"
+        : "sceneReferenceTextInput";
     const textField = document.getElementById(textFieldId);
     if (textField && refText && !textField.value.trim()) {
       textField.value = refText;
@@ -834,7 +914,12 @@ export async function boot() {
   });
   render();
   try {
-    await Promise.all([loadVoiceCatalog(), loadTtsProviders(), loadVideoProviderStatus(), loadComfyUIStatus()]);
+    await Promise.all([
+      loadVoiceCatalog(),
+      loadTtsProviders(),
+      loadVideoProviderStatus(),
+      loadComfyUIStatus(),
+    ]);
     await loadProjects(true);
   } catch (error) {
     render();

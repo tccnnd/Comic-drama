@@ -9,12 +9,7 @@ import {
   setTemporalPreviewFallbackTimer,
   setGsapLoadPromise,
 } from "./state.js";
-import {
-  asNumber,
-  clamp,
-  selectedScene,
-  sceneTemporalShots,
-} from "./utils.js";
+import { asNumber, clamp, selectedScene, sceneTemporalShots } from "./utils.js";
 
 export function ensureGsapLoaded() {
   if (window.gsap) {
@@ -112,7 +107,9 @@ export async function playTemporalPreview() {
   const actor = document.getElementById("temporalPreviewActor");
   if (!scene || !shots.length || !world || !actor) return;
   resetTemporalPreview();
-  const durations = shots.map((shot) => Math.max(0.25, asNumber(shot.duration_seconds, 0.25)) * 0.55);
+  const durations = shots.map(
+    (shot) => Math.max(0.25, asNumber(shot.duration_seconds, 0.25)) * 0.55
+  );
   const total = durations.reduce((sum, duration) => sum + duration, 0) || 1;
   const gsap = await ensureGsapLoaded();
   if (gsap) {
@@ -127,9 +124,15 @@ export async function playTemporalPreview() {
     setTemporalPreviewTimeline(tl);
     shots.forEach((shot, index) => {
       const st = temporalPreviewState(shot, index);
-      const ease = String(shot.camera_movement || "").includes("dramatic") ? "power3.out" : "sine.inOut";
+      const ease = String(shot.camera_movement || "").includes("dramatic")
+        ? "power3.out"
+        : "sine.inOut";
       tl.to(world, { x: st.x, y: st.y, scale: st.scale, duration: durations[index], ease }, cursor);
-      tl.to(actor, { x: st.actorX, y: st.actorY, duration: durations[index], ease: "sine.inOut" }, cursor);
+      tl.to(
+        actor,
+        { x: st.actorX, y: st.actorY, duration: durations[index], ease: "sine.inOut" },
+        cursor
+      );
       cursor += durations[index];
     });
     tl.play(0);

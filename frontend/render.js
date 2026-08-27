@@ -74,7 +74,10 @@ export function render() {
   stopTemporalPreview();
   const previousContent = appRoot.querySelector?.(".content");
   const previousShell = appRoot.querySelector?.(".shell");
-  const shouldRestoreSettingsScroll = previousShell?.dataset?.activeTab === "settings" && state.activeTab === "settings" && previousContent;
+  const shouldRestoreSettingsScroll =
+    previousShell?.dataset?.activeTab === "settings" &&
+    state.activeTab === "settings" &&
+    previousContent;
   if (shouldRestoreSettingsScroll) {
     const previousSettingsBody = appRoot.querySelector?.("#settingsSection .window-body");
     state.settingsScrollTop = previousContent.scrollTop;
@@ -127,7 +130,7 @@ export function renderModal() {
 
 export function renderSidebar() {
   const project = state.project;
-  const scenes = project ? (project.scenes || []) : [];
+  const scenes = project ? project.scenes || [] : [];
   return `
     <aside class="sidebar">
       <div class="sidebar-head">
@@ -141,12 +144,16 @@ export function renderSidebar() {
             ${renderProjectList()}
           </div>
         </section>
-        ${project ? `
+        ${
+          project
+            ? `
         <section class="window-pane sidebar-scenes">
           <div class="window-head">场景 <small>${scenes.length} 镜</small></div>
           <div class="window-body card-list">${scenes.map(renderSceneMiniNav).join("")}</div>
         </section>
-        ` : ""}
+        `
+            : ""
+        }
         <section class="window-pane sidebar-status">
           <div class="window-head">状态</div>
           <div class="window-body">
@@ -221,8 +228,8 @@ export function renderTopbar(project) {
         <button class="primary-button" type="button" data-action="build-project">生成整集</button>
         <button class="ghost-button" type="button" data-action="export-project">导出成片</button>
         ${project?.project_id ? `<button class="danger-button" type="button" data-action="delete-project" data-project-id="${h(project.project_id)}">删除项目</button>` : ""}
-        <a class="button-link" href="${h(finalUrl)}" target="_blank" rel="noreferrer" ${finalUrl === "#" ? "aria-disabled=\"true\"" : ""}>打开成片</a>
-        <a class="button-link" href="${h(subtitlesUrl)}" target="_blank" rel="noreferrer" ${subtitlesUrl === "#" ? "aria-disabled=\"true\"" : ""}>字幕</a>
+        <a class="button-link" href="${h(finalUrl)}" target="_blank" rel="noreferrer" ${finalUrl === "#" ? 'aria-disabled="true"' : ""}>打开成片</a>
+        <a class="button-link" href="${h(subtitlesUrl)}" target="_blank" rel="noreferrer" ${subtitlesUrl === "#" ? 'aria-disabled="true"' : ""}>字幕</a>
       </div>
     </header>
   `;
@@ -240,7 +247,8 @@ function renderVideoProviderStatus(project) {
   const provider = status.provider || {};
   const configuredCount = Number(status.configured_count || 0);
   const missing = Array.isArray(status.missing_env) ? status.missing_env.length : 0;
-  const readiness = status.readiness && typeof status.readiness === "object" ? status.readiness : {};
+  const readiness =
+    status.readiness && typeof status.readiness === "object" ? status.readiness : {};
   const blocking = Array.isArray(readiness.blocking_env) ? readiness.blocking_env.length : missing;
   const label = provider.label || provider.id || project.settings?.video_provider || "auto";
   const backend = provider.backend || "unknown";
@@ -290,7 +298,10 @@ function renderContinuitySummaryChip(project) {
 
 export function renderTabs() {
   return `<nav class="tabbar" aria-label="工作区导航">${tabs
-    .map(([key, label, section]) => `<button type="button" class="${state.activeTab === key ? "is-active" : ""}" data-action="switch-tab" data-tab="${h(key)}" data-jump-section="${h(section)}">${h(label)}</button>`)
+    .map(
+      ([key, label, section]) =>
+        `<button type="button" class="${state.activeTab === key ? "is-active" : ""}" data-action="switch-tab" data-tab="${h(key)}" data-jump-section="${h(section)}">${h(label)}</button>`
+    )
     .join("")}</nav>`;
 }
 
@@ -417,9 +428,9 @@ export function renderProduceView(project) {
   const scenes = timelineSceneItems(project);
   const summary = project.summary || {};
   const totalScenes = scenes.length;
-  const withImage = scenes.filter(s => s.assets?.image_path).length;
-  const withAudio = scenes.filter(s => s.assets?.audio_path).length;
-  const withVideo = scenes.filter(s => s.assets?.video_path).length;
+  const withImage = scenes.filter((s) => s.assets?.image_path).length;
+  const withAudio = scenes.filter((s) => s.assets?.audio_path).length;
+  const withVideo = scenes.filter((s) => s.assets?.video_path).length;
   return `
     <div class="produce-layout">
       <div class="produce-header">
@@ -532,8 +543,27 @@ export function renderSettingsView(project) {
           <div class="form-grid">
             ${fieldText("projectTitleInput", "标题", project.title || "")}
             ${fieldSelect("projectPlannerInput", "剧本拆解", planners, settings.planner || "auto")}
-            ${fieldSelect("projectKeyframeInput", "关键帧引擎", [["auto", "自动"], ["local", "本地占位"], ["comfyui", "ComfyUI"]], settings.keyframe_provider || "auto")}
-            ${fieldSelect("projectVoiceInput", "配音引擎", [["auto", "自动"], ["edge", "Edge"], ["local", "本地"], ["silent", "静音"]], settings.voice_provider || "auto")}
+            ${fieldSelect(
+              "projectKeyframeInput",
+              "关键帧引擎",
+              [
+                ["auto", "自动"],
+                ["local", "本地占位"],
+                ["comfyui", "ComfyUI"],
+              ],
+              settings.keyframe_provider || "auto"
+            )}
+            ${fieldSelect(
+              "projectVoiceInput",
+              "配音引擎",
+              [
+                ["auto", "自动"],
+                ["edge", "Edge"],
+                ["local", "本地"],
+                ["silent", "静音"],
+              ],
+              settings.voice_provider || "auto"
+            )}
             ${fieldNumber("projectSceneCountInput", "分镜数", settings.scene_count || (project.scenes || []).length || 5, 'min="1" max="24" step="1"')}
             ${fieldText("projectGlobalStyleInput", "美术风格", settings.global_style || "")}
             ${fieldTextarea("projectStoryInput", "故事 / 原始剧本", project.story_text || "", 10)}
@@ -553,7 +583,16 @@ export function renderSettingsView(project) {
             ${fieldNumber("subtitleMarginVInput", "底边距", subtitle.margin_v ?? 120, 'min="0" max="600" step="1"')}
             ${fieldNumber("subtitleOutlineInput", "描边", subtitle.outline ?? 2, 'min="0" max="8" step="1"')}
             ${fieldNumber("subtitleShadowInput", "阴影", subtitle.shadow ?? 0, 'min="0" max="8" step="1"')}
-            ${fieldSelect("subtitleAlignmentInput", "位置", [["2", "底部居中"], ["8", "顶部居中"], ["5", "画面居中"]], subtitle.alignment ?? 2)}
+            ${fieldSelect(
+              "subtitleAlignmentInput",
+              "位置",
+              [
+                ["2", "底部居中"],
+                ["8", "顶部居中"],
+                ["5", "画面居中"],
+              ],
+              subtitle.alignment ?? 2
+            )}
           </div>
           <div class="toggle-row">
             ${fieldCheckbox("subtitleSpeakerInput", "显示说话人", subtitle.show_speaker !== false)}
@@ -583,12 +622,16 @@ function renderLlmConfigSection() {
   const presets = llm?.presets || [];
   const cfg = llm?.settings || {};
 
-  const presetButtons = presets.map((p, i) =>
-    `<button class="ghost-button" type="button" data-action="llm-preset" data-preset-idx="${i}" style="font-size:12px;padding:4px 10px">${h(p.label)}</button>`
-  ).join(" ");
+  const presetButtons = presets
+    .map(
+      (p, i) =>
+        `<button class="ghost-button" type="button" data-action="llm-preset" data-preset-idx="${i}" style="font-size:12px;padding:4px 10px">${h(p.label)}</button>`
+    )
+    .join(" ");
 
-  const testBadge = !testResult ? "" :
-    testResult.ok
+  const testBadge = !testResult
+    ? ""
+    : testResult.ok
       ? `<span class="asset-readiness is-ready" style="font-size:12px">✓ 连接成功 (${h(testResult.model || cfg.model)})</span>`
       : `<span class="asset-readiness is-blocked" style="font-size:12px">✗ ${h(testResult.error || "连接失败")}</span>`;
 
@@ -685,17 +728,18 @@ function renderTaskOverridesSection(cfg, taskDefs) {
   const defaultModel = cfg.model || "";
   const visibleProfileKeys = new Set(["language_model", "character_image"]);
 
-  const taskCards = taskDefs.map(td => {
-    const key = td.key;
-    if (visibleProfileKeys.has(key)) return "";
-    const ov = overrides[key] || {};
-    const enabled = overrides[key] != null;
-    const ovBaseUrl = ov.base_url || "";
-    const ovModel = ov.model || "";
-    const ovKeyMasked = ov.api_key_masked || "";
-    const ovKeySet = ov.api_key_set === true;
+  const taskCards = taskDefs
+    .map((td) => {
+      const key = td.key;
+      if (visibleProfileKeys.has(key)) return "";
+      const ov = overrides[key] || {};
+      const enabled = overrides[key] != null;
+      const ovBaseUrl = ov.base_url || "";
+      const ovModel = ov.model || "";
+      const ovKeyMasked = ov.api_key_masked || "";
+      const ovKeySet = ov.api_key_set === true;
 
-    return `
+      return `
       <div class="task-override-card" style="border:1px solid var(--line-soft);border-radius:8px;padding:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px">
@@ -704,7 +748,9 @@ function renderTaskOverridesSection(cfg, taskDefs) {
           </label>
           <span class="muted" style="font-size:11px">${h(td.desc)}</span>
         </div>
-        ${enabled ? `
+        ${
+          enabled
+            ? `
           <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:8px">
             <div>
               <label style="font-size:11px;color:var(--muted)">独立 API Key</label>
@@ -719,10 +765,13 @@ function renderTaskOverridesSection(cfg, taskDefs) {
               <input type="text" id="taskOvModel_${h(key)}" value="${h(ovModel)}" placeholder="留空则继承默认 (${h(defaultModel)})" style="width:100%;font-size:12px" />
             </div>
           </div>
-        ` : `<div class="muted" style="font-size:12px">使用默认配置（${h(defaultModel)} @ ${h(defaultBaseUrl)}）</div>`}
+        `
+            : `<div class="muted" style="font-size:12px">使用默认配置（${h(defaultModel)} @ ${h(defaultBaseUrl)}）</div>`
+        }
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 
   return `
     <details style="margin-top:12px">
@@ -749,24 +798,39 @@ function renderLlmUsageSection() {
   const byModelEntries = Object.entries(usage.by_model || {});
   const recent = usage.recent || [];
 
-  const taskRows = byTaskEntries.length === 0
-    ? ""
-    : byTaskEntries.map(([task, info]) =>
-      `<tr><td>${h(task)}</td><td style="text-align:right">${info.calls}</td><td style="text-align:right">${(info.tokens || 0).toLocaleString()}</td></tr>`
-    ).join("");
+  const taskRows =
+    byTaskEntries.length === 0
+      ? ""
+      : byTaskEntries
+          .map(
+            ([task, info]) =>
+              `<tr><td>${h(task)}</td><td style="text-align:right">${info.calls}</td><td style="text-align:right">${(info.tokens || 0).toLocaleString()}</td></tr>`
+          )
+          .join("");
 
-  const modelRows = byModelEntries.length === 0
-    ? ""
-    : byModelEntries.map(([model, info]) =>
-      `<tr><td>${h(model)}</td><td style="text-align:right">${info.calls}</td><td style="text-align:right">${(info.tokens || 0).toLocaleString()}</td></tr>`
-    ).join("");
+  const modelRows =
+    byModelEntries.length === 0
+      ? ""
+      : byModelEntries
+          .map(
+            ([model, info]) =>
+              `<tr><td>${h(model)}</td><td style="text-align:right">${info.calls}</td><td style="text-align:right">${(info.tokens || 0).toLocaleString()}</td></tr>`
+          )
+          .join("");
 
-  const recentRows = recent.length === 0
-    ? ""
-    : recent.slice(-5).reverse().map(r => {
-      const status = r.ok ? '<span style="color:var(--ok)">✓</span>' : '<span style="color:var(--danger)">✗</span>';
-      return `<tr><td>${h(r.ts || "")}</td><td>${h(r.task || "")}</td><td>${h(r.model || "")}</td><td style="text-align:right">${(r.total_tokens || 0).toLocaleString()}</td><td style="text-align:right">${r.duration_ms || 0}ms</td><td>${status}</td></tr>`;
-    }).join("");
+  const recentRows =
+    recent.length === 0
+      ? ""
+      : recent
+          .slice(-5)
+          .reverse()
+          .map((r) => {
+            const status = r.ok
+              ? '<span style="color:var(--ok)">✓</span>'
+              : '<span style="color:var(--danger)">✗</span>';
+            return `<tr><td>${h(r.ts || "")}</td><td>${h(r.task || "")}</td><td>${h(r.model || "")}</td><td style="text-align:right">${(r.total_tokens || 0).toLocaleString()}</td><td style="text-align:right">${r.duration_ms || 0}ms</td><td>${status}</td></tr>`;
+          })
+          .join("");
 
   return `
     <details style="margin-top:12px">
@@ -789,7 +853,9 @@ function renderLlmUsageSection() {
           </table>
         </div>
       </div>
-      ${recentRows ? `
+      ${
+        recentRows
+          ? `
         <div style="margin-top:8px">
           <div style="font-size:12px;color:var(--muted);margin-bottom:4px">最近调用</div>
           <table class="mini-table" style="width:100%;font-size:12px">
@@ -797,7 +863,9 @@ function renderLlmUsageSection() {
             <tbody>${recentRows}</tbody>
           </table>
         </div>
-      ` : ""}
+      `
+          : ""
+      }
     </details>
   `;
 }
@@ -957,7 +1025,9 @@ export function renderAssetsView(project) {
           ${renderAssetGrid(assets, active)}
         </div>
       </section>
-      ${isCharacterTab ? `
+      ${
+        isCharacterTab
+          ? `
         <section class="window-pane asset-voice-pane">
           <div class="window-head">角色声线配置 <small>按资产名关联旧角色库</small></div>
           <div class="window-body section-stack">
@@ -969,7 +1039,9 @@ export function renderAssetsView(project) {
             </details>
           </div>
         </section>
-      ` : ""}
+      `
+          : ""
+      }
       <section class="window-pane asset-library-footer">
         <div class="window-head">批量操作 <small>阶段 2 生成接口中 stub</small></div>
         <div class="window-body">
@@ -986,12 +1058,16 @@ export function renderAssetsView(project) {
 function renderAssetTabs(activeTab, counts) {
   return `
     <div class="asset-type-tabs" role="tablist" aria-label="资产类型">
-      ${assetTabs.map(([key, _bucket, label]) => `
+      ${assetTabs
+        .map(
+          ([key, _bucket, label]) => `
         <button class="${activeTab === key ? "is-active" : ""}" type="button" data-action="asset-tab" data-asset-tab="${h(key)}">
           <span>${h(label)}</span>
           <strong>${h(counts[key] || 0)}</strong>
         </button>
-      `).join("")}
+      `
+        )
+        .join("")}
     </div>
   `;
 }
@@ -1016,8 +1092,13 @@ function renderAssetCard(asset) {
   const status = String(asset.status || "pending");
   const type = String(asset.asset_type || "character");
   const prompt = asset.visual_prompt || asset.appearance || asset.description || "暂无视觉描述";
-  const initials = String(asset.name || assetTypeLabel(type)).trim().slice(0, 2) || "资产";
-  const thumbnail = asset.thumbnail ? `<img src="${h(asset.thumbnail)}" alt="">` : `<div class="asset-thumb-placeholder">${h(initials)}</div>`;
+  const initials =
+    String(asset.name || assetTypeLabel(type))
+      .trim()
+      .slice(0, 2) || "资产";
+  const thumbnail = asset.thumbnail
+    ? `<img src="${h(asset.thumbnail)}" alt="">`
+    : `<div class="asset-thumb-placeholder">${h(initials)}</div>`;
   return `
     <article class="asset-card status-${h(status)}" data-action="select-asset" data-asset-id="${h(asset.id)}" data-asset-type="${h(type)}" data-asset-name="${h(asset.name || "")}">
       <div class="asset-thumb">
@@ -1033,7 +1114,14 @@ function renderAssetCard(asset) {
           <span class="asset-status status-${h(status)}">${h(assetStatusLabel(status))}</span>
         </div>
         <div class="asset-prompt">${h(prompt)}</div>
-        ${type === "character" ? `<div class="asset-traits">${[asset.gender, asset.age, asset.personality].filter(Boolean).map((item) => `<span>${h(item)}</span>`).join("")}</div>` : ""}
+        ${
+          type === "character"
+            ? `<div class="asset-traits">${[asset.gender, asset.age, asset.personality]
+                .filter(Boolean)
+                .map((item) => `<span>${h(item)}</span>`)
+                .join("")}</div>`
+            : ""
+        }
       </div>
       <div class="asset-card-actions">
         <button class="ghost-button mini-button" type="button" data-action="asset-generate" data-asset-id="${h(asset.id)}" ${status === "generating" ? "disabled" : ""}>${status === "failed" ? "重试" : "生成"}</button>
@@ -1207,7 +1295,9 @@ export function renderSceneView(project) {
 function renderSceneCard(scene) {
   const active = Number(scene.order) === Number(state.selectedSceneOrder) ? "is-active" : "";
   const gaps = sceneAssetGaps(scene);
-  const failed = Boolean(scene.validation_failed || String(scene.assets?.status || "").toLowerCase() === "failed");
+  const failed = Boolean(
+    scene.validation_failed || String(scene.assets?.status || "").toLowerCase() === "failed"
+  );
   return `
     <button class="scene-card ${active} ${failed ? "is-failed" : ""}" type="button" data-action="select-scene" data-scene-order="${h(scene.order)}">
       <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
@@ -1223,9 +1313,16 @@ export function renderTimelinePanel(project) {
   const scenes = timelineSceneItems(project);
   if (!scenes.length) return `<div class="empty-state">还没有分镜。</div>`;
   const timeline = canonicalTimeline(project);
-  const total = Math.max(1, asNumber(timeline?.duration_seconds, 0) || scenes.reduce((sum, scene) => sum + asNumber(scene.duration_seconds, 4), 0));
+  const total = Math.max(
+    1,
+    asNumber(timeline?.duration_seconds, 0) ||
+      scenes.reduce((sum, scene) => sum + asNumber(scene.duration_seconds, 4), 0)
+  );
   const width = Math.max(900, Math.round(total * TIMELINE_PX_PER_SECOND));
-  const selected = scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) || scenes[0] || selectedScene(project);
+  const selected =
+    scenes.find((scene) => Number(scene.order) === Number(state.selectedSceneOrder)) ||
+    scenes[0] ||
+    selectedScene(project);
   return `
     <div class="timeline-shell">
       <div class="timeline-ruler" style="width:${width}px">${renderTimelineRuler(total)}</div>
@@ -1238,7 +1335,9 @@ export function renderTimelinePanel(project) {
 function renderTimelineRuler(total) {
   const marks = [];
   for (let second = 0; second <= Math.ceil(total); second += 2) {
-    marks.push(`<div class="ruler-mark" style="left:${Math.round(second * TIMELINE_PX_PER_SECOND)}px">${second}s</div>`);
+    marks.push(
+      `<div class="ruler-mark" style="left:${Math.round(second * TIMELINE_PX_PER_SECOND)}px">${second}s</div>`
+    );
   }
   return marks.join("");
 }
@@ -1251,7 +1350,10 @@ function renderTimelineClip(scene) {
   const gaps = sceneAssetGaps(scene);
   const hasStart = Number.isFinite(Number(scene.start_seconds));
   const hasEnd = Number.isFinite(Number(scene.end_seconds));
-  const span = hasStart || hasEnd ? ` @ ${hasStart ? formatSeconds(scene.start_seconds) : formatSeconds(0)} → ${hasEnd ? formatSeconds(scene.end_seconds) : formatSeconds(duration)}` : "";
+  const span =
+    hasStart || hasEnd
+      ? ` @ ${hasStart ? formatSeconds(scene.start_seconds) : formatSeconds(0)} → ${hasEnd ? formatSeconds(scene.end_seconds) : formatSeconds(duration)}`
+      : "";
   return `
     <div class="timeline-clip ${active}" style="width:${width}px" data-action="select-scene" data-scene-order="${h(scene.order)}">
       <div class="clip-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
@@ -1287,7 +1389,9 @@ function renderClipPreview(scene) {
 }
 
 function sceneGenerationMeta(scene) {
-  return scene?.generation_meta && typeof scene.generation_meta === "object" ? scene.generation_meta : {};
+  return scene?.generation_meta && typeof scene.generation_meta === "object"
+    ? scene.generation_meta
+    : {};
 }
 function generationBadgeClass(meta) {
   if (!meta || !Object.keys(meta).length) return "is-unknown";
@@ -1325,24 +1429,32 @@ function renderGenerationDetail(scene) {
 function renderGovernanceBadge(scene) {
   const status = governanceStatus(scene);
   const governance = sceneGovernance(scene);
-  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const policy =
+    governance.policy && typeof governance.policy === "object" ? governance.policy : {};
   const blocked = policy.mode === "block" && governance.deliverable === false;
   return `<div class="governance-badge ${governanceStatusClass(status)}${blocked ? " is-blocked" : ""}">${h(governanceStatusLabel(status))}${blocked ? " · blocked" : ""}</div>`;
 }
 function renderGovernanceDetail(scene) {
   const governance = sceneGovernance(scene);
   const status = governanceStatus(scene);
-  const dimensions = governance.dimensions && typeof governance.dimensions === "object" ? governance.dimensions : {};
+  const dimensions =
+    governance.dimensions && typeof governance.dimensions === "object" ? governance.dimensions : {};
   const dimensionRows = ["character", "lighting", "environment", "prop", "camera"]
     .map((dimension) => {
-      const data = dimensions[dimension] && typeof dimensions[dimension] === "object" ? dimensions[dimension] : {};
+      const data =
+        dimensions[dimension] && typeof dimensions[dimension] === "object"
+          ? dimensions[dimension]
+          : {};
       const dimStatus = String(data.status || "not_evaluated");
       const score = Number.isFinite(Number(data.score)) ? Number(data.score).toFixed(2) : "0.00";
       return `<span class="governance-dimension ${governanceStatusClass(dimStatus)}" title="${h(data.reason || "")}">${h(dimension)} ${h(dimStatus)} ${h(score)}</span>`;
     })
     .join("");
-  const policy = governance.policy && typeof governance.policy === "object" ? governance.policy : {};
-  const offenders = Array.isArray(governance.offending_dimensions) ? governance.offending_dimensions : [];
+  const policy =
+    governance.policy && typeof governance.policy === "object" ? governance.policy : {};
+  const offenders = Array.isArray(governance.offending_dimensions)
+    ? governance.offending_dimensions
+    : [];
   return `
     <div class="governance-detail ${governanceStatusClass(status)}">
       <strong>${h(governanceStatusLabel(status))}</strong>
@@ -1355,14 +1467,17 @@ function renderGovernanceDetail(scene) {
 
 function renderAssetQueueSummary(project) {
   const scenes = project?.scenes || [];
-  const counts = scenes.reduce((acc, scene) => {
-    for (const gap of sceneAssetGaps(scene)) {
-      if (gap === "图片") acc.image += 1;
-      if (gap === "音频") acc.audio += 1;
-      if (gap === "视频") acc.video += 1;
-    }
-    return acc;
-  }, { image: 0, audio: 0, video: 0 });
+  const counts = scenes.reduce(
+    (acc, scene) => {
+      for (const gap of sceneAssetGaps(scene)) {
+        if (gap === "图片") acc.image += 1;
+        if (gap === "音频") acc.audio += 1;
+        if (gap === "视频") acc.video += 1;
+      }
+      return acc;
+    },
+    { image: 0, audio: 0, video: 0 }
+  );
   const total = counts.image + counts.audio + counts.video;
   return total ? `${total} 项缺口` : "全部就绪";
 }
@@ -1384,13 +1499,17 @@ function renderAssetQueue(project) {
         <button class="ghost-button" type="button" data-action="fill-missing-video">补视频</button>
       </div>
       <div class="preview-list">
-        ${items.map(({ scene, gaps }) => `
+        ${items
+          .map(
+            ({ scene, gaps }) => `
           <div class="preview-card">
             <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
             <div class="item-meta">${h(gaps.join(" / "))}</div>
             <div class="item-meta">${h(scene.speaker || "角色")} · ${formatSeconds(scene.duration_seconds)}</div>
           </div>
-        `).join("")}
+        `
+          )
+          .join("")}
       </div>
     </div>
   `;
@@ -1485,8 +1604,8 @@ export function renderSceneMedia(scene) {
   const media = showingImage
     ? `<img src="${h(assets.image_url)}" alt="">`
     : assets.video_url
-    ? `<video src="${h(assets.video_url)}" controls playsinline></video>`
-    : `<div class="scene-media-empty">暂无画面<br><span>先重绘图或单格重跑</span></div>`;
+      ? `<video src="${h(assets.video_url)}" controls playsinline></video>`
+      : `<div class="scene-media-empty">暂无画面<br><span>先重绘图或单格重跑</span></div>`;
   return `
     <div class="scene-preview-frame">
       ${media}
@@ -1633,7 +1752,8 @@ function renderSceneShotTrack(scene) {
   if (!shots.length) {
     return `<div class="micro-track shot-track"><em>暂无 shot</em></div>`;
   }
-  const total = shots.reduce((sum, shot) => sum + Math.max(0.1, asNumber(shot.duration_seconds, 0)), 0) || 1;
+  const total =
+    shots.reduce((sum, shot) => sum + Math.max(0.1, asNumber(shot.duration_seconds, 0)), 0) || 1;
   return `
     <div class="micro-track shot-track">
       ${shots
@@ -1642,7 +1762,9 @@ function renderSceneShotTrack(scene) {
           const label = String(shot.label || shot.beat_type || `SHOT ${index + 1}`).trim();
           const beatType = shotBeatClass(shot.beat_type || label);
           const width = Math.max(18, (duration / total) * 100);
-          const caption = String(shot.caption || shot.bubble || shot.dialogue || shot.title || "").trim();
+          const caption = String(
+            shot.caption || shot.bubble || shot.dialogue || shot.title || ""
+          ).trim();
           return `
             <b class="shot-node${beatType ? ` is-${h(beatType)}` : ""}${shot.has_override ? " is-overridden" : ""}" style="flex:${width};" title="${h(caption || shot.title || label)}">
               ${h(label)}
@@ -1659,7 +1781,8 @@ function renderTemporalPreview(scene) {
   const shots = sceneTemporalShots(scene);
   if (!shots.length) return "";
   const timeline = temporalShotTimeline(shots);
-  const total = timeline.reduce((sum, item) => sum + item.duration, 0) || scene.duration_seconds || 1;
+  const total =
+    timeline.reduce((sum, item) => sum + item.duration, 0) || scene.duration_seconds || 1;
   return `
     <div class="temporal-preview" data-temporal-preview data-scene-order="${h(scene.order)}">
       <div class="temporal-preview-head">
@@ -1697,7 +1820,9 @@ function renderTemporalPreview(scene) {
         ${timeline
           .map((item) => {
             const width = Math.max(20, (item.duration / total) * 100);
-            const label = String(item.shot.label || item.shot.beat_type || `SHOT ${item.index + 1}`).trim();
+            const label = String(
+              item.shot.label || item.shot.beat_type || `SHOT ${item.index + 1}`
+            ).trim();
             const rangeLabel = `${item.start.toFixed(1)}s → ${item.end.toFixed(1)}s`;
             return `
               <b data-temporal-shot="${h(item.index)}" data-shot-order="${h(item.order)}" data-duration="${h(item.duration)}" style="flex:${width};" title="${h(label)} · ${h(rangeLabel)}">
@@ -1765,7 +1890,9 @@ function renderSceneAudioManifestEditor(scene) {
 function renderSceneReadiness(scene) {
   const assets = scene.assets || {};
   const versions = assets.versions || {};
-  const recentFailure = (scene.history || []).find((item) => ["failed", "error"].includes(String(item.status || "").toLowerCase()));
+  const recentFailure = (scene.history || []).find((item) =>
+    ["failed", "error"].includes(String(item.status || "").toLowerCase())
+  );
   const directorReady = Boolean(scene.camera_movement || scene.director_recommendation);
   return `
     <div class="scene-status-grid asset-status-badges">
@@ -1795,7 +1922,9 @@ function renderAssetStatusCard(label, url, version, title = label) {
 
 function renderProductionMeta(scene, project) {
   const totalScenes = (project.scenes || []).length;
-  const phase = scene.episode_phase ? `${scene.episode_phase} ${scene.episode_phase_index || ""}/${scene.episode_phase_total || totalScenes}` : "未分配";
+  const phase = scene.episode_phase
+    ? `${scene.episode_phase} ${scene.episode_phase_index || ""}/${scene.episode_phase_total || totalScenes}`
+    : "未分配";
   return `
     <div class="production-meta-grid">
       <div class="meta-tile"><span>镜头</span><strong>${h(scene.camera_movement || "未设置")}</strong></div>
@@ -1810,7 +1939,10 @@ function renderProductionMeta(scene, project) {
 
 function renderAssetLinks(scene) {
   const assets = scene.assets || {};
-  const link = (label, url) => (url ? `<a href="${h(url)}" target="_blank" rel="noreferrer">${h(label)}</a>` : `<span>${h(label)}：缺失</span>`);
+  const link = (label, url) =>
+    url
+      ? `<a href="${h(url)}" target="_blank" rel="noreferrer">${h(label)}</a>`
+      : `<span>${h(label)}：缺失</span>`;
   return `<div class="asset-links">${link("图片", assets.image_url)}${link("音频", assets.audio_url)}${link("视频", assets.video_url)}</div>`;
 }
 
@@ -1851,7 +1983,11 @@ export function renderExportView(project) {
 function renderExportReadiness(project) {
   const entries = projectAssetGapEntries(project);
   const governanceEntries = (project.scenes || [])
-    .filter((scene) => sceneGovernance(scene).deliverable === false && sceneGovernance(scene).policy?.mode === "block")
+    .filter(
+      (scene) =>
+        sceneGovernance(scene).deliverable === false &&
+        sceneGovernance(scene).policy?.mode === "block"
+    )
     .map((scene) => ({ scene, gaps: ["governance"] }));
   const allEntries = [...entries, ...governanceEntries];
   if (!allEntries.length) {
@@ -1867,12 +2003,16 @@ function renderExportReadiness(project) {
       <div class="item-title">素材预检未通过 · ${allEntries.length} 个分镜</div>
       <div class="item-meta">导出前需要先补齐以下缺口。</div>
       <div class="preview-list export-gap-list">
-        ${allEntries.map(({ scene, gaps }) => `
+        ${allEntries
+          .map(
+            ({ scene, gaps }) => `
           <div class="preview-card">
             <div class="item-title">#${h(scene.order)} ${h(scene.title || "分镜")}</div>
             <div class="item-meta">${h(gaps.join(" / "))}</div>
           </div>
-        `).join("")}
+        `
+          )
+          .join("")}
       </div>
     </div>
   `;
@@ -1918,11 +2058,15 @@ function renderStylePickerModal(data = {}) {
     </div>
     <div class="modal-foot style-foot">
       <div class="style-preview">
-        ${selected ? `
+        ${
+          selected
+            ? `
           <div class="style-preview-label">当前选择：${h(selected.name)}</div>
           <div class="style-preview-prompt">${h(selected.positive_suffix || "")}</div>
           ${selected.negative_suffix ? `<div class="style-preview-negative">${h(selected.negative_suffix)}</div>` : ""}
-        ` : `<div class="style-preview-empty">未选择风格</div>`}
+        `
+            : `<div class="style-preview-empty">未选择风格</div>`
+        }
       </div>
       <div class="modal-actions">
         <button class="ghost-button" type="button" data-action="modal-close">取消</button>
