@@ -340,11 +340,11 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 **Gate C 环境依赖（三态）**：Docker Compose / ComfyUI tunnel / 远程视频 / 浏览器冒烟——条件满足才执行，未执行记 NOT_EVALUATED；不能用"环境不可用"掩盖确定性代码失败
 
 **Gate D 产品主线（必须 PASS）**：
-- [ ] v0.5.0 director_plan 生成（P1-PROD）
-- [ ] visual_content 进入 provider prompt
-- [ ] legacy project 兼容
-- [ ] mock provider success/failure/fallback 测试通过
-- [ ] review/export 仍可用
+- [x] v0.5.0 director_plan 生成（P1-PROD）— 2026-08-27 PASS（实测 storyboard.json 5 场景全有）
+- [x] visual_content 进入 provider prompt — PASS（test_build_scene_video_prompts_uses_visual_content_as_primary_source）
+- [x] legacy project 兼容 — PASS（legacy fallback + snapshot normalize 测试）
+- [x] mock provider success/failure/fallback 测试通过 — PASS（test_render_shot_with_provider_policy_* 三路径）
+- [x] review/export 仍可用 — PASS（旧项目加载/渲染/导出兼容测试通过，全量 511 passed）
 
 ---
 
