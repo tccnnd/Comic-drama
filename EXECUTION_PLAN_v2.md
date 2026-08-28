@@ -383,15 +383,15 @@ Docker 可选：docker-compose.yml（当前不存在需新建）+ healthcheck �
 | P3.1-3.3 | 指标/追踪/插件 | 3 | P3.1/P3.2 deferred（触发条件见 PHASE3_EVAL_AB.md）；P3.3 completed（backend/plugin_registry.py：显式注册/版本校验/错误边界/禁用，9 测试） |
 | 评估 A/B | 队列/数据库 | 3 | completed（结论：无需 Celery；暂不引入数据库；触发条件见 docs/planning/PHASE3_EVAL_AB.md） |
 
-**计数（机械可统计口径）**：
+**计数（机械可统计口径，2026-08-28 执行后）**：
 ```
-Phase 0 committed: 7
-Phase 1 committed: 10  (T1.1-T1.9 + P1-PROD)
-Phase 2 committed: 5
+Phase 0 completed: 7      (T0.1 partial: A/C 类 NOT_EVALUATED)
+Phase 1 completed: 10     (T1.1-T1.9 + P1-PROD)
+Phase 2 completed: 5      (T2.1-T2.5)
 Phase 0-2 committed total: 22
-Phase 3 planned: 3
-Optional evaluation: 2
-Total listed: 27
+Phase 3: P3.3 completed; P3.1/P3.2 deferred
+Optional evaluation: 2 completed (评估 A/B)
+Total listed: 27；完成 25，deferred 2
 ```
 
 ---
