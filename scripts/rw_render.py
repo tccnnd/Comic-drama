@@ -7,7 +7,12 @@ from pathlib import Path
 from PIL import Image
 
 from backend.config_utils import env_bool, env_float
-from backend.video_generation import VideoGenerationResult, video_fallback_mode
+from backend.video_generation import (
+    VideoGenerationResult,
+    normalize_video_render_granularity,
+    render_scene_shots_with_provider_policy,
+    video_fallback_mode,
+)
 from scripts.rw_audio import (
     apply_scene_grade,
     burn_subtitles_to_video,
@@ -373,7 +378,20 @@ def render_clip_with_meta(
     project_root: Path | None = None,
     keyframe_path: Path | None = None,
     video_provider: str = "auto",
+    render_granularity: str = "scene",
+    shot_plan: dict | None = None,
+    scene_payload: dict | None = None,
+    shot_meta_out: dict | None = None,
 ) -> tuple[Path, VideoGenerationResult]:
+    """渲染单个场景 clip。
+
+    ``render_granularity="shot"`` 且提供了 ``shot_plan`` 时，走逐镜头渲染编排
+    （复用 backend/video_generation.render_scene_shots_with_provider_policy），
+    并把镜头级 provenance 写入调用方传入的 ``shot_meta_out`` 字典。
+
+    逐镜头编排失败时：strict 模式直接抛错，report 模式降级到既有 scene 级
+    渲染路径（不改变原行为）。
+    """
     style = normalize_subtitle_style(subtitle_style)
     audio_settings = normalize_audio_style(audio_style)
     scene_id = f"{scene.scene:02}"
@@ -409,7 +427,63 @@ def render_clip_with_meta(
     warnings: list[str] = []
     used_backend = provider_spec.backend
     fallback_used = False
-    if provider_spec.backend == "comfyui":
+
+    # ── 逐镜头渲染（shot 粒度）─────────────────────────────────────────────
+    shot_rendered = False
+    if shot_plan and normalize_video_render_granularity(render_granularity) == "shot":
+        payload = scene_payload if isinstance(scene_payload, dict) else {}
+
+        def _shot_fallback_renderer(shot_request: dict, fallback_output_path: Path) -> Path:
+            camera = (
+                shot_request.get("camera") if isinstance(shot_request.get("camera"), dict) else {}
+            )
+            # shot 编排把输出放在 run_dir/shots/ 下，该子目录需自建
+            fallback_output_path.parent.mkdir(parents=True, exist_ok=True)
+            render_silent_visual_segment(
+                ffmpeg,
+                keyframe,
+                float(shot_request.get("duration_seconds") or 0.25),
+                fallback_output_path,
+                1.08,
+                str(camera.get("camera_movement") or scene.camera or "slow_push"),
+                int(shot_request.get("index") or 1),
+                camera_speed=float(camera.get("camera_speed") or scene.camera_speed or 1.0),
+                focus_x=float(camera.get("center_x") or 0.5),
+                focus_y=float(camera.get("center_y") or 0.5),
+            )
+            return fallback_output_path
+
+        try:
+            print(
+                f"[video] Rendering scene {scene_id} at shot granularity "
+                f"({len(shot_plan.get('shots') or [])} shots) with {provider_spec.label}"
+            )
+            _visual, shot_meta, _ = render_scene_shots_with_provider_policy(
+                scene=payload,
+                shot_plan=shot_plan,
+                keyframe_path=keyframe,
+                output_path=visual_path,
+                run_dir=run_dir,
+                ffmpeg=ffmpeg,
+                video_provider=video_provider,
+                fallback_renderer=_shot_fallback_renderer,
+                run_guarded=run_guarded,
+                manifest_path=run_dir / f"shot_assembly_manifest_{scene_id}.json",
+            )
+            visual_generated = True
+            shot_rendered = True
+            if shot_meta_out is not None and isinstance(shot_meta, dict):
+                shot_meta_out.update(shot_meta)
+        except Exception as exc:
+            last_error = str(exc)
+            if fallback_mode == "strict":
+                raise
+            print(
+                f"[video] shot-level render failed for scene {scene_id}; "
+                f"falling back to scene render: {exc}"
+            )
+
+    if not shot_rendered and provider_spec.backend == "comfyui":
         try:
             print(f"[video] Rendering scene {scene_id} with {provider_spec.label} video provider")
             render_scene_video_comfyui(scene, keyframe, clip_duration, visual_path, run_dir)
@@ -427,7 +501,7 @@ def render_clip_with_meta(
             print(
                 f"[video] {provider_spec.label} video provider failed for scene {scene_id}; falling back to 2.5D clip: {exc}"
             )
-    elif provider_spec.backend == "remote":
+    elif not shot_rendered and provider_spec.backend == "remote":
         max_retries = int(env_float("VIDEO_MAX_RETRIES", default=2))
         retry_delay = env_float("VIDEO_RETRY_DELAY_SECONDS", default=5.0)
         last_exc = None
@@ -505,7 +579,7 @@ def render_clip_with_meta(
                     print(
                         f"[video] {provider_spec.label} remote video provider failed for scene {scene_id} after {attempt} attempts; falling back to 2.5D clip: {exc}"
                     )
-    elif provider_spec.backend != "local":
+    elif not shot_rendered and provider_spec.backend != "local":
         raise ValueError(f"Unsupported video provider backend: {provider_spec.backend}")
 
     if not visual_generated:

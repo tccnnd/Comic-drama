@@ -249,3 +249,16 @@
 - **补齐方案已定**（待确认实施）：复用 `render_scene_shots_with_provider_policy`（纯函数式签名，CLI 可复用）→ `rw_render.py` 新增 `render_clip_shots_with_meta`，`run_workflow.py` L478 处最小分支。
 - **附带发现（文档/代码不一致）**：AGENTS.md 的 Required Checks 写 `--input`，实际参数名是 `--story`；且直接跑脚本需 `PYTHONPATH=.`。建议修正 AGENTS.md 示例。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-29 — CLI 路径补齐 shot 级渲染（FR-1.3 缺口修复）
+
+- **改动**：`scripts/rw_render.py` 的 `render_clip_with_meta` 新增 `render_granularity` / `shot_plan` / `scene_payload` / `shot_meta_out` 参数；shot 粒度下在 provider 渲染前走 `render_scene_shots_with_provider_policy`（复用 backend 的纯函数式 shot 编排），并把镜头级 provenance 通过 `shot_meta_out` 回传。
+  - 提供 `fallback_renderer`（`render_silent_visual_segment`，local 2.5D）
+  - 失败语义：strict 模式抛错；report 模式打印并降级到既有 scene 级渲染路径（原行为不变）
+- **`scripts/run_workflow.py`**：渲染循环内提前 `build_shot_plan`（渲染器需要它逐镜头调用 provider），渲染后把 shot meta 合并进 scene 的 `generation_meta`（原 L498 的 shot_plan 赋值改为复用同一份）。
+- **⚠️ 调试坑（复用 #7）**：shot 编排把输出放在 `run_dir/shots/` 子目录，**该目录需自建**（后端项目路径已存在故未暴露）→ fallback_renderer 内 `mkdir(parents=True)` 修复。此前表现为 `FileNotFoundError` → `No usable shot clips to assemble`。
+- **验收**：
+  - shot 模式端到端：`outputs/run_20260829_005122/` 5/5 场景生成 `shot_outputs`（shot_id/status=fallback/provider_id=local/duration_seconds 正确），5 个 shot clip 文件 + `shot_assembly_manifest_01.json`，final MP4 产出
+  - scene 模式回归：`outputs/run_20260829_005546/` 不进入 shot 分支，final MP4 正常产出
+  - 全量 **527 passed / exit=0**
+- **commit**：本地提交，未推 GitHub。

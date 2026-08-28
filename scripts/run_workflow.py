@@ -475,6 +475,10 @@ def main() -> None:
     for index, item in enumerate(assets):
         scene = item["scene"]
         print(f"[3/5] Rendering scene {scene.scene}: {scene.title}")
+        storyboard_scene = storyboard_scenes[index]
+        # shot 粒度下渲染前先取 shot_plan（渲染器需要它来逐镜头调用 provider）
+        shot_plan = build_shot_plan(storyboard_scene)
+        shot_meta: dict = {}
         clip_path, render_result = render_clip_with_meta(
             ffmpeg,
             scene,
@@ -485,17 +489,24 @@ def main() -> None:
             item["voice"],
             keyframe_path=item["keyframe"],
             video_provider=video_provider,
+            render_granularity=render_granularity,
+            shot_plan=shot_plan,
+            scene_payload=storyboard_scene,
+            shot_meta_out=shot_meta,
         )
         clips.append(clip_path)
         render_results.append(render_result)
-        storyboard_scene = storyboard_scenes[index]
         storyboard_scene["video"] = str(clip_path)
-        storyboard_scene["generation_meta"] = generation_meta_from_result(
+        generation_meta = generation_meta_from_result(
             render_result,
             requested_provider=video_provider,
             fallback_mode=video_fallback_mode(video_provider),
         )
-        storyboard_scene["shot_plan"] = build_shot_plan(storyboard_scene)
+        # 逐镜头 provenance（shot_outputs 等）合并进 scene 级 generation_meta
+        if shot_meta:
+            generation_meta = {**generation_meta, **shot_meta}
+        storyboard_scene["generation_meta"] = generation_meta
+        storyboard_scene["shot_plan"] = shot_plan
 
     canonical_timeline = build_canonical_timeline(
         {
