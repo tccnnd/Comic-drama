@@ -84,13 +84,13 @@ pydantic-core==2.46.4
     # via pydantic
 pynacl==1.6.2
     # via paramiko
-pypiwin32==223
+pypiwin32==223 ; sys_platform == "win32"
     # via pyttsx3
 python-multipart==0.0.32
     # via -r requirements.in
 pyttsx3==2.99
     # via -r requirements.in
-pywin32==312
+pywin32==312 ; sys_platform == "win32"
     # via
     #   pypiwin32
     #   pyttsx3

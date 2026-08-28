@@ -189,7 +189,7 @@ pynacl==1.6.2
     # via paramiko
 pyparsing==3.3.2
     # via pip-requirements-parser
-pypiwin32==223
+pypiwin32==223 ; sys_platform == "win32"
     # via pyttsx3
 pyproject-hooks==1.2.0
     # via
@@ -209,7 +209,7 @@ pytokens==0.4.1
     # via black
 pyttsx3==2.99
     # via -r requirements.in
-pywin32==312
+pywin32==312 ; sys_platform == "win32"
     # via
     #   pypiwin32
     #   pyttsx3
