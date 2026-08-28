@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
 
       - name: Compile high-risk Python files
         run: |
@@ -148,7 +148,7 @@ jobs:
 
       - name: isort --check-only
         run: |
-          python -m isort --check-only backend scripts tests video_providers.py
+          isort --check-only backend scripts tests video_providers.py
 
       - name: mypy (progressive core modules)
         run: |

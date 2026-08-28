@@ -68,7 +68,7 @@ multidict==6.7.1
     #   yarl
 paramiko==5.0.0
     # via -r requirements.in
-pillow==12.2.0
+pillow==12.3.0
     # via -r requirements.in
 propcache==0.5.2
     # via

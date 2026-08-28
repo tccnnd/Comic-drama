@@ -148,7 +148,7 @@ pathspec==1.1.1
     # via
     #   black
     #   mypy
-pillow==12.2.0
+pillow==12.3.0
     # via -r requirements.in
 pip-api==0.0.34
     # via pip-audit
