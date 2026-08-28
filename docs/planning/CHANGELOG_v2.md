@@ -236,3 +236,16 @@
 - **结论**：分支无任何需保留的独有内容 → 安全删除（`git branch -D`，恢复凭据 `ec7138f3fbbadb09d4664ac16aecaaf4f18a8a35`，reflog 亦保留）
 - **删除后**：分支收敛为仅 `main`；4 个 spec 文件在 main 完整；全量 **527 passed / exit=0**
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-28 — shot-level-video-rendering 覆盖度核查（特性线②启动）
+
+- 产出 `docs/planning/SHOT_LEVEL_COVERAGE.md`：requirement→实现→测试映射（8 FR + 8 AC + 17 task）。
+- **任务完成度 16/17**：仅 task 17（Optional controlled live validation，需真实 provider）未做，属 Gate C。
+- **实测**：Python shot 级测试 **29 passed**；前端 mjs **2 passed**（含 shot_outputs 渲染 + `rerender-shot-video` 控件）。
+- **✅ 后端 API / 项目路径已接入**：`backend/scene_renderer.py` L468 调用 `render_scene_shots_with_provider_policy`，L802 `rerender_scene_shot_video`。
+- **⚠️ 缺口确认：CLI 批处理路径不消费 granularity**（FR-1.3 未完整实现）
+  - 端到端 `--video-render-granularity shot --video-provider local` 跑通（final MP4，exit=0），但 `generation_meta` **无 shot_outputs**，日志无任何 shot 输出
+  - `run_workflow.py` 的 `render_granularity` 仅写 storyboard 元数据（L448/521/551）；渲染走 `rw_render.py` L430-476 **scene 级**单次调用；`rw_render.py` 全文件无 shot 处理
+- **补齐方案已定**（待确认实施）：复用 `render_scene_shots_with_provider_policy`（纯函数式签名，CLI 可复用）→ `rw_render.py` 新增 `render_clip_shots_with_meta`，`run_workflow.py` L478 处最小分支。
+- **附带发现（文档/代码不一致）**：AGENTS.md 的 Required Checks 写 `--input`，实际参数名是 `--story`；且直接跑脚本需 `PYTHONPATH=.`。建议修正 AGENTS.md 示例。
+- **commit**：本地提交，未推 GitHub。
