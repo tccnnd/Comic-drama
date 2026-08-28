@@ -9,7 +9,12 @@
 |---|---|
 | 任务完成度 | **16/17 已勾选**（task 17 = Optional controlled live validation，需真实 provider，属 Gate C） |
 | 后端 API / 项目路径 | ✅ 已完整接入 shot 渲染编排 |
-| **CLI 批处理路径** | ⚠️ **缺口**：`--video-render-granularity shot` 仅写入 storyboard 元数据，渲染不消费 |
+| **CLI 批处理路径** | ✅ **已补齐（2026-08-29，commit 4d6d423）**：`--video-render-granularity shot` 真正驱动逐镜头渲染并产出 `shot_outputs` |
+
+> **补齐后实测（2026-08-29）**：shot 模式 `outputs/run_20260829_005122/` 5/5 场景生成
+> `shot_outputs`（status=fallback、provider=local、duration 正确）+ 5 个 shot clip +
+> assembly manifest；scene 模式回归正常；全量 527 passed。
+> 详见 CHANGELOG_v2「CLI 路径补齐 shot 级渲染（FR-1.3 缺口修复）」。
 
 ---
 
