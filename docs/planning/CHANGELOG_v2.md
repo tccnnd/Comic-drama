@@ -203,3 +203,11 @@
   - Safety/pip-audit 无 CRITICAL：**NOT_EVALUATED**（本地 pypi.org/OSV 网络超时；CI 环境网络正常可跑，配置已就绪）
   - PR 被阻塞验证：**PASS**（security job 存在且失败即阻塞；pre-commit bandit hook 同策略）
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-28 — Phase 3 评估 A/B（任务队列 + 数据库）
+
+- 产出 `docs/planning/PHASE3_EVAL_AB.md`：评估先行结论记录。
+- **评估 A（任务队列）**：现有 `task_store`（内存 dict+Lock）+ `event_bus`（asyncio.Queue 单例）+ WebSocket 进度流，配 daemon 线程执行，满足单用户本地应用需求 → **无需引入 Celery**（引入反而增加 broker 运维负担并破坏单机部署）。可选改进：任务状态持久化（低优先级，用户反馈才做）。
+- **评估 B（数据库）**：`workspace/proj_*/project.json` 事实源 + atomic_write + 版本快照（keep=2）+ 向后兼容归一化已完整；数据量 4 项目 × ~1.2MB，glob 遍历毫秒级 → **暂不引入数据库**。触发条件（项目数百 / 全文搜索 / 跨项目聚合）才做 SQLite 只读镜像。
+- **P3.x 立项建议**：P3.1 Prometheus / P3.2 OpenTelemetry **deferred**（单机无抓取/无分布式链路，价值低）；P3.3 插件系统**立项**（E5 约束：只承诺显式注册/版本校验/错误边界/禁用）。
+- **commit**：本地提交，未推 GitHub。
