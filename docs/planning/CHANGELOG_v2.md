@@ -224,3 +224,15 @@
 - **测试**：`tests/test_plugin_registry.py`（9 个）——注册/查询、id 重复拒绝、api_version 主版本不匹配拒绝、主版本匹配带次版本通过、禁用可见性、invoke 调用、缺失/禁用返回 None、错误边界隔离、空 id 拒绝。
 - **验收**：py_compile OK；插件测试 9 passed；全量 **527 passed / 10 warnings / exit=0**（+9）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-28 — 分支去留处置：删除 codex/director-interpretation-mainline
+
+- **决策依据（先调查再动手）**：
+  - 分支相对 main：`main` 独有 51 commit / 分支独有 2 commit（`f8d8b76` spec 初版、`ec7138f` merge）
+  - 分支独有文件变更：仅 `.kiro/specs/director-interpretation-mainline/` 4 个 spec 文件（+660 行）
+  - **blob 比对**：`.config.kiro`/`design.md`/`requirements.md` main 与分支**完全相同**；`tasks.md` 有差异
+  - **tasks.md 差异定性**：main 版由 `ddc4391 "Track visual_content source provenance"` 更新过（任务 8/9/10/11 已勾选 `[x]`、含 visual_prototype scope note），**main 版领先分支**；分支版为旧版（未勾选）
+  - 反向印证：`git diff main branch` 只有 D/M（分支缺失/落后于 main），无 main 缺失的分支独有内容
+- **结论**：分支无任何需保留的独有内容 → 安全删除（`git branch -D`，恢复凭据 `ec7138f3fbbadb09d4664ac16aecaaf4f18a8a35`，reflog 亦保留）
+- **删除后**：分支收敛为仅 `main`；4 个 spec 文件在 main 完整；全量 **527 passed / exit=0**
+- **commit**：本地提交，未推 GitHub。
