@@ -211,3 +211,16 @@
 - **评估 B（数据库）**：`workspace/proj_*/project.json` 事实源 + atomic_write + 版本快照（keep=2）+ 向后兼容归一化已完整；数据量 4 项目 × ~1.2MB，glob 遍历毫秒级 → **暂不引入数据库**。触发条件（项目数百 / 全文搜索 / 跨项目聚合）才做 SQLite 只读镜像。
 - **P3.x 立项建议**：P3.1 Prometheus / P3.2 OpenTelemetry **deferred**（单机无抓取/无分布式链路，价值低）；P3.3 插件系统**立项**（E5 约束：只承诺显式注册/版本校验/错误边界/禁用）。
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-08-28 — P3.3 插件系统（E5 收敛范围）
+
+- **新增 `backend/plugin_registry.py`**：通用插件注册框架，严格按 E5 收敛承诺实现：
+  - 显式注册：`register()` 校验 id 唯一 + `api_version` 主版本匹配（`PluginVersionError`）
+  - 版本校验：插件声明 `api_version`（语义化主版本），主版本不匹配拒绝注册
+  - 错误边界：`invoke()` 捕获插件任何异常 → WARNING + 返回 None，绝不让插件异常穿透宿主
+  - 禁用插件：`disable()`/`enable()`/`is_disabled()`；禁用后 `get`/`invoke`/`list`（默认）均不可见
+- **明确不承诺（E5）**：热加载、安全隔离（插件在宿主进程内执行；隔离需独立进程+IPC+超时，另立项）。
+- **范围说明**：初版交付独立通用框架 + 测试；`video_providers.py` 现有 registry 暂不迁移（高风险文件，避免破坏 provider 契约；迁移另议）。
+- **测试**：`tests/test_plugin_registry.py`（9 个）——注册/查询、id 重复拒绝、api_version 主版本不匹配拒绝、主版本匹配带次版本通过、禁用可见性、invoke 调用、缺失/禁用返回 None、错误边界隔离、空 id 拒绝。
+- **验收**：py_compile OK；插件测试 9 passed；全量 **527 passed / 10 warnings / exit=0**（+9）。
+- **commit**：本地提交，未推 GitHub。
