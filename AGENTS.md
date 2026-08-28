@@ -63,7 +63,20 @@ For provider or workflow changes, also run a short sample workflow when the
 runtime dependencies are available:
 
 ```powershell
-python scripts\run_workflow.py --input inputs\sample_story.txt
+# --story（不是 --input）；PYTHONPATH=. 必需，否则报
+# ModuleNotFoundError: No module named 'backend'
+$env:PYTHONPATH = "."
+python -m scripts.run_workflow --story inputs\sample_story.txt
+# 指定 provider / 渲染粒度时可追加：
+python -m scripts.run_workflow --story inputs\sample_story.txt --keyframe-provider local --video-provider local --video-render-granularity scene|shot
+```
+
+Verification environment note: if the sandbox wraps `python` and reports
+`Warning: Python was not found but appears to be installed`, call the project
+virtualenv interpreter directly:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.run_workflow --story inputs\sample_story.txt
 ```
 
 ## Git Safety
@@ -73,6 +86,25 @@ python scripts\run_workflow.py --input inputs\sample_story.txt
 - Keep external reference projects under `_external/` as references, not as
   copied source unless licensing and intent are explicit.
 - Prefer small release-oriented commits after a feature has passed checks.
+
+## CI Gate (established 2026-08-29)
+
+Changes to any of the following MUST go through a PR so the full Linux CI
+pipeline runs before they land on `main`:
+
+- `requirements*.in/.txt` (dependencies, platform markers, version pins)
+- `.github/workflows/*` (CI jobs, commands, runners)
+- Python entry points relied on by CI (`python -m <pkg>` usage — verify the
+  package actually supports `-m` on Linux, e.g. isort 9 does not)
+- Files listed under High-Risk Files
+
+Rationale: the 2026-08-28 main CI failures were all "validated locally on
+Windows but broken on Linux CI" (missing `sys_platform` markers for
+pywin32/pypiwin32, `python -m isort` removed in isort 9, backend job missing
+pytest). Local Windows checks do not cover the Linux runner environment.
+
+After merging dependency changes, confirm the run is green
+(`gh run list --limit 1`) before starting dependent work.
 
 ## Current Version Direction
 
