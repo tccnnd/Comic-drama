@@ -13,14 +13,6 @@ import {
   bgmFiles,
   planners,
   cameraOptions,
-  reviewStatusOptions,
-  reviewFilterOptions,
-  reviewGovernanceFilterOptions,
-  reviewProvenanceFilterOptions,
-  reviewDeliverableFilterOptions,
-  reviewPrototypeModeFilterOptions,
-  reviewPrototypeGapFilterOptions,
-  reviewSortOptions,
   TIMELINE_PX_PER_SECOND,
 } from "./state.js";
 import {
@@ -37,10 +29,7 @@ import {
   selectedScene,
   selectedCharacter,
   canonicalTimeline,
-  canonicalPictureTrack,
   timelineSceneItems,
-  characterKey,
-  sceneCharacterNames,
   sceneAssetGaps,
   projectAssetGapEntries,
   sceneAudioManifest,
@@ -60,11 +49,6 @@ import {
   assetStatusLabel,
   assetTypeLabel,
   cameraClassName,
-  sceneReviewMeta,
-  reviewStatusLabel,
-  reviewStatusClass,
-  deriveReviewOverview,
-  applyReviewTriage,
 } from "./utils.js";
 import { renderVoiceCatalogDatalist } from "./api.js";
 import { stopTemporalPreview } from "./timeline.js";
@@ -312,6 +296,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "plan") return renderPlanView(project);
   if (state.activeTab === "assets") return renderAssetsView(project);
   if (state.activeTab === "storyboard") return renderStoryboardView(project);
+  if (state.activeTab === "review") return renderWorkbenchView(project);
   if (state.activeTab === "produce") return renderProduceView(project);
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
@@ -320,7 +305,6 @@ export function renderActiveView(project) {
 // ─── Phase ① Plan View ───────────────────────────────────────────────────────
 export function renderPlanView(project) {
   const scenes = timelineSceneItems(project);
-  const summary = project.summary || {};
   return `
     <div class="plan-layout">
       <div class="plan-main">
@@ -426,7 +410,6 @@ function renderSceneThumbCard(scene) {
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────
 export function renderProduceView(project) {
   const scenes = timelineSceneItems(project);
-  const summary = project.summary || {};
   const totalScenes = scenes.length;
   const withImage = scenes.filter((s) => s.assets?.image_path).length;
   const withAudio = scenes.filter((s) => s.assets?.audio_path).length;
@@ -476,43 +459,6 @@ function renderProduceCard(scene) {
       <div class="produce-card-actions">
         <button class="ghost-button small" type="button" data-action="rerender-video" data-scene-order="${h(scene.order)}">生成</button>
       </div>
-    </div>
-  `;
-}
-
-export function renderOverviewView(project) {
-  const scenes = timelineSceneItems(project);
-  const summary = project.summary || {};
-  const runtime = project.runtime || {};
-  return `
-    <div class="dashboard-grid">
-      <section id="projectOverviewPanel" class="window-pane">
-        <div class="window-head">项目总览 <small>${h(project.settings?.global_style || "竖屏动态漫画")}</small></div>
-        <div class="window-body section-stack">
-          <div class="overview-cards">
-            <div class="metric-card"><div class="muted">分镜</div><div class="metric-value">${summary.total_scenes || scenes.length}</div></div>
-            <div class="metric-card"><div class="muted">角色</div><div class="metric-value">${summary.total_characters || (project.characters || []).length}</div></div>
-            <div class="metric-card"><div class="muted">预计时长</div><div class="metric-value">${formatSeconds(scenes.reduce((sum, scene) => sum + asNumber(scene.duration_seconds, 0), 0))}</div></div>
-          </div>
-          <div class="scene-card">
-            <div class="item-title">故事文本</div>
-            <div class="item-meta">${nl(String(project.story_text || "").slice(0, 600))}</div>
-          </div>
-          <div class="preview-list">${scenes.slice(0, 6).map(renderSceneMiniCard).join("")}</div>
-        </div>
-      </section>
-      <section class="window-pane">
-        <div class="window-head">流水线状态 <small>${h(runtime.updated_at || "")}</small></div>
-        <div class="window-body section-stack">
-          <span class="status-pill ${statusClass(runtime.status)}">${h(runtime.status || "idle")} · ${runtime.progress ?? 0}%</span>
-          <div class="muted">${h(runtime.message || "等待操作")}</div>
-          ${renderOutputLinks(project)}
-          <div class="row-actions">
-            <button class="primary-button" type="button" data-action="switch-tab" data-tab="workbench" data-jump-section="sceneWorkbenchSection">进入工作台</button>
-            <button class="ghost-button" type="button" data-action="switch-tab" data-tab="script" data-jump-section="scriptRecognitionPanel">识别剧本</button>
-          </div>
-        </div>
-      </section>
     </div>
   `;
 }
@@ -612,6 +558,35 @@ export function renderSettingsView(project) {
       </section>
     </div>
     ${renderLlmConfigSection()}
+    ${renderEnhanceSection()}
+  `;
+}
+
+function renderEnhanceSection() {
+  return `
+    <section id="enhanceSection" class="window-pane" style="margin-top:16px">
+      <div class="window-head">ComfyUI / TTS 引擎 <small>可选增强层，不进入主链路</small></div>
+      <div class="window-body section-stack">
+        ${renderComfyUIStatus()}
+        <div class="form-grid">
+          ${fieldText("comfyuiBaseUrlInput", "ComfyUI URL", storedValue("comfyuiBaseUrl", "http://127.0.0.1:8188"))}
+        </div>
+        <div class="row-actions">
+          <button class="primary-button" type="button" data-action="open-comfyui">打开 ComfyUI</button>
+          <button class="ghost-button" type="button" data-action="save-comfyui-url">保存地址</button>
+          <button class="ghost-button" type="button" data-action="check-comfyui">检测连接</button>
+        </div>
+        <div class="form-grid">
+          ${fieldText("providerCosyVoiceInput", "OmniVoice URL", state.ttsProviders.cosyvoice || "")}
+          ${fieldText("providerGptSovitsInput", "GPT-SoVITS URL", state.ttsProviders.gpt_sovits || "")}
+          ${fieldText("providerFishInput", "Fish Speech URL", state.ttsProviders.fish || "")}
+          ${fieldText("providerIndexTtsInput", "IndexTTS2 URL", state.ttsProviders.indextts || "")}
+        </div>
+        <div class="row-actions">
+          <button class="primary-button" type="button" data-action="save-tts-providers">保存引擎地址</button>
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -1130,7 +1105,7 @@ function renderAssetCard(asset) {
   `;
 }
 
-function renderCharacterEditor(character, charIndex) {
+function renderCharacterEditor(character) {
   return `
     <div class="form-grid">
       ${fieldText("characterNameInput", "角色名", character.name || "")}
@@ -1153,47 +1128,6 @@ function renderCharacterEditor(character, charIndex) {
     </div>
     ${character.reference_image_url ? `<div class="clip-preview"><div class="thumb-frame"><img src="${h(character.reference_image_url)}" alt=""></div><div class="muted">参考图已绑定。</div></div>` : ""}
     ${renderVoicePreviewResult()}
-  `;
-}
-
-export function renderTemplatesView() {
-  return `
-    <div class="split-grid">
-      <section id="templateLibraryPanel" class="window-pane">
-        <div class="window-head">外部 TTS / 视频增强</div>
-        <div class="window-body section-stack">
-          ${renderComfyUIStatus()}
-          <div class="form-grid">
-            ${fieldText("comfyuiBaseUrlInput", "ComfyUI URL", storedValue("comfyuiBaseUrl", "http://127.0.0.1:8188"))}
-          </div>
-          <div class="row-actions">
-            <button class="primary-button" type="button" data-action="open-comfyui">打开 ComfyUI</button>
-            <button class="ghost-button" type="button" data-action="save-comfyui-url">保存地址</button>
-          </div>
-          <div class="row-actions">
-            <button class="ghost-button" type="button" data-action="check-comfyui">检测连接</button>
-          </div>
-          <div class="form-grid">
-            ${fieldText("providerCosyVoiceInput", "OmniVoice URL", state.ttsProviders.cosyvoice || "")}
-            ${fieldText("providerGptSovitsInput", "GPT-SoVITS URL", state.ttsProviders.gpt_sovits || "")}
-            ${fieldText("providerFishInput", "Fish Speech URL", state.ttsProviders.fish || "")}
-            ${fieldText("providerIndexTtsInput", "IndexTTS2 URL", state.ttsProviders.indextts || "")}
-          </div>
-          <div class="row-actions">
-            <button class="primary-button" type="button" data-action="save-tts-providers">保存引擎地址</button>
-            <button class="ghost-button" type="button" data-action="refresh-all">刷新目录</button>
-          </div>
-          <div class="muted">ComfyUI / AnimateDiff / CogVideoX 继续作为可选增强层，不进入主链路。</div>
-        </div>
-      </section>
-      <section class="window-pane">
-        <div class="window-head">声线试听 <small>${state.voiceCatalog.length} 条目录</small></div>
-        <div class="window-body section-stack">
-          ${renderVoicePreviewForm()}
-          ${renderVoicePreviewResult()}
-        </div>
-      </section>
-    </div>
   `;
 }
 
@@ -1229,26 +1163,6 @@ function renderComfyUIStatus() {
   `;
 }
 
-function renderVoicePreviewForm() {
-  const scene = selectedScene();
-  const character = selectedCharacter();
-  const source = character || scene || {};
-  return `
-    <div class="form-grid">
-      ${fieldSelect("voicePreviewEngineInput", "引擎", voiceEngines, source.voice_engine || "auto")}
-      <label class="field"><span>Voice</span><input id="voicePreviewVoiceInput" list="voiceCatalogList" type="text" value="${h(source.voice_id || source.voice_profile || "zh-CN-XiaoxiaoNeural")}"></label>
-      ${fieldNumber("voicePreviewRateInput", "语速", source.voice_rate ?? 1, 'min="0.5" max="2" step="0.05"')}
-      ${fieldNumber("voicePreviewPitchInput", "音高", source.voice_pitch ?? 0, 'min="-24" max="24" step="0.5"')}
-      ${fieldNumber("voicePreviewVolumeInput", "音量", source.voice_volume ?? 1, 'min="0" max="2" step="0.05"')}
-      ${fieldText("voicePreviewEmotionInput", "情绪", source.emotion || "")}
-      ${fieldText("voicePreviewReferenceAudioInput", "参考音频路径", source.reference_audio_path || "")}
-      ${fieldTextarea("voicePreviewReferenceTextInput", "参考音频文本", source.reference_text || "", 3)}
-      ${fieldTextarea("voicePreviewTextInput", "试听文本", scene?.dialogue || "这是一次漫剧配音试听。", 3)}
-    </div>
-    <button class="primary-button" type="button" data-action="preview-voice">生成试听</button>
-  `;
-}
-
 function renderVoicePreviewResult() {
   if (!state.voicePreview?.url) return "";
   return `
@@ -1274,10 +1188,6 @@ export function renderWorkbenchView(project) {
         </section>
       </div>
       <div class="workbench-main">
-      <section id="sceneWorkbenchSection" class="window-pane workbench-secondary">
-        <div class="window-head">时间轴<small>拖拽片段右侧手柄调整时长</small></div>
-        <div class="window-body">${renderTimelinePanel(project)}</div>
-      </section>
       <section id="storyboardReviewSection" class="window-pane workbench-secondary">
         <div class="window-head">Storyboard review <small>canonical timeline 实片台</small></div>
         <div class="window-body">${renderStoryboardReviewCanvas(project)}</div>
@@ -1286,10 +1196,6 @@ export function renderWorkbenchView(project) {
       ${renderSelectedSceneWindow(project)}
     </div>
   `;
-}
-
-export function renderSceneView(project) {
-  return renderSelectedSceneWindow(project);
 }
 
 function renderSceneCard(scene) {
@@ -1411,28 +1317,6 @@ function renderGenerationBadge(scene) {
   const attempts = Number(meta.attempts || 0);
   const suffix = [provider, attempts > 1 ? `${attempts} tries` : ""].filter(Boolean).join(" · ");
   return `<div class="generation-badge ${generationBadgeClass(meta)}">${h(generationLabel(meta))}${suffix ? ` · ${h(suffix)}` : ""}</div>`;
-}
-function renderGenerationDetail(scene) {
-  const meta = sceneGenerationMeta(scene);
-  if (!Object.keys(meta).length) {
-    return `<div class="generation-detail is-unknown"><strong>Generation</strong><span>Unknown provenance</span></div>`;
-  }
-  return `
-    <div class="generation-detail ${generationBadgeClass(meta)}">
-      <strong>${h(generationLabel(meta))}</strong>
-      <span>${h(meta.provider_label || meta.provider_id || "provider unknown")} · ${h(meta.backend || "backend unknown")} · ${h(meta.attempts || 0)} attempt(s)</span>
-      ${meta.error ? `<span class="danger-text">${h(meta.error)}</span>` : ""}
-      ${Array.isArray(meta.warnings) && meta.warnings.length ? `<span>${h(meta.warnings[0])}</span>` : ""}
-    </div>
-  `;
-}
-function renderGovernanceBadge(scene) {
-  const status = governanceStatus(scene);
-  const governance = sceneGovernance(scene);
-  const policy =
-    governance.policy && typeof governance.policy === "object" ? governance.policy : {};
-  const blocked = policy.mode === "block" && governance.deliverable === false;
-  return `<div class="governance-badge ${governanceStatusClass(status)}${blocked ? " is-blocked" : ""}">${h(governanceStatusLabel(status))}${blocked ? " · blocked" : ""}</div>`;
 }
 function renderGovernanceDetail(scene) {
   const governance = sceneGovernance(scene);

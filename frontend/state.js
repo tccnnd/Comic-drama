@@ -162,8 +162,9 @@ export const tabs = [
   ["plan", "① 策划", "planSection"],
   ["assets", "② 资产", "assetsSection"],
   ["storyboard", "③ 分镜", "storyboardSection"],
-  ["produce", "④ 出片", "produceSection"],
-  ["settings", "⑤ 设置", "settingsSection"],
+  ["review", "④ 审查", "storyboardReviewSection"],
+  ["produce", "⑤ 出片", "produceSection"],
+  ["settings", "⑥ 设置", "settingsSection"],
 ];
 
 export const voiceEngines = [

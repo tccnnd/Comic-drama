@@ -914,15 +914,22 @@ export async function boot() {
   });
   render();
   try {
-    await Promise.all([
-      loadVoiceCatalog(),
-      loadTtsProviders(),
-      loadVideoProviderStatus(),
-      loadComfyUIStatus(),
-    ]);
+    // 项目列表加载与状态探测解耦：任一状态接口失败不应阻断项目列表。
     await loadProjects(true);
   } catch (error) {
     render();
     showToast(error.message || "启动失败", "danger");
+    return;
+  }
+  const statusResults = await Promise.allSettled([
+    loadVoiceCatalog(),
+    loadTtsProviders(),
+    loadVideoProviderStatus(),
+    loadComfyUIStatus(),
+  ]);
+  const failures = statusResults.filter((item) => item.status === "rejected");
+  if (failures.length) {
+    const reason = failures[0].reason;
+    showToast(`部分状态加载失败：${reason?.message || reason || "未知错误"}`, "warn");
   }
 }
