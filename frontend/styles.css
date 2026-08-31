@@ -3282,3 +3282,272 @@ select:focus {
   padding: 6px 14px;
   min-height: 30px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Phase B — Visual Layer (2026-09-01)
+   Override-only section: appended last, same specificity wins.
+   Safe to review or revert independently of the base styles above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #0b0f16;
+  --surface: #111722;
+  --surface-2: #151d2a;
+  --surface-3: #1c2635;
+  --line: #293550;
+  --accent: #67b7ff;
+  --accent-strong: #3d95ff;
+  --accent-glow: rgba(103, 183, 255, 0.22);
+  --ok-glow: rgba(84, 209, 156, 0.18);
+  --danger-glow: rgba(255, 122, 122, 0.16);
+  --radius: 10px;
+  --radius-lg: 12px;
+  --speed: 0.16s;
+  --speed-slow: 0.28s;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(103, 183, 255, 0.05), transparent 60%),
+    radial-gradient(900px 420px at -10% 110%, rgba(233, 183, 101, 0.035), transparent 55%),
+    var(--bg);
+}
+
+/* digits align everywhere: durations, counts, sizes */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3750;
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4a6d;
+}
+
+::selection {
+  background: rgba(103, 183, 255, 0.28);
+}
+
+/* ── Interactive feedback ─────────────────────────────────────────────── */
+
+button,
+.button-link {
+  transition:
+    background var(--speed) ease,
+    border-color var(--speed) ease,
+    color var(--speed) ease,
+    box-shadow var(--speed) ease,
+    transform 0.06s ease;
+}
+
+button:active:not(:disabled),
+.button-link:active {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+.button-link:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+button:hover:not(:disabled):not(.tabbar button) {
+  border-color: #46608c;
+}
+
+.tabbar button:hover:not(.is-active) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: transparent;
+}
+
+/* ── Button hierarchy ─────────────────────────────────────────────────── */
+
+button,
+.button-link {
+  border-radius: var(--radius);
+}
+
+.primary-button {
+  background: linear-gradient(180deg, #4396f5, #2a6fc4);
+  border-color: rgba(103, 183, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 10px rgba(63, 148, 245, 0.25);
+  font-weight: 600;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #55a4ff, #3479d1);
+  border-color: #8ec4ff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 3px 14px rgba(63, 148, 245, 0.38);
+}
+
+.danger-button,
+.project-delete-button {
+  background: rgba(255, 122, 122, 0.12);
+  border-color: rgba(255, 122, 122, 0.4);
+  color: #ff8f8f;
+}
+
+.danger-button:hover:not(:disabled),
+.project-delete-button:hover:not(:disabled) {
+  background: rgba(255, 122, 122, 0.2);
+  border-color: rgba(255, 122, 122, 0.65);
+  color: #ffb3b3;
+}
+
+.ghost-button,
+.button-link {
+  background: var(--surface-2);
+}
+
+.ghost-button:hover:not(:disabled),
+.button-link:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: #4a5b75;
+}
+
+/* isolate destructive action from production actions in the topbar */
+.toolbar .danger-button {
+  margin-left: 14px;
+  padding-left: 14px;
+  box-shadow: -12px 0 0 -11px rgba(255, 255, 255, 0.14); /* hairline separator */
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────── */
+
+.tabbar button {
+  border-color: transparent;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.tabbar button.is-active {
+  background: linear-gradient(180deg, rgba(103, 183, 255, 0.16), rgba(103, 183, 255, 0.08));
+  border-color: rgba(103, 183, 255, 0.45);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  font-weight: 600;
+}
+
+/* ── Panels & cards ───────────────────────────────────────────────────── */
+
+.window-pane,
+.panel {
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.window-head {
+  letter-spacing: 0.01em;
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.project-item,
+.scene-card,
+.character-card,
+.asset-card,
+.template-card,
+.diagnostic-card {
+  transition:
+    border-color var(--speed) ease,
+    background var(--speed) ease,
+    box-shadow var(--speed) ease;
+}
+
+.project-item.is-active,
+.scene-card.is-active,
+.character-card.is-active {
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px rgba(103, 183, 255, 0.25);
+}
+
+.project-main:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.metric-card {
+  transition: border-color var(--speed) ease;
+}
+
+.summary-chip:hover,
+.status-pill:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Inputs ───────────────────────────────────────────────────────────── */
+
+textarea,
+input,
+select {
+  border-radius: var(--radius);
+  transition:
+    border-color var(--speed) ease,
+    box-shadow var(--speed) ease,
+    background var(--speed) ease;
+}
+
+textarea:hover,
+input:hover,
+select:hover {
+  border-color: #3a4a6d;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────── */
+
+.toast {
+  border-radius: var(--radius);
+  border-left: 3px solid var(--accent);
+  animation: toast-in var(--speed-slow) ease;
+}
+
+.toast.ok {
+  border-left-color: var(--ok);
+}
+
+.toast.danger {
+  border-left-color: var(--danger);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Boot ─────────────────────────────────────────────────────────────── */
+
+.boot-title {
+  background: linear-gradient(120deg, #e8edf6, #67b7ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
