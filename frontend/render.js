@@ -340,6 +340,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "review") return renderWorkbenchView(project);
   if (state.activeTab === "produce") return renderProduceView(project);
   if (state.activeTab === "tasks") return renderTasksView();
+  if (state.activeTab === "bgm") return renderBgmView();
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
@@ -708,6 +709,204 @@ export function renderTasksDetail() {
         }</div>
       </div>
     </div>`;
+}
+
+// ─── BGM Library (C2) ─────────────────────────────────────────────────────────
+// 后端 bgm.py 实测返回：{ library: { 风格: [{name, path, size_kb}] }, root }
+// 即每个素材只有 name(去扩展名) / path(assets/audio/bgm/{style}/{file}) / size_kb
+// 与风格分组。后端没有时长 / 码率 / 情绪标签 / 绑定数，前端如实展示，不编造。
+// 试听 / 下载走 app.py 的只读静态挂载 /bgm（由 bgmFileUrl 拼出）。
+
+function bgmFileUrl(path) {
+  // path: "assets/audio/bgm/{style}/{file}"
+  const parts = String(path || "").split("/").filter(Boolean);
+  if (parts.length < 3) return "";
+  const style = parts[parts.length - 2];
+  const file = parts[parts.length - 1];
+  return `/bgm/${encodeURIComponent(style)}/${encodeURIComponent(file)}`;
+}
+
+function flattenBgm() {
+  const lib = state.bgm || {};
+  const out = [];
+  for (const [style, files] of Object.entries(lib)) {
+    for (const f of Array.isArray(files) ? files : []) {
+      out.push({ style, name: f.name, path: f.path, size_kb: f.size_kb });
+    }
+  }
+  return out;
+}
+
+function findBgm(path) {
+  return flattenBgm().find((t) => t.path === path) || null;
+}
+
+function filteredBgm() {
+  const keyword = String(state.bgmKeyword || "").trim().toLowerCase();
+  return flattenBgm().filter((t) => {
+    if (state.selectedBgmStyle !== "all" && t.style !== state.selectedBgmStyle) return false;
+    if (!keyword) return true;
+    return [t.name, t.style, t.path].join(" ").toLowerCase().includes(keyword);
+  });
+}
+
+function bgmTime(value) {
+  const parsed = Date.parse(value || "");
+  if (!Number.isFinite(parsed)) return "—";
+  return new Date(parsed).toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function bgmSizeLabel(kb) {
+  const n = Number(kb) || 0;
+  return n >= 1024 ? `${(n / 1024).toFixed(1)} MB` : `${Math.round(n)} KB`;
+}
+
+export function renderBgmView() {
+  const styles = Object.keys(state.bgm || {});
+  return `
+    <div class="bgm-layout">
+      <div id="bgmStats" class="bgm-stats">${renderBgmStats()}</div>
+      <div class="window-pane bgm-toolbar">
+        <div class="window-body row-actions">
+          <div class="bgm-filter-group">
+            ${["all", ...styles]
+              .map(
+                (s) =>
+                  `<button type="button" class="ghost-button bgm-filter ${
+                    state.selectedBgmStyle === s ? "is-active" : ""
+                  }" data-action="bgm-filter" data-style="${h(s)}">${s === "all" ? "全部" : h(s)}</button>`
+              )
+              .join("")}
+          </div>
+          <input
+            id="bgmKeywordInput"
+            class="field-text bgm-search"
+            type="search"
+            placeholder="搜索素材名 / 风格…"
+            value="${h(state.bgmKeyword || "")}"
+            data-action="bgm-search"
+          />
+          <span class="spacer"></span>
+          <span id="bgmSyncHint" class="muted fs11">${
+            state.bgmLoading ? "同步中…" : state.bgmError ? "同步失败" : `已同步 ${bgmTime(state.bgmLastSync)}`
+          }</span>
+          <button class="ghost-button" type="button" data-action="refresh-bgm">刷新</button>
+          <button class="primary-button" type="button" data-action="upload-bgm">上传 BGM</button>
+          <input
+            id="bgmFileInput"
+            type="file"
+            accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,audio/*"
+            style="display:none"
+            data-action="bgm-file"
+          />
+        </div>
+      </div>
+      <div class="bgm-body">
+        <div class="window-pane bgm-list-pane">
+          <div class="window-head">素材列表<div class="spacer"></div><small>点击卡片试听</small></div>
+          <div class="window-body bgm-list-body">
+            ${
+              state.bgmError
+                ? `<div class="status-pill danger">加载失败：${h(state.bgmError)}</div>`
+                : ""
+            }
+            <div id="bgmCards" class="bgm-cards">${renderBgmCards()}</div>
+          </div>
+        </div>
+        <div id="bgmDetail" class="window-pane bgm-detail-pane">${renderBgmDetail()}</div>
+      </div>
+      <div id="bgmPlayer" class="bgm-player">${renderBgmPlayer()}</div>
+    </div>`;
+}
+
+export function renderBgmStats() {
+  const all = flattenBgm();
+  const styleCount = Object.keys(state.bgm || {}).length;
+  const totalKb = all.reduce((sum, t) => sum + (Number(t.size_kb) || 0), 0);
+  const selected = state.selectedBgmPath ? findBgm(state.selectedBgmPath)?.name || "—" : "—";
+  const cards = [
+    ["素材总数", all.length, ""],
+    ["风格数", styleCount, ""],
+    ["总大小", bgmSizeLabel(totalKb), ""],
+    ["试听中", selected, state.selectedBgmPath ? "ok" : ""],
+  ];
+  return cards
+    .map(
+      ([label, value, tone]) => `
+        <div class="bgm-stat">
+          <span class="bgm-stat-label">${h(label)}</span>
+          <span class="bgm-stat-value ${tone ? `is-${tone}` : ""}">${h(String(value))}</span>
+        </div>`
+    )
+    .join("");
+}
+
+export function renderBgmCards() {
+  const rows = filteredBgm();
+  if (!rows.length) {
+    return `<div class="muted" style="padding:16px 6px">${
+      state.bgm && Object.keys(state.bgm).length
+        ? "没有匹配的素材"
+        : "素材库为空 · 点击右上角「上传 BGM」添加本地音频"
+    }</div>`;
+  }
+  return rows
+    .map((t) => {
+      const selected = state.selectedBgmPath === t.path;
+      return `
+        <div class="bgm-card ${selected ? "is-selected" : ""}" data-action="select-bgm" data-path="${h(t.path)}">
+          <div class="row"><b class="fs12">${h(t.name)}</b><div class="spacer"></div><span class="chip">${h(t.style)}</span></div>
+          <div class="row fs11 muted" style="margin-top:6px">
+            <span class="mono">${h(bgmSizeLabel(t.size_kb))}</span>
+            <div class="spacer"></div>
+            <button class="ghost-button mini" type="button" data-action="select-bgm" data-path="${h(t.path)}">▶ 试听</button>
+          </div>
+        </div>`;
+    })
+    .join("");
+}
+
+export function renderBgmDetail() {
+  const path = state.selectedBgmPath;
+  if (!path) {
+    return `
+      <div class="window-head">素材详情</div>
+      <div class="window-body"><p class="muted">点击左侧任意素材查看详情、试听与下载。</p></div>`;
+  }
+  const t = findBgm(path);
+  if (!t) {
+    return `
+      <div class="window-head">素材详情</div>
+      <div class="window-body"><p class="muted">加载中…</p></div>`;
+  }
+  const url = bgmFileUrl(t.path);
+  return `
+    <div class="window-head">素材详情</div>
+    <div class="window-body bgm-detail-body">
+      <div class="bgm-kv"><span class="muted">素材名</span><b class="mono fs11">${h(t.name)}</b></div>
+      <div class="bgm-kv"><span class="muted">风格</span><b>${h(t.style)}</b></div>
+      <div class="bgm-kv"><span class="muted">大小</span><b class="mono">${h(bgmSizeLabel(t.size_kb))}</b></div>
+      <div class="bgm-kv"><span class="muted">路径</span><b class="mono fs11">${h(t.path)}</b></div>
+      <div class="row-actions" style="margin-top:8px">
+        <button class="ghost-button mini" type="button" data-action="copy-bgm-path" data-path="${h(t.path)}">复制路径</button>
+        <a class="ghost-button mini" href="${h(url)}" target="_blank" rel="noopener">下载</a>
+        <button class="ghost-button mini" type="button" disabled title="后端未提供删除端点（bgm.py 仅有列表与上传）">删除</button>
+      </div>
+      <p class="fs11 muted-2" style="margin-top:10px">试听请点击左侧卡片或下方播放条；绑定到分镜 / 场景：后端待实现，本版仅做素材库管理。</p>
+    </div>`;
+}
+
+export function renderBgmPlayer() {
+  const path = state.selectedBgmPath;
+  if (!path) {
+    return `<span class="muted fs11">未选择素材 · 点击左侧卡片试听</span>`;
+  }
+  const t = findBgm(path);
+  return `
+    <b class="fs12">${h(t ? t.name : path)}</b>
+    <span class="chip">${h(t ? t.style : "")}</span>
+    <div class="spacer"></div>
+    <audio id="bgmAudioBar" controls preload="none" src="${h(bgmFileUrl(path))}"></audio>`;
 }
 
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────

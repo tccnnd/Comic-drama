@@ -90,8 +90,19 @@ import {
   loadTasks,
   loadTaskDetail,
   loadTaskFiles,
+  loadBgm,
+  uploadBgm,
 } from "./api.js";
-import { render, renderTasksStats, renderTasksRows, renderTasksDetail } from "./render.js";
+import {
+  render,
+  renderTasksStats,
+  renderTasksRows,
+  renderTasksDetail,
+  renderBgmStats,
+  renderBgmCards,
+  renderBgmDetail,
+  renderBgmPlayer,
+} from "./render.js";
 
 import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
 
@@ -188,6 +199,9 @@ async function switchTab(tab, section) {
   if (tab === "tasks") {
     startTasksPoll();
     await refreshTasks();
+  }
+  if (tab === "bgm") {
+    await refreshBgm();
   }
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
@@ -497,6 +511,9 @@ async function handleClick(event) {
     "refresh-tasks",
     "select-task",
     "task-detail",
+    "bgm-filter",
+    "refresh-bgm",
+    "select-bgm",
   ]);
   if (state.busy && !allowedWhileBusy.has(action)) return;
   try {
@@ -515,6 +532,38 @@ async function handleClick(event) {
     }
     if (action === "select-task" || action === "task-detail") {
       await selectTask(button.dataset.taskId || "");
+      return;
+    }
+    if (action === "bgm-filter") {
+      state.selectedBgmStyle = button.dataset.style || "all";
+      render();
+      return;
+    }
+    if (action === "refresh-bgm") {
+      await refreshBgm();
+      return;
+    }
+    if (action === "select-bgm") {
+      await selectBgm(button.dataset.path || "");
+      return;
+    }
+    if (action === "upload-bgm") {
+      const input = document.getElementById("bgmFileInput");
+      if (input) input.click();
+      return;
+    }
+    if (action === "copy-bgm-path") {
+      const path = button.dataset.path || "";
+      const done = () => {
+        const original = button.textContent;
+        button.textContent = "已复制";
+        setTimeout(() => {
+          button.textContent = original;
+        }, 1200);
+      };
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(path).then(done).catch(() => {});
+      }
       return;
     }
     if (action === "select-project") {
@@ -822,6 +871,14 @@ function handleChange(event) {
     event.target.value = "";
     return;
   }
+  if (event.target?.id === "bgmFileInput") {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleBgmFile(file).catch((error) => showToast(error?.message || "上传失败", "danger"));
+    }
+    event.target.value = "";
+    return;
+  }
   // Auto-fill reference text when selecting a voice sample
   if (
     event.target?.id === "characterReferenceAudioInput" ||
@@ -861,6 +918,13 @@ function handleInput(event) {
     state.taskKeyword = event.target.value;
     const tbody = document.getElementById("tasksTableBody");
     if (tbody) tbody.innerHTML = renderTasksRows();
+    return;
+  }
+  if (event.target?.dataset?.action === "bgm-search") {
+    // BGM 搜索：局部刷新卡片网格，保留输入焦点（与 task-search 同一手法）
+    state.bgmKeyword = event.target.value;
+    const cards = document.getElementById("bgmCards");
+    if (cards) cards.innerHTML = renderBgmCards();
     return;
   }
   if (state.modal && event.target?.dataset?.modalField) {
@@ -967,6 +1031,101 @@ async function selectTask(taskId) {
     state.tasksError = error?.message || "加载任务详情失败";
   } finally {
     patchTasksDom();
+  }
+}
+
+// ─── BGM Library (C2) ──────────────────────────────────────────────────────────
+// 与 C1 任务中心不同，BGM 库不是实时数据：素材只在上传时变化，因此不做轮询，
+// 仅在进入该页时 refreshBgm 一次 + 上传后刷新。搜索 / 筛选走局部 DOM 替换保留焦点。
+
+function bgmSyncText() {
+  if (state.bgmLoading) return "同步中…";
+  if (state.bgmError) return "同步失败";
+  if (!state.bgmLastSync) return "尚未同步";
+  return `已同步 ${new Date(state.bgmLastSync).toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
+function patchBgmDom() {
+  if (state.activeTab !== "bgm") return;
+  const stats = document.getElementById("bgmStats");
+  const cards = document.getElementById("bgmCards");
+  const detail = document.getElementById("bgmDetail");
+  const player = document.getElementById("bgmPlayer");
+  const hint = document.getElementById("bgmSyncHint");
+  if (stats) stats.innerHTML = renderBgmStats();
+  if (cards) cards.innerHTML = renderBgmCards();
+  if (detail) detail.innerHTML = renderBgmDetail();
+  if (player) player.innerHTML = renderBgmPlayer();
+  if (hint) hint.textContent = bgmSyncText();
+}
+
+export async function refreshBgm() {
+  if (state.activeTab !== "bgm") return;
+  state.bgmLoading = true;
+  patchBgmDom();
+  try {
+    await loadBgm();
+    state.bgmError = "";
+  } catch (error) {
+    state.bgmError = error?.message || "加载 BGM 素材库失败";
+  } finally {
+    state.bgmLoading = false;
+    patchBgmDom();
+  }
+}
+
+async function selectBgm(path) {
+  if (state.selectedBgmPath === path) return;
+  state.selectedBgmPath = path;
+  patchBgmDom();
+  const audio = document.getElementById("bgmAudioBar");
+  if (audio) audio.play().catch(() => {});
+}
+
+const BGM_UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // 后端上限 10 MB
+const BGM_ALLOWED_EXT = [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"];
+const BGM_ALLOWED_STYLE = /^[a-zA-Z0-9_-]+$/;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("读取文件失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleBgmFile(file) {
+  if (!file) return;
+  const name = file.name || "bgm_upload";
+  const ext = name.toLowerCase().slice(name.lastIndexOf("."));
+  if (!BGM_ALLOWED_EXT.includes(ext)) {
+    throw new Error(`不支持的格式：${ext || "无扩展名"}（允许 ${BGM_ALLOWED_EXT.join(", ")}）`);
+  }
+  if (file.size > BGM_UPLOAD_MAX_BYTES) {
+    throw new Error(`文件过大：${(file.size / 1024 / 1024).toFixed(1)} MB，后端上限 10 MB`);
+  }
+  // 上传目录（style）默认用当前筛选风格；"全部"时落到 uploads 分组，名称需符合后端白名单
+  const style = state.selectedBgmStyle && state.selectedBgmStyle !== "all" ? state.selectedBgmStyle : "uploads";
+  if (!BGM_ALLOWED_STYLE.test(style)) {
+    throw new Error("当前筛选风格名含非法字符，无法作为上传目录");
+  }
+  if (state.bgmUploading) {
+    throw new Error("正在上传中，请稍候");
+  }
+  state.bgmUploading = true;
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    const result = await uploadBgm(name, style, dataUrl);
+    showToast("BGM 上传成功", "ok");
+    await refreshBgm();
+    state.selectedBgmPath = result?.path || `assets/audio/bgm/${style}/${name}`;
+    patchBgmDom();
+  } catch (error) {
+    state.bgmUploadError = error?.message || "上传失败";
+    throw error;
+  } finally {
+    state.bgmUploading = false;
   }
 }
 

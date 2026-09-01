@@ -1640,3 +1640,24 @@ export async function loadTaskFiles(taskId) {
 export function taskVideoUrl(taskId) {
   return `${API.tasks}/${encodeURIComponent(taskId)}/video`;
 }
+
+// ─── BGM Library (C2) ────────────────────────────────────────────────────────
+// 后端 bgm.py：
+//   GET /api/bgm-library   → { library: { 风格: [{name, path, size_kb}] }, root }
+//   POST /api/bgm-upload   → { filename, style, data_url(base64) } → { path, style, size_kb }
+// 后端只返回素材的 name/path/size_kb 与风格分组，没有时长/码率/标签/绑定数，
+// 前端如实展示，不编造这些字段。试听/下载走 app.py 挂载的只读静态目录 /bgm。
+
+export async function loadBgm() {
+  const payload = await apiJson(API.bgmLibrary);
+  state.bgm = payload?.library || {};
+  state.bgmLastSync = Date.now();
+  return state.bgm;
+}
+
+export async function uploadBgm(filename, style, dataUrl) {
+  return apiJson(API.bgmUpload, {
+    method: "POST",
+    body: JSON.stringify({ filename, style, data_url: dataUrl }),
+  });
+}

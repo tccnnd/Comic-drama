@@ -43,6 +43,13 @@ app.add_middleware(
 app.mount("/outputs", StaticFiles(directory=OUTPUTS), name="outputs")
 app.mount("/workspace", StaticFiles(directory=WORKSPACE), name="workspace")
 app.mount("/frontend", StaticFiles(directory=FRONTEND), name="frontend")
+
+# BGM 素材只读静态挂载：bgm.py 的 GET/POST 只返回素材的仓库相对路径
+# （assets/audio/bgm/{style}/{file}），此前没有任何端点能把这些文件流给前端，
+# 导致「试听 / 下载」无法工作。这里补一个只读挂载，前端按 /bgm/{style}/{file} 取用。
+_BGM_DIR = OUTPUTS.parent / "assets" / "audio" / "bgm"
+if _BGM_DIR.is_dir():
+    app.mount("/bgm", StaticFiles(directory=_BGM_DIR), name="bgm")
 app.include_router(style_router)
 app.include_router(asset_router)
 app.include_router(system_router)

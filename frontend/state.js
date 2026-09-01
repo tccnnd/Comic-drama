@@ -13,6 +13,8 @@ export const API = {
   llmTest: "/api/llm-test",
   llmUsage: "/api/llm-usage",
   tasks: "/api/tasks",
+  bgmLibrary: "/api/bgm-library",
+  bgmUpload: "/api/bgm-upload",
 };
 
 export const TIMELINE_PX_PER_SECOND = 72;
@@ -49,6 +51,15 @@ export const state = {
   taskFilter: "all",
   taskKeyword: "",
   tasksPolling: false,
+  bgm: {},
+  bgmLoading: false,
+  bgmError: "",
+  bgmLastSync: 0,
+  selectedBgmStyle: "all",
+  bgmKeyword: "",
+  selectedBgmPath: "",
+  bgmUploading: false,
+  bgmUploadError: "",
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -176,7 +187,8 @@ export const tabs = [
   ["review", "④ 审查", "storyboardReviewSection"],
   ["produce", "⑤ 出片", "produceSection"],
   ["tasks", "⑥ 任务中心", "tasksSection"],
-  ["settings", "⑦ 设置", "settingsSection"],
+  ["bgm", "⑦ BGM 素材库", "bgmSection"],
+  ["settings", "⑧ 设置", "settingsSection"],
 ];
 
 // 任务中心：后端 tasks.py 只提供只读端点 + 单任务 WS 订阅，
