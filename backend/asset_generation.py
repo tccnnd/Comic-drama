@@ -103,6 +103,21 @@ def _check_comfyui_online() -> bool:
         return False
 
 
+def _safe_comfyui_base_url() -> str:
+    """Best-effort ComfyUI URL for logs/messages.
+
+    ``comfyui_base_url()`` may raise (e.g. SSH tunnel auth failure); never let
+    diagnostics break the actual render path.
+    """
+    try:
+        return comfyui_base_url()
+    except Exception as exc:  # pragma: no cover - depends on tunnel state
+        logger.warning("comfyui_base_url() failed: %s", exc)
+        import os
+
+        return os.environ.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").strip()
+
+
 def _resolve_checkpoint(desired: str) -> str:
     """Resolve the checkpoint to use: prefer desired, fallback to first available.
 
@@ -415,7 +430,7 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
     if not _check_comfyui_online():
         logger.warning(
             "ComfyUI unreachable at %s; rendering asset %s via cloud T2I",
-            comfyui_base_url(),
+            _safe_comfyui_base_url(),
             asset_id,
         )
         return _render_asset_image_cloud(project_id, asset_id)
