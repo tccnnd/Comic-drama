@@ -18,19 +18,22 @@ Status: mostly complete.
 
 ## Phase 1: Real Video Generation
 
-Status: scene-level mainline delivered; shot-level rendering is the active next
-step.
+Status: scene-level mainline delivered (v0.2.0); shot-level rendering delivered
+as opt-in (v0.6.0-pre, `video_render_granularity=shot`; scene-level remains the
+default). Live end-to-end validation is Gate C and was NOT_EVALUATED in the
+sandbox (ffmpeg/provider not confirmed available).
 
-- Treat generated video clips as first-class scene media.
-- Route each scene through a pluggable `VIDEO_PROVIDER`.
-- Keep local 2.5D rendering as a fallback, not the target quality ceiling.
-- Add provider adapters for self-hosted ComfyUI video workflows.
+- Treat generated video clips as first-class scene media. ✅ (scene + shot)
+- Route each scene through a pluggable `VIDEO_PROVIDER`. ✅
+- Keep local 2.5D rendering as a fallback, not the target quality ceiling. ✅
+- Add provider adapters for self-hosted ComfyUI video workflows. ✅
 - Add gateway adapters for Sora-style, Doubao, Seedance, and aggregator
-  platforms.
-- Persist provider request, response, cost, timing, and failure metadata.
+  platforms. ✅
+- Persist provider request, response, cost, timing, and failure metadata. ✅
 - Render `shot_plan.shots[]` as provider clips, assemble them into the scene
-  video, and persist per-shot provenance.
+  video, and persist per-shot provenance. ✅ (v0.6.0-pre)
 - Add dry-run quota guards before enabling shot-level live calls by default.
+  ⏳ (pending; required before flipping the default away from scene-level)
 
 ## Phase 2: Global Consistency Governance
 

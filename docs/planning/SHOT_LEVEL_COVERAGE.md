@@ -34,6 +34,12 @@
 
 **测试实测**：Python shot 级测试 **29 passed**；前端 mjs **2 passed**。
 
+> **2026-09-01 复测更新**：在修正测试临时目录写法（`--basetemp` 需用 bash 的 `$TEMP` 而非 PowerShell 的 `$env:TEMP`，否则路径畸形导致 setup ERROR）后，shot 级 Python 测试 **56 passed / 0 failed**（含 `test_video_provider_mainline.py`、`test_project_runtime.py` 的 shot 用例）。全量基线仍为 527 passed（见 EXECUTION_PLAN_v2.md §6）。
+>
+> **Gate C 实跑验证状态：NOT_EVALUATED**。本沙箱 `ffmpeg` 不在 PATH，真实端到端视频装配（需 ffmpeg + 可用 provider）无法在此环境执行；属计划 Gate C 环境依赖，记为 NOT_EVALUATED，不构成代码失败证据。确定性代码覆盖由上述 56 个测试提供（Gate A）。需在具备 ffmpeg + provider 的环境中补 task 17（optional controlled live validation）。
+>
+> 另：根 `AGENTS.md` 的 Required Checks 命令笔误（`--input` / 缺 PYTHONPATH）**此前已修正**（现用 `--story` 且含 `PYTHONPATH=.` 说明），本核查文档第 77–81 行的"附带发现"已过时，以现行 `AGENTS.md` 为准。
+
 ---
 
 ## 缺口：CLI 批处理路径不消费 render granularity

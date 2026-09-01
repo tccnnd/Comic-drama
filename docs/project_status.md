@@ -15,7 +15,7 @@ script
 -> shot_plan
 -> production_bible
 -> scene-level video provider / local fallback
--> shot-level provider assembly (draft)
+-> shot-level provider assembly (implemented, v0.6.0-pre, opt-in; scene-level remains default)
 -> canonical_timeline
 -> consistency governance
 -> director review console
@@ -40,7 +40,7 @@ script
 | v0.3.0 | `global-consistency-governance` | Delivered on `main`; browser visual smoke pending | merged from `codex/global-consistency-governance` |
 | v0.4.0 | `director-review-console` | Delivered on `main`; browser visual smoke pending | merged from `codex/director-review-console-impl` |
 | v0.5.0 | `director-interpretation-mainline` | Delivered on `main` (2026-06-07); deterministic-first, LLM tier deferred; visual prototype library seeded | merged from `codex/director-interpretation-mainline-impl` |
-| next | `shot-level-video-rendering` | Implementation 14/17 tasks complete; pending mock-provider integration tests (task 15) and docs (task 16) before acceptance | in progress |
+| next → v0.6.0-pre | `shot-level-video-rendering` | Delivered on `main` (opt-in via `video_render_granularity=shot`; scene-level is default). 16/17 tasks complete; remaining task 17 = optional controlled live validation (Gate C, env-gated). 56 shot-level tests PASS. | delivered (opt-in) |
 
 ## Delivered Stack
 
@@ -87,7 +87,9 @@ Expected result: an output run directory under `outputs/`, per-scene media, a
 
 - Continue v0.5.0 implementation on current `main` with focused prototype
   coverage and prompt-contract tests.
-- Accept or revise `.kiro/specs/shot-level-video-rendering/` before touching
-  high-risk renderer/provider files for multi-shot real video.
+- `shot-level-video-rendering` is implemented and merged (v0.6.0-pre, opt-in).
+  Before enabling shot-level live calls by default, add dry-run quota guards
+  (see `docs/roadmap.md`); live end-to-end validation is Gate C and was
+  NOT_EVALUATED in the sandbox (ffmpeg/provider not confirmed available).
 - Keep `_external/Toonflow-app` untouched unless explicitly investigating that
   nested reference project.
