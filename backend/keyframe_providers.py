@@ -1,7 +1,8 @@
 """Cloud keyframe generation providers as fallback when ComfyUI is unavailable.
 
 Supports:
-- DashScope/Bailian text-to-image (via Moyin relay or direct)
+- OpenAI Images API (gpt-image-2 / gpt-image-1*) via /v1/images/generations
+- DashScope/Bailian text-to-image (wanx*) via Moyin relay or direct
 - Base64 inline image for providers that accept data URIs
 
 This allows keyframe generation without a GPU server.
@@ -27,6 +28,120 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
+DEFAULT_DASHSCOPE_T2I_MODEL = "wanx2.1-t2i-turbo"
+
+
+def _is_openai_image_model(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized.startswith("gpt-image") or normalized.startswith("dall-e")
+
+
+def _nearest_openai_image_size(width: int, height: int) -> str:
+    """Map requested WxH onto a size gpt-image-2 accepts."""
+    width = max(1, int(width or 1024))
+    height = max(1, int(height or 1024))
+    ratio = width / height
+    if 0.9 <= ratio <= 1.1:
+        return "1024x1024"
+    if ratio >= 1.0:
+        return "1536x1024"
+    return "1024x1536"
+
+
+def _openai_compatible_root(base_url: str) -> str:
+    """Normalize a chat/images base URL to the OpenAI-compatible root (…/v1)."""
+    root = str(base_url or "").strip().rstrip("/")
+    if not root:
+        return "https://memefast.top/v1"
+    if root.endswith("/v1"):
+        return root
+    return f"{root}/v1"
+
+
+def generate_keyframe_openai(
+    prompt: str,
+    *,
+    width: int = 1024,
+    height: int = 1536,
+    output_path: Path | None = None,
+    model: str = "",
+    api_key: str = "",
+    base_url: str = "",
+) -> Path | None:
+    """Generate a keyframe via OpenAI Images API (/v1/images/generations).
+
+    Used for gpt-image-2 and other gpt-image-* models on OpenAI-compatible
+    relays (including memefast.top).
+    """
+    api_key = (
+        api_key
+        or _env("KEYFRAME_T2I_API_KEY")
+        or _env("XL_API_KEY")
+        or _env("OPENAI_API_KEY")
+        or _env("LLM_API_KEY")
+    )
+    base_url = (
+        base_url
+        or _env("KEYFRAME_T2I_BASE_URL")
+        or _env("XL_BASE_URL")
+        or _env("OPENAI_BASE_URL")
+        or _env("LLM_BASE_URL")
+        or "https://memefast.top"
+    )
+    model = model or _env("KEYFRAME_T2I_MODEL") or DEFAULT_OPENAI_IMAGE_MODEL
+    if not api_key:
+        logger.warning("[keyframe-cloud] No API key configured for OpenAI image generation")
+        return None
+
+    size = _nearest_openai_image_size(width, height)
+    root = _openai_compatible_root(base_url)
+    submit_url = f"{root}/images/generations"
+    body = {
+        "model": model,
+        "prompt": prompt[:32000],
+        "n": 1,
+        "size": size,
+        "response_format": "b64_json",
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    logger.info("[keyframe-cloud] Submitting OpenAI image: model=%s, size=%s", model, size)
+    try:
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        req = Request(submit_url, data=data, headers=headers, method="POST")
+        with urlopen(req, timeout=180) as resp:
+            response = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:400]
+        except Exception:
+            detail = str(exc)
+        logger.error("[keyframe-cloud] OpenAI image submit failed: %s %s", exc, detail)
+        return None
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        logger.error("[keyframe-cloud] OpenAI image submit failed: %s", exc)
+        return None
+
+    items = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(items, list) or not items:
+        logger.error("[keyframe-cloud] OpenAI image response missing data: %s", response)
+        return None
+    first = items[0] if isinstance(items[0], dict) else {}
+    b64 = str(first.get("b64_json") or "").strip()
+    if b64:
+        return _write_image_bytes(base64.b64decode(b64), output_path)
+    img_url = str(first.get("url") or "").strip()
+    if img_url:
+        return _download_image(img_url, output_path)
+    logger.error("[keyframe-cloud] OpenAI image response had no b64_json or url")
+    return None
+
+
 def generate_keyframe_dashscope(
     prompt: str,
     negative_prompt: str = "",
@@ -38,10 +153,11 @@ def generate_keyframe_dashscope(
     api_key: str = "",
     base_url: str = "",
 ) -> Path | None:
-    """Generate a keyframe image using DashScope text-to-image API.
+    """Generate a keyframe via the configured cloud T2I backend.
 
-    Uses the same Moyin relay as video generation, or direct DashScope endpoint.
-    Returns the output path on success, None on failure.
+    ``gpt-image-*`` / ``dall-e*`` models go to OpenAI Images API.
+    Other models (``wanx*``) stay on DashScope text2image.
+    Default model is ``gpt-image-2``.
     """
     api_key = (
         api_key or _env("KEYFRAME_T2I_API_KEY") or _env("XL_API_KEY") or _env("DASHSCOPE_API_KEY")
@@ -49,7 +165,18 @@ def generate_keyframe_dashscope(
     base_url = (
         base_url or _env("KEYFRAME_T2I_BASE_URL") or _env("XL_BASE_URL") or "https://memefast.top"
     )
-    model = model or _env("KEYFRAME_T2I_MODEL") or "wanx2.1-t2i-turbo"
+    model = model or _env("KEYFRAME_T2I_MODEL") or DEFAULT_OPENAI_IMAGE_MODEL
+
+    if _is_openai_image_model(model):
+        return generate_keyframe_openai(
+            prompt,
+            width=width,
+            height=height,
+            output_path=output_path,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+        )
 
     if not api_key:
         logger.warning("[keyframe-cloud] No API key configured for cloud keyframe generation")
@@ -156,21 +283,31 @@ def generate_keyframe_dashscope(
     return None
 
 
+def _write_image_bytes(payload: bytes, output_path: Path | None) -> Path | None:
+    if not output_path or not payload:
+        return None
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(payload)
+        if output_path.exists() and output_path.stat().st_size > 0:
+            logger.info(
+                "[keyframe-cloud] Wrote keyframe: %s (%d KB)",
+                output_path.name,
+                output_path.stat().st_size // 1024,
+            )
+            return output_path
+    except Exception as exc:
+        logger.error("[keyframe-cloud] Write failed: %s", exc)
+    return None
+
+
 def _download_image(url: str, output_path: Path | None) -> Path | None:
     """Download an image from URL to the output path."""
     if not output_path:
         return None
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         with urlopen(url, timeout=60) as resp:
-            output_path.write_bytes(resp.read())
-        if output_path.exists() and output_path.stat().st_size > 0:
-            logger.info(
-                "[keyframe-cloud] Downloaded keyframe: %s (%d KB)",
-                output_path.name,
-                output_path.stat().st_size // 1024,
-            )
-            return output_path
+            return _write_image_bytes(resp.read(), output_path)
     except Exception as exc:
         logger.error("[keyframe-cloud] Download failed: %s", exc)
     return None
