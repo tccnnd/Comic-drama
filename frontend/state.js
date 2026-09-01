@@ -6,6 +6,8 @@ export const API = {
   ttsProviders: "/api/tts-providers",
   comfyuiStatus: "/api/comfyui/status",
   voicePreview: "/api/voice-preview",
+  voicePresets: "/api/voice-presets",
+  ttsDiagnostics: "/api/tts-diagnostics",
   fillMissingAssets: "/api/projects",
   repairStoryText: "/api/projects",
   applyScriptPreview: "/api/projects",
@@ -60,6 +62,13 @@ export const state = {
   selectedBgmPath: "",
   bgmUploading: false,
   bgmUploadError: "",
+  voicePresets: { default: "", items: [] },
+  voicePresetsLoading: false,
+  voicePresetsError: "",
+  voicePresetsLastSync: 0,
+  voicePresetEditing: null,
+  voiceKeyword: "",
+  ttsDiagnostics: null,
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -188,7 +197,8 @@ export const tabs = [
   ["produce", "⑤ 出片", "produceSection"],
   ["tasks", "⑥ 任务中心", "tasksSection"],
   ["bgm", "⑦ BGM 素材库", "bgmSection"],
-  ["settings", "⑧ 设置", "settingsSection"],
+  ["voice", "⑧ 声线预设", "voiceSection"],
+  ["settings", "⑨ 设置", "settingsSection"],
 ];
 
 // 任务中心：后端 tasks.py 只提供只读端点 + 单任务 WS 订阅，

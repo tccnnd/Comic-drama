@@ -341,6 +341,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "produce") return renderProduceView(project);
   if (state.activeTab === "tasks") return renderTasksView();
   if (state.activeTab === "bgm") return renderBgmView();
+  if (state.activeTab === "voice") return renderVoiceView();
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
@@ -907,6 +908,234 @@ export function renderBgmPlayer() {
     <span class="chip">${h(t ? t.style : "")}</span>
     <div class="spacer"></div>
     <audio id="bgmAudioBar" controls preload="none" src="${h(bgmFileUrl(path))}"></audio>`;
+}
+
+// ─── Phase ⑧ Voice Presets View ──────────────────────────────────────────────
+function voiceProfileLabel(value) {
+  const found = (voiceProfiles || []).find(([v]) => v === value);
+  return found ? found[1] : value || "未命名";
+}
+
+function voiceProfileSelectHtml(id, value, disabled) {
+  const opts = (voiceProfiles || [])
+    .map(
+      ([v, l]) =>
+        `<option value="${h(v)}" ${String(v) === String(value) ? "selected" : ""}>${h(l)}</option>`
+    )
+    .join("");
+  return `<label class="field"><span>声线标签</span><select id="${h(id)}" ${
+    disabled ? "disabled" : ""
+  }>${opts}</select></label>`;
+}
+
+function voiceCatalogSelectHtml(id, value) {
+  const items = Array.isArray(state.voiceCatalog) ? state.voiceCatalog : [];
+  const opts = [`<option value="">选择音色…</option>`]
+    .concat(
+      items.map((v) => {
+        const val = v.short_name || "";
+        const label = v.label || v.friendly_name || val;
+        return `<option value="${h(val)}" ${
+          String(val) === String(value) ? "selected" : ""
+        }>${h(label)} (${h(val)})</option>`;
+      })
+    )
+    .join("");
+  return `<label class="field"><span>音色</span><select id="${h(id)}">${opts}</select></label>`;
+}
+
+function filteredVoicePresets() {
+  const keyword = String(state.voiceKeyword || "").trim().toLowerCase();
+  const items = Array.isArray(state.voicePresets?.items) ? state.voicePresets.items : [];
+  if (!keyword) return items;
+  return items.filter((it) =>
+    [it.profile, it.voice].join(" ").toLowerCase().includes(keyword)
+  );
+}
+
+export function renderVoiceView() {
+  const total = Array.isArray(state.voicePresets?.items)
+    ? state.voicePresets.items.length
+    : 0;
+  return `
+    <div class="voice-layout">
+      <div id="voiceStats" class="voice-stats">${renderVoiceStats()}</div>
+      <div class="window-pane voice-toolbar">
+        <div class="window-body row-actions">
+          <input
+            id="voiceKeywordInput"
+            class="field-text voice-search"
+            type="search"
+            placeholder="搜索声线标签 / 音色…"
+            value="${h(state.voiceKeyword || "")}"
+            data-action="voice-search"
+          />
+          <span class="spacer"></span>
+          <span id="voiceSyncHint" class="muted fs11">${
+            state.voicePresetsLoading
+              ? "同步中…"
+              : state.voicePresetsError
+              ? "同步失败"
+              : `已同步 ${bgmTime(state.voicePresetsLastSync)}`
+          }</span>
+          <button class="ghost-button" type="button" data-action="refresh-voice">刷新</button>
+          <button class="primary-button" type="button" data-action="add-voice-preset">+ 新增预设</button>
+        </div>
+      </div>
+      <div class="voice-body">
+        <div class="window-pane voice-list-pane">
+          <div class="window-head">声线预设 <small>${total} 项</small></div>
+          <div class="window-body voice-list-body">
+            ${
+              state.voicePresetsError
+                ? `<div class="status-pill danger">加载失败：${h(state.voicePresetsError)}</div>`
+                : ""
+            }
+            <div id="voiceCards" class="voice-cards">${renderVoiceCards()}</div>
+          </div>
+        </div>
+        <div id="voiceDetail" class="window-pane voice-detail-pane">${renderVoiceDetail()}</div>
+      </div>
+      <div id="voicePreview" class="voice-preview">${renderVoicePreviewResult()}</div>
+    </div>`;
+}
+
+export function renderVoiceStats() {
+  const items = Array.isArray(state.voicePresets?.items)
+    ? state.voicePresets.items
+    : [];
+  const catalogCount = Array.isArray(state.voiceCatalog) ? state.voiceCatalog.length : 0;
+  const defaultVoice = state.voicePresets?.default || "—";
+  const hasPreview = state.voicePreview?.url ? "已生成" : "未生成";
+  const cards = [
+    ["预设总数", items.length, ""],
+    ["默认音色", defaultVoice, state.voicePresets?.default ? "ok" : ""],
+    ["音色库", catalogCount, ""],
+    ["试听", hasPreview, state.voicePreview?.url ? "ok" : ""],
+  ];
+  return cards
+    .map(
+      ([label, value, tone]) => `
+        <div class="voice-stat">
+          <span class="voice-stat-label">${h(label)}</span>
+          <span class="voice-stat-value ${tone ? `is-${tone}` : ""}">${h(String(value))}</span>
+        </div>`
+    )
+    .join("");
+}
+
+export function renderVoiceCards() {
+  const rows = filteredVoicePresets();
+  if (!rows.length) {
+    return `<div class="muted" style="padding:16px 6px">${
+      Array.isArray(state.voicePresets?.items) && state.voicePresets.items.length
+        ? "没有匹配的预设"
+        : "还没有声线预设 · 点击右上角「+ 新增预设」建立 profile → 音色 映射"
+    }</div>`;
+  }
+  return rows
+    .map((it) => {
+      const isDefault = state.voicePresets?.default === it.voice;
+      return `
+        <div class="voice-card ${
+          state.voicePresetEditing && state.voicePresetEditing.profile === it.profile
+            ? "is-selected"
+            : ""
+        }" data-action="select-voice-preset" data-profile="${h(it.profile)}" data-voice="${h(it.voice)}">
+          <div class="row"><b class="fs12">${h(voiceProfileLabel(it.profile))}</b><div class="spacer"></div>${
+        isDefault ? `<span class="chip ok">默认</span>` : ""
+      }</div>
+          <div class="row fs11 muted" style="margin-top:6px">
+            <span class="mono">${h(it.voice || "—")}</span>
+          </div>
+          <div class="row-actions" style="margin-top:8px">
+            <button class="ghost-button mini" type="button" data-action="preview-voice-preset" data-profile="${h(
+              it.profile
+            )}" data-voice="${h(it.voice)}">▶ 试听</button>
+            <button class="ghost-button mini" type="button" data-action="edit-voice-preset" data-profile="${h(
+              it.profile
+            )}" data-voice="${h(it.voice)}">编辑</button>
+            ${
+              isDefault
+                ? ""
+                : `<button class="ghost-button mini" type="button" data-action="set-default-voice-preset" data-voice="${h(
+                    it.voice
+                  )}" data-profile="${h(it.profile)}">设为默认</button>`
+            }
+            <button class="ghost-button mini danger" type="button" data-action="delete-voice-preset" data-profile="${h(
+              it.profile
+            )}" data-voice="${h(it.voice)}">删除</button>
+          </div>
+        </div>`;
+    })
+    .join("");
+}
+
+function renderTtsDiagnosticsCard() {
+  const d = state.ttsDiagnostics;
+  if (!d) {
+    return `<div class="diagnostic-card"><span class="muted">TTS 引擎诊断不可用 · 点击刷新后查看。</span></div>`;
+  }
+  const engineStatus = (name, ok) =>
+    `<span class="status-pill ${ok ? "ok" : "warn"}">${h(name)} ${ok ? "可用" : "不可用"}</span>`;
+  const edge = Boolean(d.edge_tts);
+  const pyttsx3 = Boolean(d.pyttsx3);
+  const sapi = Boolean(d.windows_sapi);
+  const chain = Array.isArray(d.default_chain)
+    ? d.default_chain.join(" → ")
+    : d.default_chain || "—";
+  return `
+    <div class="diagnostic-card">
+      <div class="item-title">TTS 引擎诊断</div>
+      <div class="row-actions" style="flex-wrap:wrap;gap:6px">
+        ${engineStatus("Edge TTS", edge)}
+        ${engineStatus("pyttsx3", pyttsx3)}
+        ${engineStatus("Windows SAPI", sapi)}
+      </div>
+      <div class="item-meta">默认引擎链：${h(chain)}</div>
+      ${
+        d.provider_config_path
+          ? `<div class="item-meta muted">引擎配置：${h(d.provider_config_path)}</div>`
+          : ""
+      }
+      ${
+        Array.isArray(d.external_providers) && d.external_providers.length
+          ? `<div class="item-meta">外部引擎：${h(d.external_providers.join(", "))}</div>`
+          : ""
+      }
+    </div>`;
+}
+
+export function renderVoiceDetail() {
+  const editing = state.voicePresetEditing;
+  if (!editing) {
+    return `
+      <div class="window-head">预设编辑 / TTS 诊断</div>
+      <div class="window-body section-stack">
+        <p class="muted">点击左侧预设进行编辑，或点击右上角「+ 新增预设」创建 profile → 音色 映射。</p>
+        ${renderTtsDiagnosticsCard()}
+      </div>`;
+  }
+  const isNew = !!editing.isNew;
+  const profile = editing.profile || "";
+  const voice = editing.voice || "";
+  return `
+    <div class="window-head">${isNew ? "新增预设" : "编辑预设"} · ${h(voiceProfileLabel(profile))}</div>
+    <div class="window-body section-stack">
+      <div class="form-grid">
+        ${voiceProfileSelectHtml("voicePresetProfileInput", profile, !isNew)}
+        ${voiceCatalogSelectHtml("voicePresetVoiceInput", voice)}
+        ${fieldCheckbox("voicePresetDefaultInput", "设为默认音色", state.voicePresets?.default === voice)}
+      </div>
+      <div class="row-actions" style="margin-top:8px">
+        <button class="ghost-button" type="button" data-action="preview-voice-preset" data-profile="${h(
+          profile
+        )}" data-voice="${h(voice)}">试听</button>
+        <span class="spacer"></span>
+        <button class="ghost-button" type="button" data-action="cancel-voice-preset">取消</button>
+        <button class="primary-button" type="button" data-action="save-voice-preset">保存</button>
+      </div>
+    </div>`;
 }
 
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────
@@ -1665,7 +1894,7 @@ function renderComfyUIStatus() {
   `;
 }
 
-function renderVoicePreviewResult() {
+export function renderVoicePreviewResult() {
   if (!state.voicePreview?.url) return "";
   return `
     <div class="scene-card">

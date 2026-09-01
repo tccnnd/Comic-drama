@@ -3852,3 +3852,126 @@ select:hover {
   .bgm-body { grid-template-columns: minmax(0, 1fr); }
   .bgm-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Voice Presets (C3) — 声线预设
+   作用域限定在 .voice-layout 内，与 .bgm-layout 同策略，复用通用工具类。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.voice-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ── 作用域内通用工具类 ── */
+.voice-layout .fs11 { font-size: 11px; }
+.voice-layout .mono { font-family: "Cascadia Mono", Consolas, "Courier New", monospace; }
+.voice-layout .spacer { flex: 1; }
+.voice-layout .mini { padding: 3px 9px; font-size: 11.5px; border-radius: 7px; }
+
+/* ── 统计卡 ── */
+.voice-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.voice-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+}
+.voice-stat-label {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.voice-stat-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-stat-value.is-ok { color: var(--ok); }
+
+/* ── 工具栏 ── */
+.voice-toolbar .window-body { padding: 9px 12px; }
+.voice-search {
+  min-width: 200px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 12px;
+}
+.voice-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── 主体：左卡片网格 + 右详情 ── */
+.voice-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.voice-list-pane,
+.voice-detail-pane { display: flex; flex-direction: column; min-height: 0; }
+.voice-list-body { overflow: auto; padding: 10px 12px; }
+
+.voice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 9px;
+}
+.voice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.voice-card:hover { border-color: rgba(103, 183, 255, 0.35); }
+.voice-card.is-selected {
+  background: rgba(103, 183, 255, 0.1);
+  border-color: rgba(103, 183, 255, 0.55);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ── 详情面板 ── */
+.voice-detail-pane .section-stack { padding: 10px 12px; overflow: auto; }
+
+/* ── 常驻试听条 ── */
+.voice-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  min-height: 36px;
+}
+.voice-preview audio { height: 32px; max-width: 420px; flex: 1; }
+
+@media (max-width: 1180px) {
+  .voice-body { grid-template-columns: minmax(0, 1fr); }
+  .voice-stats { grid-template-columns: repeat(2, 1fr); }
+}

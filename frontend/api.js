@@ -354,6 +354,60 @@ export async function loadTtsProviders() {
   }
 }
 
+export async function loadVoicePresets() {
+  state.voicePresetsLoading = true;
+  state.voicePresetsError = "";
+  try {
+    const payload = await apiJson(API.voicePresets);
+    state.voicePresets = {
+      default: payload?.default || "",
+      items: Array.isArray(payload?.items) ? payload.items : [],
+    };
+    state.voicePresetsLastSync = Date.now();
+  } catch (error) {
+    state.voicePresetsError = error?.message || String(error);
+    console.warn("Failed to load voice presets:", error);
+  } finally {
+    state.voicePresetsLoading = false;
+  }
+}
+
+export async function saveVoicePresets() {
+  const items = state.voicePresets?.items || [];
+  const payload = {
+    default: state.voicePresets?.default || "",
+    items: items.map((it) => ({
+      profile: it.profile || "",
+      voice: it.voice || "",
+    })),
+  };
+  setBusy(true, "保存声线预设");
+  try {
+    const saved = await apiJson(API.voicePresets, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    state.voicePresets = {
+      default: saved?.default || payload.default,
+      items: Array.isArray(saved?.items) ? saved.items : payload.items,
+    };
+    state.voicePresetsLastSync = Date.now();
+    return saved;
+  } finally {
+    setBusy(false);
+  }
+}
+
+export async function loadTtsDiagnostics() {
+  try {
+    const payload = await apiJson(API.ttsDiagnostics);
+    state.ttsDiagnostics = payload || null;
+  } catch (error) {
+    console.warn("Failed to load TTS diagnostics:", error);
+    state.ttsDiagnostics = null;
+  }
+}
+
 export async function loadVideoProviderStatus(
   provider = state.project?.settings?.video_provider || "auto"
 ) {

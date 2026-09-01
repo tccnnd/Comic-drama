@@ -30,6 +30,8 @@ import {
   readTextFile,
   timelineSceneItems,
   applyReviewTriage,
+  getValue,
+  getChecked,
 } from "./utils.js";
 import {
   setRenderFn,
@@ -92,6 +94,9 @@ import {
   loadTaskFiles,
   loadBgm,
   uploadBgm,
+  loadVoicePresets,
+  saveVoicePresets,
+  loadTtsDiagnostics,
 } from "./api.js";
 import {
   render,
@@ -102,6 +107,10 @@ import {
   renderBgmCards,
   renderBgmDetail,
   renderBgmPlayer,
+  renderVoiceStats,
+  renderVoiceCards,
+  renderVoiceDetail,
+  renderVoicePreviewResult,
 } from "./render.js";
 
 import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
@@ -202,6 +211,9 @@ async function switchTab(tab, section) {
   }
   if (tab === "bgm") {
     await refreshBgm();
+  }
+  if (tab === "voice") {
+    await refreshVoice();
   }
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
@@ -514,6 +526,11 @@ async function handleClick(event) {
     "bgm-filter",
     "refresh-bgm",
     "select-bgm",
+    "refresh-voice",
+    "select-voice-preset",
+    "add-voice-preset",
+    "edit-voice-preset",
+    "cancel-voice-preset",
   ]);
   if (state.busy && !allowedWhileBusy.has(action)) return;
   try {
@@ -564,6 +581,45 @@ async function handleClick(event) {
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(path).then(done).catch(() => {});
       }
+      return;
+    }
+    if (action === "refresh-voice") {
+      await refreshVoice();
+      return;
+    }
+    if (action === "add-voice-preset") {
+      openVoiceEditor("", "", true);
+      return;
+    }
+    if (action === "select-voice-preset") {
+      await selectVoicePreset(button.dataset.profile || "", button.dataset.voice || "");
+      return;
+    }
+    if (action === "edit-voice-preset") {
+      openVoiceEditor(button.dataset.profile || "", button.dataset.voice || "", false);
+      return;
+    }
+    if (action === "cancel-voice-preset") {
+      state.voicePresetEditing = null;
+      patchVoiceDom({ detail: true });
+      return;
+    }
+    if (action === "save-voice-preset") {
+      await saveVoicePreset();
+      return;
+    }
+    if (action === "delete-voice-preset") {
+      const profile = button.dataset.profile || "";
+      if (!window.confirm(`确认删除声线预设「${profile || "未命名"}」？`)) return;
+      await deleteVoicePreset(profile);
+      return;
+    }
+    if (action === "set-default-voice-preset") {
+      await setDefaultVoicePreset(button.dataset.voice || "");
+      return;
+    }
+    if (action === "preview-voice-preset") {
+      await previewVoicePreset(button);
       return;
     }
     if (action === "select-project") {
@@ -927,6 +983,13 @@ function handleInput(event) {
     if (cards) cards.innerHTML = renderBgmCards();
     return;
   }
+  if (event.target?.dataset?.action === "voice-search") {
+    // 声线预设搜索：局部刷新卡片网格，保留输入焦点
+    state.voiceKeyword = event.target.value;
+    const cards = document.getElementById("voiceCards");
+    if (cards) cards.innerHTML = renderVoiceCards();
+    return;
+  }
   if (state.modal && event.target?.dataset?.modalField) {
     const field = event.target.dataset.modalField;
     if (!state.modal.data.form) state.modal.data.form = {};
@@ -1126,6 +1189,169 @@ async function handleBgmFile(file) {
     throw error;
   } finally {
     state.bgmUploading = false;
+  }
+}
+
+// ─── Voice Presets (C3) ───────────────────────────────────────────────────────
+// 声线预设：profile → voice 映射管理 + 试听。后端 /api/voice-presets 已就绪，
+// 预览走 /api/voice-preview（离线时 synthesize_preview 返回静音兜底，UI 仍可用）。
+// 交互沿用 BGM 的局部 DOM 替换策略，保留搜索框焦点。
+
+const VOICE_PREVIEW_SAMPLE_TEXT = "这是一条声线试听示例，用于确认音色与语速是否符合预期。";
+
+function voiceSyncText() {
+  if (state.voicePresetsLoading) return "同步中…";
+  if (state.voicePresetsError) return "同步失败";
+  if (!state.voicePresetsLastSync) return "尚未同步";
+  return `已同步 ${new Date(state.voicePresetsLastSync).toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
+function normalizeVoiceDefault() {
+  const def = state.voicePresets?.default;
+  if (!def) return;
+  const exists = (state.voicePresets.items || []).some((it) => (it.voice || "") === def);
+  if (!exists) state.voicePresets.default = "";
+}
+
+function patchVoiceDom({ stats = true, cards = true, detail = true, preview = true } = {}) {
+  if (state.activeTab !== "voice") return;
+  const statsEl = document.getElementById("voiceStats");
+  const cardsEl = document.getElementById("voiceCards");
+  const detailEl = document.getElementById("voiceDetail");
+  const previewEl = document.getElementById("voicePreview");
+  const hint = document.getElementById("voiceSyncHint");
+  if (stats && statsEl) statsEl.innerHTML = renderVoiceStats();
+  if (cards && cardsEl) cardsEl.innerHTML = renderVoiceCards();
+  if (detail && detailEl) detailEl.innerHTML = renderVoiceDetail();
+  if (preview && previewEl) previewEl.innerHTML = renderVoicePreviewResult();
+  if (hint) hint.textContent = voiceSyncText();
+}
+
+export async function refreshVoice() {
+  if (state.activeTab !== "voice") return;
+  state.voicePresetsLoading = true;
+  patchVoiceDom();
+  try {
+    await loadVoiceCatalog();
+    await loadTtsProviders();
+    await loadTtsDiagnostics();
+    await loadVoicePresets();
+    state.voicePresetsError = "";
+  } catch (error) {
+    state.voicePresetsError = error?.message || "加载声线预设失败";
+  } finally {
+    state.voicePresetsLoading = false;
+    patchVoiceDom();
+  }
+}
+
+function openVoiceEditor(profile, voice, isNew) {
+  state.voicePresetEditing = {
+    profile: profile || "",
+    voice: voice || "",
+    isDefault: !isNew && state.voicePresets?.default === (voice || ""),
+    isNew: Boolean(isNew),
+  };
+  patchVoiceDom({ detail: true });
+}
+
+async function selectVoicePreset(profile, voice) {
+  openVoiceEditor(profile, voice, false);
+}
+
+async function saveVoicePreset() {
+  const editing = state.voicePresetEditing;
+  if (!editing) return;
+  const profile = (getValue("voicePresetProfileInput") || editing.profile || "").trim();
+  const voice = (getValue("voicePresetVoiceInput") || "").trim();
+  const isDefault = getChecked("voicePresetDefaultInput");
+  if (!profile) {
+    showToast("请选择声线标签", "danger");
+    return;
+  }
+  if (!voice) {
+    showToast("请选择音色", "danger");
+    return;
+  }
+  const items = (Array.isArray(state.voicePresets?.items) ? state.voicePresets.items : [])
+    .filter((it) => (it.profile || "") !== profile)
+    .concat([{ profile, voice }]);
+  state.voicePresets = {
+    default: isDefault ? voice : state.voicePresets?.default || "",
+    items,
+  };
+  try {
+    await saveVoicePresets();
+    if (isDefault) state.voicePresets.default = voice;
+    state.voicePresetEditing = null;
+    showToast("声线预设已保存", "ok");
+  } catch (error) {
+    showToast(error?.message || "保存失败", "danger");
+  } finally {
+    patchVoiceDom();
+  }
+}
+
+async function deleteVoicePreset(profile) {
+  const items = (state.voicePresets?.items || []).filter((it) => (it.profile || "") !== profile);
+  state.voicePresets = { default: state.voicePresets?.default || "", items };
+  normalizeVoiceDefault();
+  try {
+    await saveVoicePresets();
+    showToast("已删除声线预设", "ok");
+  } catch (error) {
+    showToast(error?.message || "删除失败", "danger");
+  } finally {
+    if (state.voicePresetEditing && state.voicePresetEditing.profile === profile) {
+      state.voicePresetEditing = null;
+    }
+    patchVoiceDom();
+  }
+}
+
+async function setDefaultVoicePreset(voice) {
+  if (!voice) return;
+  state.voicePresets = { ...(state.voicePresets || { items: [] }), default: voice };
+  try {
+    await saveVoicePresets();
+    showToast("已设为默认音色", "ok");
+  } catch (error) {
+    showToast(error?.message || "设置失败", "danger");
+  } finally {
+    patchVoiceDom();
+  }
+}
+
+async function previewVoicePreset(button) {
+  const editing = state.voicePresetEditing;
+  let voice = button?.dataset?.voice || "";
+  if (editing) {
+    voice = getValue("voicePresetVoiceInput") || editing.voice || voice;
+  }
+  if (!voice) {
+    showToast("请先选择音色再试听", "danger");
+    return;
+  }
+  setBusy(true, "生成试听");
+  try {
+    state.voicePreview = await apiJson(API.voicePreview, {
+      method: "POST",
+      body: JSON.stringify({
+        voice,
+        text: VOICE_PREVIEW_SAMPLE_TEXT,
+        engine: "auto",
+      }),
+    });
+    patchVoiceDom({ preview: true });
+    if (state.voicePreview?.fallback) {
+      showToast("试听已生成（引擎不可用，返回静音兜底）", "warn");
+    } else {
+      showToast("试听已生成", "ok");
+    }
+  } catch (error) {
+    showToast(error?.message || "试听生成失败", "danger");
+  } finally {
+    setBusy(false);
   }
 }
 
