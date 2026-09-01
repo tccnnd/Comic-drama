@@ -13,7 +13,7 @@ script
   -> shot_plan + visual_prototype + visual_content
   -> production_bible
   -> scene-level video provider / local 2.5D fallback   (v0.2.0)
-  -> shot-level provider assembly           (implementation complete, pending live validation)
+  -> shot-level provider assembly           (v0.6.0-pre delivered; Gate C EVALUATED 2026-09-01)
   -> canonical_timeline               (v0.2.0 provenance enrichment, shot-level in v0.6.0-pre)
   -> consistency governance           (v0.3.0)
   -> director review console          (v0.4.0)
@@ -33,7 +33,7 @@ review, provider routing, governance, and export).
 | Consistency governance | Five-dimension continuity (character/lighting/environment/prop/camera); per-scene verdict; project ledger; `report`/`block` policy | v0.3.0 | Delivered on `main` |
 | Director review console | In-place review console: overview, triage filter/sort, unified review unit, per-scene + serial batch rerender | v0.4.0 | Delivered on `main` |
 | Director interpretation | Structured `director_plan` (why) with scene-level `shot_archetypes`; per-shot `visual_prototype` (`id`, params, hard/soft/guideline constraints) renders deterministic `visual_content`; provider prompt consumes `visual_content` plus prototype constraints | v0.5.0 | Delivered on `main` (2026-06-07); deterministic-first, LLM tier deferred |
-| Shot-level video rendering | Render each `shot_plan.shots[]` item through the video provider, assemble shot clips into a scene clip, and persist per-shot provenance | next | Implementation 15/17 tasks complete (mock-provider tests passing); pending docs finalization (task 16) and optional live validation (task 17) |
+| Shot-level video rendering | Render each `shot_plan.shots[]` item through the video provider, assemble shot clips into a scene clip, and persist per-shot provenance | v0.6.0-pre | 17/17 tasks complete. Gate C EVALUATED 2026-09-01: two-shot XL live submit (HTTP 429 → report fallback) produced valid assembled 10s 1080x1920 media + `shot_outputs`. XL `real_video` success at shot-level still pending aggregator quota. |
 
 ## Merge State
 

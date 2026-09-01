@@ -20,8 +20,11 @@ Status: mostly complete.
 
 Status: scene-level mainline delivered (v0.2.0); shot-level rendering delivered
 as opt-in (v0.6.0-pre, `video_render_granularity=shot`; scene-level remains the
-default). Live end-to-end validation is Gate C and was NOT_EVALUATED in the
-sandbox (ffmpeg/provider not confirmed available).
+default). Live end-to-end validation (Gate C) EVALUATED on 2026-09-01 via a
+controlled two-shot XL submit: provider was reached (`ready=True`) but returned
+HTTP 429 on all attempts; `report` fallback assembled a valid 10.00s 1080x1920
+h264 scene MP4 with persisted `shot_outputs`. The XL `real_video` success
+branch remains unproven here until the aggregator 429 clears.
 
 - Treat generated video clips as first-class scene media. ✅ (scene + shot)
 - Route each scene through a pluggable `VIDEO_PROVIDER`. ✅

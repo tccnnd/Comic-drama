@@ -40,7 +40,7 @@ script
 | v0.3.0 | `global-consistency-governance` | Delivered on `main`; browser visual smoke pending | merged from `codex/global-consistency-governance` |
 | v0.4.0 | `director-review-console` | Delivered on `main`; browser visual smoke pending | merged from `codex/director-review-console-impl` |
 | v0.5.0 | `director-interpretation-mainline` | Delivered on `main` (2026-06-07); deterministic-first, LLM tier deferred; visual prototype library seeded | merged from `codex/director-interpretation-mainline-impl` |
-| next → v0.6.0-pre | `shot-level-video-rendering` | Delivered on `main` (opt-in via `video_render_granularity=shot`; scene-level is default). 16/17 tasks complete; remaining task 17 = optional controlled live validation (Gate C, env-gated). 56 shot-level tests PASS. | delivered (opt-in) |
+| next → v0.6.0-pre | `shot-level-video-rendering` | Delivered on `main` (opt-in via `video_render_granularity=shot`; scene-level is default). 17/17 tasks complete. Gate C EVALUATED 2026-09-01: two-shot XL live submit (HTTP 429 → report fallback) produced valid assembled media + `shot_outputs`. 56 shot-level tests PASS. | delivered (opt-in) |
 
 ## Delivered Stack
 
@@ -64,9 +64,12 @@ prototype or falls back to freeform with a prototype gap record.
 
 - Scene-level live real-video success is validated with XL:
   `outputs/live_xl_ac7_20260624_161004/live_validation_result.json`.
-- Shot-level real-video rendering is implemented behind
-  `VIDEO_RENDER_GRANULARITY=shot` (14/17 spec tasks complete); mock-provider
-  integration tests and docs are the remaining acceptance gates.
+- Shot-level rendering is implemented behind `VIDEO_RENDER_GRANULARITY=shot`
+  (17/17 spec tasks). Gate C live XL submit was EVALUATED 2026-09-01
+  (`outputs/gate_c_shot_xl_20260901_220421/live_validation_result.json`):
+  provider reached, HTTP 429 on all attempts, report-mode fallback assembled
+  a valid 10s 1080x1920 scene clip. XL `real_video` success at shot-level
+  remains unproven until the aggregator 429 clears.
 - ComfyUI keyframe tunnel can block the full ComfyUI sample path. The local
   keyframe path is the current reliable demo route.
 - Browser visual smoke for the governance and director-review UI remains
@@ -88,8 +91,8 @@ Expected result: an output run directory under `outputs/`, per-scene media, a
 - Continue v0.5.0 implementation on current `main` with focused prototype
   coverage and prompt-contract tests.
 - `shot-level-video-rendering` is implemented and merged (v0.6.0-pre, opt-in).
-  Before enabling shot-level live calls by default, add dry-run quota guards
-  (see `docs/roadmap.md`); live end-to-end validation is Gate C and was
-  NOT_EVALUATED in the sandbox (ffmpeg/provider not confirmed available).
+  Gate C live validation EVALUATED 2026-09-01 (two-shot XL submit; 429 →
+  report fallback; assembled media verified). Before enabling shot-level
+  live calls by default, add dry-run quota guards (see `docs/roadmap.md`).
 - Keep `_external/Toonflow-app` untouched unless explicitly investigating that
   nested reference project.

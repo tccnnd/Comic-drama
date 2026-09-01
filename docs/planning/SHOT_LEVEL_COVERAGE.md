@@ -7,7 +7,7 @@
 
 | 项 | 结论 |
 |---|---|
-| 任务完成度 | **16/17 已勾选**（task 17 = Optional controlled live validation，需真实 provider，属 Gate C） |
+| 任务完成度 | **17/17 已勾选**（task 17 = Optional controlled live validation，Gate C EVALUATED 2026-09-01） |
 | 后端 API / 项目路径 | ✅ 已完整接入 shot 渲染编排 |
 | **CLI 批处理路径** | ✅ **已补齐（2026-08-29，commit 4d6d423）**：`--video-render-granularity shot` 真正驱动逐镜头渲染并产出 `shot_outputs` |
 
@@ -36,7 +36,17 @@
 
 > **2026-09-01 复测更新**：在修正测试临时目录写法（`--basetemp` 需用 bash 的 `$TEMP` 而非 PowerShell 的 `$env:TEMP`，否则路径畸形导致 setup ERROR）后，shot 级 Python 测试 **56 passed / 0 failed**（含 `test_video_provider_mainline.py`、`test_project_runtime.py` 的 shot 用例）。全量基线仍为 527 passed（见 EXECUTION_PLAN_v2.md §6）。
 >
-> **Gate C 实跑验证状态：NOT_EVALUATED**。本沙箱 `ffmpeg` 不在 PATH，真实端到端视频装配（需 ffmpeg + 可用 provider）无法在此环境执行；属计划 Gate C 环境依赖，记为 NOT_EVALUATED，不构成代码失败证据。确定性代码覆盖由上述 56 个测试提供（Gate A）。需在具备 ffmpeg + provider 的环境中补 task 17（optional controlled live validation）。
+> **Gate C 实跑验证状态：EVALUATED（2026-09-01，受控两镜头 XL 实跑）**。
+> ffmpeg 经 `.venv` 的 `imageio-ffmpeg` 解析（`get_ffmpeg_exe()`）。XL provider
+> `ready=True`（`XL_API_KEY`/`XL_MODEL`/`XL_BASE_URL` 已配置，`memefast.top` HTTP 200）。
+> 用生产函数 `render_scene_shots_with_provider_policy` + `video_provider="xl"` +
+> 默认 `VIDEO_MAX_RETRIES=2` 对 2 镜头（各 5s）提交：6 次 DashScope submit 全部
+> `HTTP 429 Too Many Requests`（配额/限流，非配置缺失）。`VIDEO_FALLBACK_MODE=report`
+> 随后走本地 2.5D fallback，ffmpeg hard-cut 拼出有效 10.00s 1080x1920 h264 场景 MP4。
+> `shot_outputs` 2 条均 `status=fallback` / `provider_id=xl` / `attempts=3`，error 为诚实 429。
+> 验收口径（task 17）：短两镜头样本 + 验证 `shot_outputs` + 组装后的场景媒体 → **达成**。
+> XL `real_video` 成功分支仍未在本环境跑通（429 未解除）；scene-level XL 成功见 v0.2.0。
+> 证据：`outputs/gate_c_shot_xl_20260901_220421/live_validation_result.json`（`outputs/` gitignored）。
 >
 > 另：根 `AGENTS.md` 的 Required Checks 命令笔误（`--input` / 缺 PYTHONPATH）**此前已修正**（现用 `--story` 且含 `PYTHONPATH=.` 说明），本核查文档第 77–81 行的"附带发现"已过时，以现行 `AGENTS.md` 为准。
 

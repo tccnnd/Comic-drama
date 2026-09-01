@@ -272,10 +272,24 @@ shot-language and prompt candidate work only.
     feature, configuration, validation, and known limitations.
   - _Requirements: NFR-2, NFR-3_
 
-- [ ] 17. Optional controlled live validation
-  - Only run after explicit approval because it consumes provider quota.
-  - Use a short two-shot sample and verify `shot_outputs` plus assembled scene
-    media.
+- [x] 17. Optional controlled live validation
+  - Ran 2026-09-01 after explicit approval (consumes provider quota).
+  - Short two-shot sample (`5s + 5s`) through production
+    `render_scene_shots_with_provider_policy` with `video_provider=xl`
+    and default `VIDEO_MAX_RETRIES=2` (429 backoff ≥30s).
+  - XL DashScope submit was reached (`ready=True`, `memefast.top` HTTP 200)
+    but returned `HTTP 429 Too Many Requests` on all 6 attempts
+    (2 shots × 3 attempts). This is quota/rate-limit, not a config miss
+    (`XL_API_KEY` / `XL_MODEL` / `XL_BASE_URL` were configured).
+  - `VIDEO_FALLBACK_MODE=report` then rendered local 2.5D fallback clips
+    and assembled a valid scene MP4. Verified `shot_outputs` (count=2,
+    `status=fallback`, `provider_id=xl`, honest 429 error) plus assembled
+    media (10.00s, 1080x1920, h264).
+  - Evidence (gitignored `outputs/`):
+    `outputs/gate_c_shot_xl_20260901_220421/live_validation_result.json`.
+  - The XL `real_video` success branch remains unproven in this workspace
+    until the aggregator 429 clears; scene-level XL success was previously
+    recorded in v0.2.0.
   - _Requirements: AC-8_
 
 ## Validation Commands

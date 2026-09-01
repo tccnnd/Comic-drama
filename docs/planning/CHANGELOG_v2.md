@@ -240,7 +240,7 @@
 ### 2026-08-28 — shot-level-video-rendering 覆盖度核查（特性线②启动）
 
 - 产出 `docs/planning/SHOT_LEVEL_COVERAGE.md`：requirement→实现→测试映射（8 FR + 8 AC + 17 task）。
-- **任务完成度 16/17**：仅 task 17（Optional controlled live validation，需真实 provider）未做，属 Gate C。
+- **任务完成度当时 16/17**：仅 task 17（Optional controlled live validation，需真实 provider）未做，属 Gate C。2026-09-01 已 EVALUATED，见下文。
 - **实测**：Python shot 级测试 **29 passed**；前端 mjs **2 passed**（含 shot_outputs 渲染 + `rerender-shot-video` 控件）。
 - **✅ 后端 API / 项目路径已接入**：`backend/scene_renderer.py` L468 调用 `render_scene_shots_with_provider_policy`，L802 `rerender_scene_shot_video`。
 - **⚠️ 缺口确认：CLI 批处理路径不消费 granularity**（FR-1.3 未完整实现）
@@ -262,3 +262,18 @@
   - scene 模式回归：`outputs/run_20260829_005546/` 不进入 shot 分支，final MP4 正常产出
   - 全量 **527 passed / exit=0**
 - **commit**：本地提交，未推 GitHub。
+
+### 2026-09-01 — Gate C task 17 受控两镜头 XL 实跑
+
+- **动作**：用户选 (a) 做 shot-level 受控实跑。探测确认 `imageio-ffmpeg` 二进制可用、XL `ready=True`（`XL_API_KEY`/`XL_MODEL`/`XL_BASE_URL` 已配）、`memefast.top` HTTP 200。
+- **实跑**：生产函数 `render_scene_shots_with_provider_policy` + `video_provider=xl` + 默认 `VIDEO_MAX_RETRIES=2`，短两镜头（5s+5s）。
+  - 第一轮 `max_retries=0`：2 次 submit 均 `HTTP 429`。
+  - 第二轮生产默认重试：2 镜 × 3 次 = 6 次 submit 仍全部 `HTTP 429`（配额/限流，非配置缺失）。
+- **验收（task 17 口径）**：
+  - `shot_outputs` 2 条：`status=fallback` / `provider_id=xl` / `attempts=3` / error 为诚实 429。
+  - 组装后的场景媒体：10.00s、1080x1920、h264、1.6MB，ffmpeg probe 有视频流。
+  - `VIDEO_FALLBACK_MODE=report` 路径端到端走通。
+- **未覆盖**：shot-level XL `real_video` 成功分支（需 429 解除）。scene-level XL 成功仍以 v0.2.0 记录为准。
+- **证据**：`outputs/gate_c_shot_xl_20260901_220421/live_validation_result.json`（`outputs/` gitignored）。
+- **文档**：勾选 `.kiro/specs/shot-level-video-rendering/tasks.md` task 17；同步 `docs/project_status.md` / `docs/roadmap.md` / `docs/production_pipeline.md` / `docs/releases/v0.6.0-pre.md` / `docs/planning/SHOT_LEVEL_COVERAGE.md`。
+- **任务完成度**：17/17。
