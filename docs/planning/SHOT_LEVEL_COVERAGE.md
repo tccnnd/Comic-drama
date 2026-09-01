@@ -28,7 +28,7 @@
 | FR-4 镜头级 provenance | `build_shot_output`(L1440)、`generation_meta_from_shot_outputs`(L1482) | `test_build_shot_output_sanitizes_and_stabilizes_record`、`test_generation_meta_from_shot_outputs_aggregates_counts_and_sanitizes` |
 | FR-5 镜头级 fallback | `render_shot_with_provider_policy` fallback 分支 | `test_render_shot_with_provider_policy_report_failure_uses_fallback`、`_strict_failure_raises`、`test_video_fallback_mode_honors_provider_specific_strict` |
 | FR-6 resume / 定向重渲染 | `build_shot_cache_key`(L257)；`scene_renderer.rerender_scene_shot_video`(L802) | `test_build_shot_cache_key_is_stable_and_tracks_render_inputs` |
-| FR-7 成本/配额控制 | `estimate_shot_render_quota`(L312)、`validate_shot_render_quota`(L368) | `test_estimate_shot_render_quota_counts_calls_seconds_and_cache_reuse`、`test_validate_shot_render_quota_blocks_over_limit_before_submit`、`test_video_shot_quota_config_resolves_request_project_and_env` |
+| FR-7 成本/配额控制 | `estimate_shot_render_quota`、`validate_shot_render_quota`、`video_shot_quota_config`（远程默认 8 calls / 40s；`0` 关闭） | `test_estimate_shot_render_quota_counts_calls_seconds_and_cache_reuse`、`test_validate_shot_render_quota_blocks_over_limit_before_submit`、`test_video_shot_quota_config_resolves_request_project_and_env`、`test_video_shot_quota_config_applies_remote_defaults_and_zero_opt_out`、`test_remote_shot_quota_defaults_block_nine_shot_scene_before_submit`、`test_cli_shot_quota_error_does_not_fall_back_to_scene_render` |
 | FR-8 Review Console 可见性 | `frontend/utils.js` L476 `meta.shot_outputs` | `tests/test_frontend_imports.mjs`（shot_outputs 渲染 + `data-action="rerender-shot-video"`） |
 | AC-5 timeline 兼容 | `normalize_generation_meta` | `test_normalize_generation_meta_preserves_v2_shot_outputs_and_counts` |
 

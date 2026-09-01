@@ -36,7 +36,9 @@ branch remains unproven here until the aggregator 429 clears.
 - Render `shot_plan.shots[]` as provider clips, assemble them into the scene
   video, and persist per-shot provenance. ✅ (v0.6.0-pre)
 - Add dry-run quota guards before enabling shot-level live calls by default.
-  ⏳ (pending; required before flipping the default away from scene-level)
+  ✅ (remote default 8 calls / 40 seconds per scene; `0` opts out; CLI quota
+  errors no longer fall back to a scene-level submit). Scene-level remains the
+  default until XL `real_video` at shot-level is proven.
 
 ## Phase 2: Global Consistency Governance
 

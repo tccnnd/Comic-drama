@@ -732,6 +732,148 @@ def test_validate_shot_render_quota_blocks_over_limit_before_submit():
     assert dry_run_result["dry_run"] is True
 
 
+def test_video_shot_quota_config_applies_remote_defaults_and_zero_opt_out(monkeypatch):
+    for name in (
+        "VIDEO_SHOT_MAX_CALLS",
+        "VIDEO_SHOT_MAX_SECONDS",
+        "VIDEO_SHOT_DRY_RUN",
+        "VIDEO_SHOT_REUSE_CACHE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("VIDEO_PROVIDER", "local")
+
+    remote = video_shot_quota_config(video_provider="xl")
+    assert remote["max_calls"] == 8
+    assert remote["max_seconds"] == 40.0
+
+    local = video_shot_quota_config(video_provider="local")
+    assert local["max_calls"] is None
+    assert local["max_seconds"] is None
+
+    comfy = video_shot_quota_config(video_provider="comfyui")
+    assert comfy["max_calls"] is None
+    assert comfy["max_seconds"] is None
+
+    opted = video_shot_quota_config(
+        video_provider="xl",
+        request_values={"video_shot_max_calls": 0, "video_shot_max_seconds": 0},
+    )
+    assert opted["max_calls"] is None
+    assert opted["max_seconds"] is None
+
+
+def test_remote_shot_quota_defaults_block_nine_shot_scene_before_submit(tmp_path, monkeypatch):
+    import backend.video_generation as video_generation
+
+    monkeypatch.delenv("VIDEO_SHOT_MAX_CALLS", raising=False)
+    monkeypatch.delenv("VIDEO_SHOT_MAX_SECONDS", raising=False)
+    submitted: list[str] = []
+
+    def fake_remote(*args, **kwargs):
+        submitted.append("remote")
+        raise AssertionError("quota should block before provider submit")
+
+    monkeypatch.setattr(video_generation, "render_remote_video_provider", fake_remote)
+    shots = [
+        {"shot_id": f"shot_{index:02d}", "shot_order": index, "duration_seconds": 1.0}
+        for index in range(1, 10)
+    ]
+    scene = {
+        "scene_id": "scene_quota",
+        "order": 1,
+        "title": "Quota",
+        "duration_seconds": 9.0,
+        "shot_plan": {"shots": shots},
+    }
+    keyframe = tmp_path / "keyframe.png"
+    keyframe.write_bytes(PNG_1X1)
+
+    with pytest.raises(VideoShotQuotaError) as exc_info:
+        video_generation.render_scene_shots_with_provider_policy(
+            scene=scene,
+            shot_plan={"scene_id": "scene_quota", "shots": shots},
+            keyframe_path=keyframe,
+            output_path=tmp_path / "out.mp4",
+            run_dir=tmp_path,
+            ffmpeg="ffmpeg",
+            video_provider="xl",
+        )
+
+    assert submitted == []
+    assert "VIDEO_SHOT_MAX_CALLS=8" in str(exc_info.value)
+    assert not (tmp_path / "out.mp4").exists()
+
+
+def test_cli_shot_quota_error_does_not_fall_back_to_scene_render(tmp_path, monkeypatch):
+    from scripts import rw_render
+    from scripts.rw_models import StoryScene
+
+    keyframe = tmp_path / "kf.png"
+    keyframe.write_bytes(PNG_1X1)
+    voice = tmp_path / "voice.wav"
+    voice.write_bytes(b"voice")
+    submitted: list[str] = []
+
+    monkeypatch.setattr(rw_render, "mix_voice_with_bgm", lambda *args, **kwargs: voice)
+    monkeypatch.setattr(rw_render, "mix_scene_sfx", lambda *args, **kwargs: voice)
+    monkeypatch.setenv("VIDEO_FALLBACK_MODE", "report")
+
+    def boom(*args, **kwargs):
+        submitted.append("shot")
+        raise VideoShotQuotaError(
+            {
+                "ok": False,
+                "errors": ["provider calls 9 exceed VIDEO_SHOT_MAX_CALLS=8"],
+                "estimate": {},
+                "limits": {"max_calls": 8, "max_seconds": 40.0},
+            }
+        )
+
+    monkeypatch.setattr(rw_render, "render_scene_shots_with_provider_policy", boom)
+    monkeypatch.setattr(
+        rw_render,
+        "render_remote_video_provider",
+        lambda *args, **kwargs: submitted.append("scene"),
+    )
+    monkeypatch.setattr(
+        rw_render,
+        "render_silent_visual_segment",
+        lambda *args, **kwargs: submitted.append("local"),
+    )
+
+    scene = StoryScene(
+        scene=1,
+        duration=9.0,
+        title="Quota",
+        visual="A corridor.",
+        dialogue="",
+        camera="slow_push",
+        emotion="neutral",
+        characters=[],
+        bg_color="#000000",
+        accent_color="#ffffff",
+    )
+    shot_plan = {
+        "shots": [{"shot_id": f"s{index:02d}", "duration_seconds": 1.0} for index in range(1, 10)]
+    }
+    with pytest.raises(VideoShotQuotaError):
+        rw_render.render_clip_with_meta(
+            "ffmpeg",
+            scene,
+            tmp_path,
+            "local",
+            "silent",
+            9.0,
+            voice,
+            keyframe_path=keyframe,
+            video_provider="xl",
+            render_granularity="shot",
+            shot_plan=shot_plan,
+            scene_payload={"scene_id": "scene_quota"},
+        )
+    assert submitted == ["shot"]
+
+
 def test_build_shot_provider_request_inputs_preserves_shot_context_and_video_model(monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "deepseek-v4pro-should-not-leak")
     monkeypatch.setenv("DOUBAO_MODEL", "doubao-video-env-model")

@@ -277,3 +277,13 @@
 - **证据**：`outputs/gate_c_shot_xl_20260901_220421/live_validation_result.json`（`outputs/` gitignored）。
 - **文档**：勾选 `.kiro/specs/shot-level-video-rendering/tasks.md` task 17；同步 `docs/project_status.md` / `docs/roadmap.md` / `docs/production_pipeline.md` / `docs/releases/v0.6.0-pre.md` / `docs/planning/SHOT_LEVEL_COVERAGE.md`。
 - **任务完成度**：17/17。
+
+### 2026-09-01 — shot-level 远程配额默认守卫（不翻默认粒度）
+
+- **缺口**：配额 helper 已存在，但未配置时 `max_calls`/`max_seconds` 为 unlimited，远程 shot 实跑等于无守卫；CLI `rw_render` 在 report 模式会把 `VideoShotQuotaError` 吞掉并降级到 scene 级提交，反而绕过配额。
+- **改动**：
+  - `video_shot_quota_config(..., video_provider=)`：远程 backend 未配置时默认 `VIDEO_SHOT_MAX_CALLS=8` / `VIDEO_SHOT_MAX_SECONDS=40`；显式 `0` 关闭该上限；local/ComfyUI 仍不限额。
+  - `render_scene_shots_with_provider_policy` 把 `video_provider` 传入配额解析。
+  - `scripts/rw_render.py`：`VideoShotQuotaError` / `VideoShotDryRun` 必须上抛，禁止 scene-level fallback。
+- **未做**：不把 `VIDEO_RENDER_GRANULARITY` 默认改为 `shot`（Gate C XL `real_video` 仍未跑通，HTTP 429）。
+- **验证**：新增 3 个 pytest（远程默认、9-shot 拦截、CLI 不降级）。
