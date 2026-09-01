@@ -1606,3 +1606,37 @@ export async function importScriptFile(file) {
     previewScript().catch((error) => showToast(error.message, "danger"));
   }
 }
+
+// ─── Task Center (C1) ────────────────────────────────────────────────────────
+// 后端 backend/routers/tasks.py 只暴露只读端点：
+//   GET /api/tasks             任务列表
+//   GET /api/tasks/{id}        任务详情
+//   GET /api/tasks/{id}/files  产物文件清单
+//   GET /api/tasks/{id}/video  成片视频
+//   WS  /api/tasks/{id}/stream 单任务进度订阅（前端当前未接入）
+// 取消 / 重试 / 删除后端未实现，UI 层依据 state.js 的 TASK_CAPABILITIES 置灰。
+
+export async function loadTasks() {
+  const tasks = await apiJson(API.tasks);
+  state.tasks = Array.isArray(tasks) ? tasks : [];
+  state.tasksLastSync = Date.now();
+  return state.tasks;
+}
+
+export async function loadTaskDetail(taskId) {
+  if (!taskId) return null;
+  const detail = await apiJson(`${API.tasks}/${encodeURIComponent(taskId)}`);
+  state.selectedTaskDetail = detail || null;
+  return state.selectedTaskDetail;
+}
+
+export async function loadTaskFiles(taskId) {
+  if (!taskId) return [];
+  const payload = await apiJson(`${API.tasks}/${encodeURIComponent(taskId)}/files`);
+  state.selectedTaskFiles = Array.isArray(payload?.files) ? payload.files : [];
+  return state.selectedTaskFiles;
+}
+
+export function taskVideoUrl(taskId) {
+  return `${API.tasks}/${encodeURIComponent(taskId)}/video`;
+}

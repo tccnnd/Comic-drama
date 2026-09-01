@@ -4,6 +4,7 @@ import {
   state,
   appRoot,
   tabs,
+  TASK_CAPABILITIES,
   assetTabs,
   voiceEngines,
   voiceSamples,
@@ -50,7 +51,7 @@ import {
   assetTypeLabel,
   cameraClassName,
 } from "./utils.js";
-import { renderVoiceCatalogDatalist } from "./api.js";
+import { renderVoiceCatalogDatalist, taskVideoUrl } from "./api.js";
 import { stopTemporalPreview } from "./timeline.js";
 import { renderStoryboardReviewCanvas } from "./components/review/canvas.js";
 
@@ -67,8 +68,48 @@ export function render() {
     state.settingsScrollTop = previousContent.scrollTop;
     state.settingsBodyScrollTop = previousSettingsBody?.scrollTop || 0;
   }
+  // Phase C: preserve focus, text selection and scroll positions across the
+  // full re-render so typing in dense forms is never interrupted.
+  const active = document.activeElement;
+  const focusId = active && active.id ? active.id : "";
+  const focusSelection =
+    focusId && typeof active.selectionStart === "number"
+      ? { start: active.selectionStart, end: active.selectionEnd }
+      : null;
+  const scrollSelectors = ".content .window-body, .sidebar-scroll";
+  const previousScrollables = previousContent
+    ? [
+        [previousContent, previousContent.scrollTop],
+        ...Array.from(appRoot.querySelectorAll(scrollSelectors)).map((el) => [el, el.scrollTop]),
+      ]
+    : [];
   appRoot.innerHTML = renderShell();
   renderVoiceCatalogDatalist();
+  // restore scroll positions (matched by structural order; counts are
+  // template-driven so they stay stable between renders of the same view)
+  if (!shouldRestoreSettingsScroll && previousScrollables.length) {
+    const newScrollables = [
+      appRoot.querySelector(".content"),
+      ...Array.from(appRoot.querySelectorAll(scrollSelectors)),
+    ];
+    previousScrollables.forEach(([el, top], index) => {
+      const target = newScrollables[index];
+      if (target && top) target.scrollTop = top;
+    });
+  }
+  if (focusId) {
+    const restored = document.getElementById(focusId);
+    if (restored) {
+      try {
+        restored.focus({ preventScroll: true });
+        if (focusSelection && typeof restored.setSelectionRange === "function") {
+          restored.setSelectionRange(focusSelection.start, focusSelection.end);
+        }
+      } catch {
+        /* element type changed or not focusable anymore — ignore */
+      }
+    }
+  }
   if (shouldRestoreSettingsScroll) {
     requestAnimationFrame(() => {
       const content = document.querySelector(".content");
@@ -298,6 +339,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "storyboard") return renderStoryboardView(project);
   if (state.activeTab === "review") return renderWorkbenchView(project);
   if (state.activeTab === "produce") return renderProduceView(project);
+  if (state.activeTab === "tasks") return renderTasksView();
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
@@ -405,6 +447,267 @@ function renderSceneThumbCard(scene) {
       <div class="scene-thumb-label">#${h(scene.order)}</div>
     </button>
   `;
+}
+
+// ─── Task Center (C1) ────────────────────────────────────────────────────────
+// 数据模型以 backend/task_store.py 的 snapshot() 为准。注意它与设计稿 C1 的
+// 假设不同：后端一个 task = 一条完整渲染流水线（story + planner + scene_count），
+// 没有「任务类型 / 关联对象」字段，因此表格列按真实字段组织。
+// 生命周期：status queued → running → succeeded|failed
+//           stage  queued → starting → planning|rendering|assembling → done|failed
+
+const TASK_STATUS_META = {
+  queued: { label: "排队", pill: "" },
+  running: { label: "运行中", pill: "" },
+  succeeded: { label: "成功", pill: "ok" },
+  failed: { label: "失败", pill: "danger" },
+};
+
+const TASK_STAGE_LABEL = {
+  queued: "排队",
+  starting: "准备",
+  running: "运行",
+  planning: "规划",
+  rendering: "渲染",
+  assembling: "合成",
+  done: "完成",
+  failed: "失败",
+};
+
+function taskStatusMeta(status) {
+  return TASK_STATUS_META[status] || { label: h(status || "未知"), pill: "" };
+}
+
+function taskProgressValue(task) {
+  const raw = Number(task?.progress);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+function taskDuration(task) {
+  const start = Date.parse(task?.created_at || "");
+  const end = Date.parse(task?.updated_at || "");
+  if (!Number.isFinite(start)) return "—";
+  const stop = Number.isFinite(end) ? end : Date.now();
+  const seconds = Math.max(0, Math.round((stop - start) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${seconds % 60}s`;
+}
+
+function taskTime(value) {
+  const parsed = Date.parse(value || "");
+  if (!Number.isFinite(parsed)) return "—";
+  return new Date(parsed).toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function filteredTasks() {
+  const keyword = String(state.taskKeyword || "").trim().toLowerCase();
+  return (state.tasks || []).filter((task) => {
+    if (state.taskFilter !== "all" && task.status !== state.taskFilter) return false;
+    if (!keyword) return true;
+    const haystack = [task.id, task.stage, task.message, task.planner]
+      .map((item) => String(item || "").toLowerCase())
+      .join(" ");
+    return haystack.includes(keyword);
+  });
+}
+
+export function renderTasksView() {
+  return `
+    <div class="tasks-layout">
+      <div id="tasksStats" class="tasks-stats">${renderTasksStats()}</div>
+      <div class="window-pane tasks-toolbar">
+        <div class="window-body row-actions">
+          <div class="tasks-filter-group">
+            ${[
+              ["all", "全部"],
+              ["queued", "排队"],
+              ["running", "运行中"],
+              ["succeeded", "成功"],
+              ["failed", "失败"],
+            ]
+              .map(
+                ([key, label]) =>
+                  `<button type="button" class="ghost-button tasks-filter ${
+                    state.taskFilter === key ? "is-active" : ""
+                  }" data-action="task-filter" data-filter="${h(key)}">${h(label)}</button>`
+              )
+              .join("")}
+          </div>
+          <input
+            id="taskKeywordInput"
+            class="field-text tasks-search"
+            type="search"
+            placeholder="搜索任务 ID / 阶段 / 规划器…"
+            value="${h(state.taskKeyword || "")}"
+            data-action="task-search"
+          />
+          <span class="spacer"></span>
+          <span id="tasksSyncHint" class="muted fs11">${
+            state.tasksLoading ? "同步中…" : state.tasksError ? "同步失败" : `已同步 ${taskTime(state.tasksLastSync)}`
+          }</span>
+          <button class="ghost-button" type="button" data-action="refresh-tasks">刷新</button>
+        </div>
+      </div>
+      <div class="tasks-body">
+        <div class="window-pane tasks-list-pane">
+          <div class="window-head">任务列表<div class="spacer"></div><small>轮询 3s · 局部刷新</small></div>
+          <div class="window-body tasks-list-body">
+            ${
+              state.tasksError
+                ? `<div class="status-pill danger">加载失败：${h(state.tasksError)}</div>`
+                : ""
+            }
+            <table class="mini-table tasks-table">
+              <thead>
+                <tr>
+                  <th>任务 ID</th><th>状态</th><th style="width:120px">进度</th>
+                  <th>阶段</th><th>场景</th><th>创建</th><th>耗时</th><th style="width:150px">操作</th>
+                </tr>
+              </thead>
+              <tbody id="tasksTableBody">${renderTasksRows()}</tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tasksDetail" class="window-pane tasks-detail-pane">${renderTasksDetail()}</div>
+      </div>
+    </div>
+  `;
+}
+
+export function renderTasksStats() {
+  const list = state.tasks || [];
+  const count = (status) => list.filter((task) => task.status === status).length;
+  const cards = [
+    ["排队", count("queued"), ""],
+    ["运行中", count("running"), ""],
+    ["成功", count("succeeded"), "ok"],
+    ["失败", count("failed"), "danger"],
+  ];
+  return cards
+    .map(
+      ([label, value, tone]) => `
+        <div class="tasks-stat">
+          <span class="tasks-stat-label">${h(label)}</span>
+          <span class="tasks-stat-value ${tone ? `is-${tone}` : ""}">${value}</span>
+        </div>`
+    )
+    .join("");
+}
+
+export function renderTasksRows() {
+  const rows = filteredTasks();
+  if (!rows.length) {
+    return `<tr><td colspan="8" class="muted" style="padding:16px 6px">${
+      state.tasks.length ? "没有匹配的任务" : "暂无任务"
+    }</td></tr>`;
+  }
+  return rows
+    .map((task) => {
+      const meta = taskStatusMeta(task.status);
+      const progress = taskProgressValue(task);
+      const selected = state.selectedTaskId === task.id;
+      const hasVideo = Boolean(task.final_video);
+      return `
+        <tr class="${selected ? "is-selected" : ""}" data-action="select-task" data-task-id="${h(task.id)}">
+          <td class="mono">${h(task.id)}</td>
+          <td><span class="status-pill ${meta.pill}">${h(meta.label)}</span></td>
+          <td>
+            <div class="tasks-progress"><div class="tasks-progress-fill" style="width:${progress}%"></div></div>
+            <span class="fs11 muted">${progress}%</span>
+          </td>
+          <td>${h(TASK_STAGE_LABEL[task.stage] || task.stage || "—")}</td>
+          <td>${h(task.scene_count ?? "—")}</td>
+          <td class="fs11 muted">${h(taskTime(task.created_at))}</td>
+          <td class="fs11 muted">${h(taskDuration(task))}</td>
+          <td>
+            <div class="row-actions">
+              <button class="ghost-button mini" type="button" data-action="task-detail" data-task-id="${h(task.id)}">详情</button>
+              ${
+                hasVideo
+                  ? `<a class="ghost-button mini" href="${h(taskVideoUrl(task.id))}" target="_blank" rel="noopener">视频</a>`
+                  : `<button class="ghost-button mini" type="button" disabled title="任务完成后可下载成片">视频</button>`
+              }
+              ${
+                TASK_CAPABILITIES.cancel
+                  ? `<button class="ghost-button mini" type="button" data-action="task-cancel" data-task-id="${h(task.id)}">取消</button>`
+                  : `<button class="ghost-button mini" type="button" disabled title="后端未提供取消端点（tasks.py 仅有只读 + WS）">取消</button>`
+              }
+            </div>
+          </td>
+        </tr>`;
+    })
+    .join("");
+}
+
+export function renderTasksDetail() {
+  const taskId = state.selectedTaskId;
+  const detail = state.selectedTaskDetail;
+  if (!taskId) {
+    return `
+      <div class="window-head">任务详情</div>
+      <div class="window-body">
+        <p class="muted">点击左侧任意任务查看详情、产物与日志。</p>
+      </div>`;
+  }
+  if (!detail) {
+    return `
+      <div class="window-head">任务详情<div class="spacer"></div><small class="mono">${h(taskId)}</small></div>
+      <div class="window-body"><p class="muted">加载中…</p></div>`;
+  }
+  const logs = Array.isArray(detail.logs) ? detail.logs : [];
+  const files = Array.isArray(state.selectedTaskFiles) ? state.selectedTaskFiles : [];
+  return `
+    <div class="window-head">任务详情<div class="spacer"></div><small class="mono">${h(detail.id || taskId)}</small></div>
+    <div class="window-body tasks-detail-body">
+      <div class="tasks-detail-section">
+        <div class="tasks-kv"><span class="muted">状态</span><b>${h(taskStatusMeta(detail.status).label)}</b></div>
+        <div class="tasks-kv"><span class="muted">阶段</span><b>${h(TASK_STAGE_LABEL[detail.stage] || detail.stage || "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">进度</span><b>${taskProgressValue(detail)}%</b></div>
+        <div class="tasks-kv"><span class="muted">场景数</span><b>${h(detail.scene_count ?? "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">规划器</span><b>${h(detail.planner || "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">关键帧</span><b>${h(detail.keyframe_provider || "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">视频</span><b>${h(detail.video_provider || "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">粒度</span><b>${h(detail.video_render_granularity || "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">配音</span><b>${h(detail.voice_provider || "—")}</b></div>
+        <div class="tasks-kv"><span class="muted">耗时</span><b>${h(taskDuration(detail))}</b></div>
+      </div>
+      ${
+        detail.error
+          ? `<div class="status-pill danger" style="margin:8px 0">${h(String(detail.error))}</div>`
+          : ""
+      }
+      <div class="tasks-detail-section">
+        <div class="tasks-detail-title">产物 · GET /files · /video</div>
+        ${
+          detail.final_video
+            ? `<a class="primary-button mini" href="${h(taskVideoUrl(detail.id))}" target="_blank" rel="noopener">下载成片</a>`
+            : `<span class="muted fs11">任务尚未产出成片</span>`
+        }
+        ${
+          files.length
+            ? `<table class="mini-table"><tbody>${files
+                .map(
+                  (file) => `<tr>
+                    <td class="mono fs11">${h(file.name)}</td>
+                    <td class="fs11 muted">${h(file.size ?? "")}</td>
+                    <td><a class="ghost-button mini" href="${h(file.url)}" target="_blank" rel="noopener">下载</a></td>
+                  </tr>`
+                )
+                .join("")}</tbody></table>`
+            : `<p class="muted fs11">暂无产物文件</p>`
+        }
+      </div>
+      <div class="tasks-detail-section">
+        <div class="tasks-detail-title">日志 · 最近 ${logs.length} 条</div>
+        <div class="tasks-log">${
+          logs.length
+            ? logs.map((line) => `<div>${h(line)}</div>`).join("")
+            : `<span class="muted fs11">暂无日志</span>`
+        }</div>
+      </div>
+    </div>`;
 }
 
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────

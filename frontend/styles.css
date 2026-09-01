@@ -3551,3 +3551,154 @@ select:hover {
   background-clip: text;
   color: transparent;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Task Center (C1) — 任务中心
+   作用域限定在 .tasks-layout 内，通用工具类（fs11 / mono / mini / spacer）
+   不污染全局，避免与产品既有或未来的同名类冲突。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tasks-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ── 作用域内通用工具类 ── */
+.tasks-layout .fs11 { font-size: 11px; }
+.tasks-layout .mono { font-family: "Cascadia Mono", Consolas, "Courier New", monospace; }
+.tasks-layout .spacer { flex: 1; }
+.tasks-layout .mini { padding: 3px 9px; font-size: 11.5px; border-radius: 7px; }
+
+/* ── 统计卡 ── */
+.tasks-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.tasks-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+}
+.tasks-stat-label {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tasks-stat-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.tasks-stat-value.is-ok { color: var(--ok); }
+.tasks-stat-value.is-danger { color: var(--danger); }
+
+/* ── 工具栏 ── */
+.tasks-toolbar .window-body { padding: 9px 12px; }
+.tasks-filter-group { display: inline-flex; gap: 4px; }
+.tasks-filter.is-active {
+  background: rgba(103, 183, 255, 0.16);
+  border-color: rgba(103, 183, 255, 0.45);
+  color: var(--text);
+  font-weight: 600;
+}
+.tasks-search {
+  min-width: 200px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 12px;
+}
+.tasks-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── 主体：左列表 + 右详情 ── */
+.tasks-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.tasks-list-pane,
+.tasks-detail-pane { display: flex; flex-direction: column; min-height: 0; }
+.tasks-list-body { overflow: auto; padding: 8px 12px; }
+.tasks-detail-body { overflow: auto; }
+
+.tasks-table { width: 100%; }
+.tasks-table th,
+.tasks-table td { padding: 6px 8px; vertical-align: middle; }
+.tasks-table tbody tr { cursor: pointer; }
+.tasks-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+.tasks-table tbody tr.is-selected {
+  background: rgba(103, 183, 255, 0.1);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ── 行内进度条 ── */
+.tasks-progress {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+.tasks-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4396f5, #67b7ff);
+  transition: width 0.3s ease;
+}
+
+/* ── 详情面板 ── */
+.tasks-detail-section {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.tasks-detail-section:last-child { border-bottom: 0; }
+.tasks-detail-title {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.tasks-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 3px 0;
+}
+.tasks-log {
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0c121c;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (max-width: 1180px) {
+  .tasks-body { grid-template-columns: minmax(0, 1fr); }
+  .tasks-stats { grid-template-columns: repeat(2, 1fr); }
+}

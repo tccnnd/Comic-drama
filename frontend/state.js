@@ -12,6 +12,7 @@ export const API = {
   llmSettings: "/api/llm-settings",
   llmTest: "/api/llm-test",
   llmUsage: "/api/llm-usage",
+  tasks: "/api/tasks",
 };
 
 export const TIMELINE_PX_PER_SECOND = 72;
@@ -38,6 +39,16 @@ export const state = {
   llmUsage: null,
   settingsScrollTop: 0,
   settingsBodyScrollTop: 0,
+  tasks: [],
+  tasksLoading: false,
+  tasksError: "",
+  tasksLastSync: 0,
+  selectedTaskId: "",
+  selectedTaskDetail: null,
+  selectedTaskFiles: [],
+  taskFilter: "all",
+  taskKeyword: "",
+  tasksPolling: false,
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -164,8 +175,23 @@ export const tabs = [
   ["storyboard", "③ 分镜", "storyboardSection"],
   ["review", "④ 审查", "storyboardReviewSection"],
   ["produce", "⑤ 出片", "produceSection"],
-  ["settings", "⑥ 设置", "settingsSection"],
+  ["tasks", "⑥ 任务中心", "tasksSection"],
+  ["settings", "⑦ 设置", "settingsSection"],
 ];
+
+// 任务中心：后端 tasks.py 只提供只读端点 + 单任务 WS 订阅，
+// 没有取消 / 重试 / 删除能力。这里显式登记，供 UI 层把不支持的操作置灰，
+// 避免出现「点了没反应」的假按钮。
+export const TASK_CAPABILITIES = {
+  list: true,
+  detail: true,
+  files: true,
+  video: true,
+  stream: true,
+  cancel: false,
+  retry: false,
+  delete: false,
+};
 
 export const voiceEngines = [
   ["auto", "自动"],

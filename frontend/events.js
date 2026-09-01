@@ -87,8 +87,11 @@ import {
   saveSceneSfxTimestamp,
   setCurrentProject,
   apiJson,
+  loadTasks,
+  loadTaskDetail,
+  loadTaskFiles,
 } from "./api.js";
-import { render } from "./render.js";
+import { render, renderTasksStats, renderTasksRows, renderTasksDetail } from "./render.js";
 
 import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
 
@@ -180,6 +183,12 @@ async function switchTab(tab, section) {
   const previousTab = state.activeTab;
   state.activeTab = tab;
   render();
+  // 任务中心轮询：仅在停留该页时运行，离开即停，避免后台无谓请求
+  stopTasksPoll();
+  if (tab === "tasks") {
+    startTasksPoll();
+    await refreshTasks();
+  }
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
   }
@@ -484,11 +493,28 @@ async function handleClick(event) {
     "style-pick",
     "style-confirm",
     "asset-add-submit",
+    "task-filter",
+    "refresh-tasks",
+    "select-task",
+    "task-detail",
   ]);
   if (state.busy && !allowedWhileBusy.has(action)) return;
   try {
     if (action === "switch-tab") {
       await switchTab(button.dataset.tab || "plan", button.dataset.jumpSection);
+      return;
+    }
+    if (action === "task-filter") {
+      state.taskFilter = button.dataset.filter || "all";
+      render();
+      return;
+    }
+    if (action === "refresh-tasks") {
+      await refreshTasks();
+      return;
+    }
+    if (action === "select-task" || action === "task-detail") {
+      await selectTask(button.dataset.taskId || "");
       return;
     }
     if (action === "select-project") {
@@ -830,6 +856,13 @@ function handleInput(event) {
     render();
     return;
   }
+  if (event.target?.dataset?.action === "task-search") {
+    // 任务中心搜索：局部刷新表格，不全量重渲染（保留输入焦点）
+    state.taskKeyword = event.target.value;
+    const tbody = document.getElementById("tasksTableBody");
+    if (tbody) tbody.innerHTML = renderTasksRows();
+    return;
+  }
   if (state.modal && event.target?.dataset?.modalField) {
     const field = event.target.dataset.modalField;
     if (!state.modal.data.form) state.modal.data.form = {};
@@ -857,6 +890,83 @@ function handleInput(event) {
   }
   if (event.target?.id === "scriptTitleInput") {
     state.project.title = event.target.value;
+  }
+}
+
+// ─── Task Center (C1) ────────────────────────────────────────────────────────
+// 局部刷新是这里的重点：render() 会全量重建 DOM（render.js 的 appRoot.innerHTML
+// = renderShell()），轮询若走全量渲染，用户正在搜索框输入时会被打断。
+// 因此轮询与搜索都只替换三个容器的 innerHTML，不碰整棵树。
+
+const TASKS_POLL_INTERVAL = 3000;
+let tasksPollTimer = null;
+
+export function startTasksPoll() {
+  stopTasksPoll();
+  if (state.activeTab !== "tasks") return;
+  tasksPollTimer = setInterval(() => {
+    refreshTasks({ silent: true });
+  }, TASKS_POLL_INTERVAL);
+}
+
+export function stopTasksPoll() {
+  if (tasksPollTimer) {
+    clearInterval(tasksPollTimer);
+    tasksPollTimer = null;
+  }
+}
+
+function taskSyncText() {
+  if (state.tasksLoading) return "同步中…";
+  if (state.tasksError) return "同步失败";
+  if (!state.tasksLastSync) return "尚未同步";
+  return `已同步 ${new Date(state.tasksLastSync).toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
+function patchTasksDom() {
+  if (state.activeTab !== "tasks") return;
+  const stats = document.getElementById("tasksStats");
+  const tbody = document.getElementById("tasksTableBody");
+  const detail = document.getElementById("tasksDetail");
+  const hint = document.getElementById("tasksSyncHint");
+  if (stats) stats.innerHTML = renderTasksStats();
+  if (tbody) tbody.innerHTML = renderTasksRows();
+  if (detail) detail.innerHTML = renderTasksDetail();
+  if (hint) hint.textContent = taskSyncText();
+}
+
+export async function refreshTasks({ silent = false } = {}) {
+  if (state.activeTab !== "tasks") return;
+  state.tasksLoading = true;
+  if (!silent) patchTasksDom();
+  try {
+    await loadTasks();
+    state.tasksError = "";
+    if (state.selectedTaskId) {
+      await loadTaskDetail(state.selectedTaskId);
+      await loadTaskFiles(state.selectedTaskId);
+    }
+  } catch (error) {
+    state.tasksError = error?.message || "加载任务失败";
+  } finally {
+    state.tasksLoading = false;
+    patchTasksDom();
+  }
+}
+
+async function selectTask(taskId) {
+  if (state.selectedTaskId === taskId) return;
+  state.selectedTaskId = taskId;
+  state.selectedTaskDetail = null;
+  state.selectedTaskFiles = [];
+  patchTasksDom();
+  try {
+    await loadTaskDetail(taskId);
+    await loadTaskFiles(taskId);
+  } catch (error) {
+    state.tasksError = error?.message || "加载任务详情失败";
+  } finally {
+    patchTasksDom();
   }
 }
 
