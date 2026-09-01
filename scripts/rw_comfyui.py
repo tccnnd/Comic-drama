@@ -920,10 +920,16 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
     provider = (provider or "auto").strip().lower()
     if provider == "local":
         return create_keyframe(scene, run_dir)
-    if provider == "comfyui":
-        return render_keyframe_comfyui(scene, run_dir)
     if provider == "cloud":
         return _generate_keyframe_cloud(scene, run_dir)
+    if provider == "comfyui":
+        try:
+            return render_keyframe_comfyui(scene, run_dir)
+        except Exception as exc:
+            if env_bool("COMFYUI_STRICT", "KEYFRAME_STRICT", default=False):
+                raise
+            print(f"[keyframe] ComfyUI unavailable, trying cloud provider: {exc}")
+            return _generate_keyframe_cloud(scene, run_dir)
     # Auto mode: try ComfyUI -> cloud -> local
     try:
         return render_keyframe_comfyui(scene, run_dir)
