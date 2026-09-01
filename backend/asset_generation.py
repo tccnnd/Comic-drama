@@ -18,6 +18,7 @@ from backend.assets import (
     update_project_asset,
 )
 from backend.event_bus import project_event_bus
+from backend.keyframe_providers import generate_keyframe_dashscope
 from backend.llm_hub import llm_client
 from backend.logger import get_logger
 from backend.project_runtime import load_project, project_snapshot, workspace_url
@@ -380,13 +381,44 @@ def _publish_project_update(project_id: str) -> None:
     project_event_bus.publish_project_updated(project_id, project)
 
 
+def _render_asset_image_cloud(project_id: str, asset_id: str) -> Asset:
+    """Render one asset image via cloud T2I (gpt-image-2 by default)."""
+    asset = _load_asset_record(project_id, asset_id)
+    style = _project_style(project_id)
+    positive_prompt, negative_prompt = _asset_generation_prompts(asset, style)
+    if style.get("positive_suffix"):
+        positive_prompt = f"{positive_prompt}, {style['positive_suffix']}"
+    width, height = ASSET_DIMENSIONS.get(asset.asset_type, (768, 1024))
+    output_path = _asset_output_path(project_id, asset_id)
+    result = generate_keyframe_dashscope(
+        prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        width=width,
+        height=height,
+        output_path=output_path,
+    )
+    if not result or not result.exists() or result.stat().st_size <= 0:
+        raise RuntimeError("Cloud T2I returned no image")
+    thumbnail = workspace_url(project_id, _asset_output_relative_path(asset_id))
+    return update_project_asset(
+        project_id,
+        asset_id,
+        {
+            "status": AssetStatus.DONE,
+            "thumbnail": thumbnail,
+            "error": "",
+        },
+    )
+
+
 def _render_asset_image(project_id: str, asset_id: str) -> Asset:
-    # Pre-check: ensure ComfyUI is reachable
     if not _check_comfyui_online():
-        raise RuntimeError(
-            "ComfyUI 服务不可达。请确认 ComfyUI 已启动，或 SSH 隧道已连接到远程 GPU 服务器。"
-            f" 当前目标地址: {comfyui_base_url()}"
+        logger.warning(
+            "ComfyUI unreachable at %s; rendering asset %s via cloud T2I",
+            comfyui_base_url(),
+            asset_id,
         )
+        return _render_asset_image_cloud(project_id, asset_id)
 
     asset = _load_asset_record(project_id, asset_id)
     style = _project_style(project_id)
@@ -504,13 +536,6 @@ def generate_asset_image(project_id: str, asset_id: str) -> Asset:
 
 
 def generate_all_assets(project_id: str) -> dict[str, Any]:
-    # Pre-check ComfyUI availability before starting batch
-    if not _check_comfyui_online():
-        raise RuntimeError(
-            "ComfyUI 服务不可达。请确认 ComfyUI 已启动，或 SSH 隧道已连接到远程 GPU 服务器。"
-            f" 当前目标地址: {comfyui_base_url()}"
-        )
-
     store = load_asset_store(project_id)
     asset_ids = [
         asset.id

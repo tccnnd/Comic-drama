@@ -560,13 +560,6 @@ def extract_assets_endpoint(project_id: str) -> dict[str, Any]:
 
 @asset_router.post("/{asset_id}/generate")
 def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
-    from backend.asset_generation import _check_comfyui_online
-
-    if not _check_comfyui_online():
-        raise HTTPException(
-            status_code=503,
-            detail="ComfyUI 服务不可达。请确认 ComfyUI 已启动，或 SSH 隧道已连接到远程 GPU 服务器。",
-        )
     try:
         asset = update_asset_status(project_id, asset_id, AssetStatus.GENERATING)
     except FileNotFoundError:
@@ -591,13 +584,6 @@ def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
 
 @asset_router.post("/generate-all")
 def generate_all_assets_endpoint(project_id: str) -> dict[str, Any]:
-    from backend.asset_generation import _check_comfyui_online
-
-    if not _check_comfyui_online():
-        raise HTTPException(
-            status_code=503,
-            detail="ComfyUI 服务不可达。请确认 ComfyUI 已启动，或 SSH 隧道已连接到远程 GPU 服务器。",
-        )
     try:
         with project_lock(project_id):
             store = load_asset_store(project_id)
