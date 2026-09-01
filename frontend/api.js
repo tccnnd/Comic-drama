@@ -1479,6 +1479,20 @@ export async function loadConsistencyReport(projectId) {
   }
 }
 
+export async function loadHealth() {
+  try {
+    const data = await apiJson("/api/health/detailed", { method: "GET" });
+    state.healthReport = data || null;
+    state.healthError = "";
+    return state.healthReport;
+  } catch (err) {
+    state.healthError = err?.message || String(err);
+    console.warn("Failed to load health:", err);
+    state.healthReport = null;
+    return null;
+  }
+}
+
 export function saveComfyUIUrl() {
   const url = comfyuiEditorUrl();
   if (!url) {

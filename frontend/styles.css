@@ -4209,3 +4209,98 @@ select:hover {
   .consistency-body { grid-template-columns: minmax(0, 1fr); }
   .consistency-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   System Health (C6) — 系统健康
+   作用域限定在 .health-layout 内，与 .consistency-layout 同策略。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.health-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ── 作用域内通用工具类 ── */
+.health-layout .fs11 { font-size: 11px; }
+.health-layout .muted { color: var(--muted); }
+.health-layout .spacer { flex: 1; }
+.health-layout .is-ok { color: var(--ok); }
+.health-layout .is-bad { color: var(--danger); }
+
+/* ── 统计卡 ── */
+.health-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.health-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+}
+.health-stat-label {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.health-stat-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.health-stat-value.is-ok { color: var(--ok); }
+.health-stat-value.is-warn { color: var(--warn); }
+
+/* ── 工具栏 ── */
+.health-toolbar .window-body { padding: 9px 12px; }
+
+/* ── 报告主体 ── */
+.health-report-pane { display: flex; flex-direction: column; min-height: 0; }
+.health-report-pane .section-stack { padding: 10px 12px; overflow: auto; }
+
+/* ── 组件明细 ── */
+.health-component { margin-bottom: 14px; }
+.health-component:last-child { margin-bottom: 0; }
+.health-component h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.health-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.health-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.health-kv:last-child { border-bottom: 0; }
+.health-dir-list {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@media (max-width: 1180px) {
+  .health-stats { grid-template-columns: repeat(2, 1fr); }
+}

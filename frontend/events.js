@@ -99,6 +99,7 @@ import {
   loadTtsDiagnostics,
   loadCostEstimate,
   loadConsistencyReport,
+  loadHealth,
 } from "./api.js";
 import {
   render,
@@ -119,6 +120,8 @@ import {
   renderConsistencyStats,
   renderConsistencyReport,
   renderConsistencyRecommendations,
+  renderHealthStats,
+  renderHealthReport,
 } from "./render.js";
 
 import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
@@ -228,6 +231,9 @@ async function switchTab(tab, section) {
   }
   if (tab === "consistency") {
     await refreshConsistency();
+  }
+  if (tab === "health") {
+    await refreshHealth();
   }
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
@@ -547,6 +553,7 @@ async function handleClick(event) {
     "cancel-voice-preset",
     "refresh-cost",
     "refresh-consistency",
+    "refresh-health",
   ]);
   if (state.busy && !allowedWhileBusy.has(action)) return;
   try {
@@ -644,6 +651,10 @@ async function handleClick(event) {
     }
     if (action === "refresh-consistency") {
       await refreshConsistency();
+      return;
+    }
+    if (action === "refresh-health") {
+      await refreshHealth();
       return;
     }
     if (action === "select-project") {
@@ -1462,6 +1473,38 @@ export async function refreshConsistency() {
   } finally {
     state.consistencyLoading = false;
     patchConsistencyDom();
+  }
+}
+
+function healthSyncText() {
+  if (state.healthLoading) return "检查中…";
+  if (state.healthError) return "检查失败";
+  if (!state.healthLastSync) return "尚未检查";
+  return `已同步 ${new Date(state.healthLastSync).toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
+function patchHealthDom({ stats = true, report = true } = {}) {
+  if (state.activeTab !== "health") return;
+  const statsEl = document.getElementById("healthStats");
+  const reportEl = document.getElementById("healthReport");
+  const hint = document.getElementById("healthSyncHint");
+  if (stats && statsEl) statsEl.innerHTML = renderHealthStats();
+  if (report && reportEl) reportEl.innerHTML = renderHealthReport();
+  if (hint) hint.textContent = healthSyncText();
+}
+
+export async function refreshHealth() {
+  if (state.activeTab !== "health") return;
+  state.healthLoading = true;
+  patchHealthDom();
+  try {
+    await loadHealth();
+    state.healthLastSync = Date.now();
+  } catch (error) {
+    state.healthError = error?.message || "加载系统健康失败";
+  } finally {
+    state.healthLoading = false;
+    patchHealthDom();
   }
 }
 

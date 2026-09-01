@@ -344,6 +344,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "voice") return renderVoiceView();
   if (state.activeTab === "cost") return renderCostView(project);
   if (state.activeTab === "consistency") return renderConsistencyView(project);
+  if (state.activeTab === "health") return renderHealthView(project);
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
@@ -1365,6 +1366,128 @@ export function renderConsistencyRecommendations(project) {
     <ul class="consistency-reco-list">
       ${recos.map((t) => `<li>${h(String(t))}</li>`).join("")}
     </ul>`;
+}
+
+export function renderHealthView(project) {
+  const r = state.healthReport;
+  const overall = r ? (r.status === "ok" ? "正常" : "降级") : "—";
+  return `
+    <div class="health-layout">
+      <div id="healthStats" class="health-stats">${renderHealthStats(project)}</div>
+      <div class="window-pane health-toolbar">
+        <div class="window-body row-actions">
+          <span class="spacer"></span>
+          <span id="healthSyncHint" class="muted fs11">${
+            state.healthLoading
+              ? "检查中…"
+              : state.healthError
+              ? "检查失败"
+              : state.healthLastSync
+              ? `已同步 ${bgmTime(state.healthLastSync)}`
+              : "尚未检查"
+          }</span>
+          <button class="ghost-button" type="button" data-action="refresh-health">刷新</button>
+        </div>
+      </div>
+      <div class="window-pane health-report-pane">
+        <div class="window-head">系统健康详情 <small>${h(overall)}</small></div>
+        <div class="window-body section-stack" id="healthReport">${renderHealthReport(project)}</div>
+      </div>
+    </div>`;
+}
+
+export function renderHealthStats(project) {
+  const r = state.healthReport;
+  const vp = r?.components?.video_provider || {};
+  const cf = r?.components?.comfyui || {};
+  const st = r?.components?.storage || {};
+  const providerLabel = vp.provider?.label || vp.provider?.id || "—";
+  const cards = [
+    ["总体状态", r ? (r.status === "ok" ? "正常" : "降级") : "—", r ? (r.status === "ok" ? "ok" : "warn") : ""],
+    ["视频引擎", providerLabel, vp.readiness?.ready ? "ok" : r ? "warn" : ""],
+    ["ComfyUI", r ? (cf.ready ? "就绪" : "阻断") : "—", r ? (cf.ready ? "ok" : "warn") : ""],
+    ["存储", r ? (st.writable ? "可写" : "不可写") : "—", r ? (st.writable ? "ok" : "warn") : ""],
+  ];
+  return cards
+    .map(
+      ([label, value, tone]) => `
+        <div class="health-stat">
+          <span class="health-stat-label">${h(label)}</span>
+          <span class="health-stat-value ${tone ? `is-${tone}` : ""}">${h(String(value))}</span>
+        </div>`
+    )
+    .join("");
+}
+
+export function renderHealthReport(project) {
+  const r = state.healthReport;
+  if (state.healthError) {
+    return `<div class="status-pill danger">健康检查失败：${h(state.healthError)}</div>`;
+  }
+  if (!r) {
+    return `<p class="muted">尚未进行系统健康检查。点击右上角「刷新」探测视频引擎、ComfyUI 与存储状态。</p>`;
+  }
+  const vp = r.components?.video_provider || {};
+  const cf = r.components?.comfyui || {};
+  const st = r.components?.storage || {};
+  const prov = vp.provider || {};
+  const readiness = vp.readiness || {};
+
+  const vpBlock = `
+    <div class="health-component">
+      <h4>视频 Provider</h4>
+      <div class="health-kv-list">
+        ${healthKv("引擎", prov.label ? `${prov.label}（${prov.id}）` : prov.id || "—")}
+        ${healthKv("后端", prov.backend || "—")}
+        ${healthKv("就绪", readiness.ready ? "是" : "否")}
+        ${healthKv("说明", readiness.summary || "—")}
+        ${healthKv("已配置环境变量", vp.configured_count == null ? "—" : String(vp.configured_count))}
+        ${healthKvList("缺失环境变量", vp.missing_env || [], "无")}
+      </div>
+    </div>`;
+
+  const cfBlock = `
+    <div class="health-component">
+      <h4>ComfyUI</h4>
+      <div class="health-kv-list">
+        ${healthKv("就绪", cf.ready ? "是" : "否")}
+        ${healthKvList("阻断项", cf.blockers || [], "无")}
+        ${healthKvList("警告", cf.warnings || [], "无")}
+      </div>
+    </div>`;
+
+  const dirs = st.dirs || {};
+  const dirRows = Object.keys(dirs)
+    .map((name) => {
+      const d = dirs[name] || {};
+      const writableText = d.writable ? "可写" : d.writable === false ? "不可写" : "—";
+      const writableTone = d.writable ? "is-ok" : d.writable === false ? "is-bad" : "";
+      return `<li>${h(name)}：<span class="${d.exists ? "" : "muted"}">${
+        d.exists ? "存在" : "缺失"
+      }</span> / <span class="${writableTone}">${writableText}</span>${
+        d.detail ? ` <span class="muted fs11">(${h(String(d.detail))})</span>` : ""
+      }</li>`;
+    })
+    .join("");
+  const stBlock = `
+    <div class="health-component">
+      <h4>存储</h4>
+      <div class="health-kv-list">
+        ${healthKv("整体可写", st.writable ? "是" : "否")}
+      </div>
+      <ul class="health-dir-list">${dirRows || '<li class="muted">无目录信息</li>'}</ul>
+    </div>`;
+
+  return `${vpBlock}${cfBlock}${stBlock}`;
+}
+
+function healthKv(k, v) {
+  return `<div class="health-kv"><span class="muted">${h(k)}</span><b>${h(String(v))}</b></div>`;
+}
+
+function healthKvList(k, items, emptyText) {
+  const body = items && items.length ? items.map((i) => h(String(i))).join("、") : emptyText;
+  return `<div class="health-kv"><span class="muted">${h(k)}</span><b>${h(body)}</b></div>`;
 }
 
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────

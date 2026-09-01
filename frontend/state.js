@@ -78,6 +78,10 @@ export const state = {
   consistencyLoading: false,
   consistencyError: "",
   consistencyLastSync: 0,
+  healthReport: null,
+  healthLoading: false,
+  healthError: "",
+  healthLastSync: 0,
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -210,6 +214,7 @@ export const tabs = [
   ["settings", "⑨ 设置", "settingsSection"],
   ["cost", "⑩ 成本与用量", "costSection"],
   ["consistency", "⑪ 一致性治理", "consistencySection"],
+  ["health", "⑫ 系统健康", "healthSection"],
 ];
 
 // 任务中心：后端 tasks.py 只提供只读端点 + 单任务 WS 订阅，
