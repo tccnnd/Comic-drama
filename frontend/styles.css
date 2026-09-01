@@ -3975,3 +3975,104 @@ select:hover {
   .voice-body { grid-template-columns: minmax(0, 1fr); }
   .voice-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Cost & Usage (C4) — 成本与用量
+   作用域限定在 .cost-layout 内，与 .bgm-layout / .voice-layout 同策略。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.cost-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ── 作用域内通用工具类 ── */
+.cost-layout .fs11 { font-size: 11px; }
+.cost-layout .muted { color: var(--muted); }
+.cost-layout .spacer { flex: 1; }
+
+/* ── 统计卡 ── */
+.cost-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.cost-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+}
+.cost-stat-label {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cost-stat-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cost-stat-value.is-ok { color: var(--ok); }
+
+/* ── 工具栏 ── */
+.cost-toolbar .window-body { padding: 9px 12px; }
+.cost-toolbar .field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cost-provider-select {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* ── 主体：左成本估算 + 右 LLM 用量 ── */
+.cost-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.cost-estimate-pane,
+.cost-usage-pane { display: flex; flex-direction: column; min-height: 0; }
+.cost-estimate-pane .section-stack,
+.cost-usage-pane .section-stack { padding: 10px 12px; overflow: auto; }
+
+.cost-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cost-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.cost-kv:last-child { border-bottom: 0; }
+
+@media (max-width: 1180px) {
+  .cost-body { grid-template-columns: minmax(0, 1fr); }
+  .cost-stats { grid-template-columns: repeat(2, 1fr); }
+}

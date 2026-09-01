@@ -342,6 +342,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "tasks") return renderTasksView();
   if (state.activeTab === "bgm") return renderBgmView();
   if (state.activeTab === "voice") return renderVoiceView();
+  if (state.activeTab === "cost") return renderCostView(project);
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
@@ -1138,6 +1139,98 @@ export function renderVoiceDetail() {
     </div>`;
 }
 
+// ─── Phase ⑩ Cost & Usage View ───────────────────────────────────────────────
+const COST_PROVIDER_OPTIONS = ["xl", "doubao", "seedance", "sora", "comfyui", "local"];
+
+export function renderCostView(project) {
+  return `
+    <div class="cost-layout">
+      <div id="costStats" class="cost-stats">${renderCostStats(project)}</div>
+      <div class="window-pane cost-toolbar">
+        <div class="window-body row-actions">
+          <label class="field-inline">引擎
+            <select id="costProviderSelect" class="cost-provider-select" data-action="cost-provider">
+              <option value="" ${state.costProvider ? "" : "selected"}>自动（默认）</option>
+              ${COST_PROVIDER_OPTIONS.map(
+                (p) => `<option value="${h(p)}" ${state.costProvider === p ? "selected" : ""}>${h(p)}</option>`
+              ).join("")}
+            </select>
+          </label>
+          <span class="spacer"></span>
+          <span id="costSyncHint" class="muted fs11">${
+            state.costEstimateLoading
+              ? "估算中…"
+              : state.costEstimateError
+              ? "估算失败"
+              : state.costLastSync
+              ? `已同步 ${bgmTime(state.costLastSync)}`
+              : "尚未估算"
+          }</span>
+          <button class="ghost-button" type="button" data-action="refresh-cost">刷新</button>
+        </div>
+      </div>
+      <div class="cost-body">
+        <div class="window-pane cost-estimate-pane">
+          <div class="window-head">项目成本估算 <small>${h(state.costEstimate?.provider || "—")}</small></div>
+          <div class="window-body section-stack" id="costEstimate">${renderCostEstimate(project)}</div>
+        </div>
+        <div class="window-pane cost-usage-pane">
+          <div class="window-head">LLM 用量</div>
+          <div class="window-body section-stack" id="costUsage">${renderLlmUsageSection()}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+export function renderCostStats(project) {
+  const c = state.costEstimate;
+  const u = state.llmUsage;
+  const cards = [
+    ["估算总成本", c ? `${c.estimated_total_cost_cny} 元` : "—", c ? "ok" : ""],
+    ["估算时长", c ? `${c.total_duration_seconds}s` : "—", ""],
+    ["LLM 调用", u ? String(u.total_calls || 0) : "—", ""],
+    ["LLM tokens", u ? (u.total_tokens || 0).toLocaleString() : "—", ""],
+  ];
+  return cards
+    .map(
+      ([label, value, tone]) => `
+        <div class="cost-stat">
+          <span class="cost-stat-label">${h(label)}</span>
+          <span class="cost-stat-value ${tone ? `is-${tone}` : ""}">${h(String(value))}</span>
+        </div>`
+    )
+    .join("");
+}
+
+export function renderCostEstimate(project) {
+  const c = state.costEstimate;
+  if (state.costEstimateError) {
+    return `<div class="status-pill danger">估算失败：${h(state.costEstimateError)}</div>`;
+  }
+  if (!c) {
+    return `<p class="muted">尚未生成成本估算。点击右上角「刷新」按当前引擎估算本项目的视频 / 图片成本。</p>`;
+  }
+  const rows = [
+    ["引擎", c.provider],
+    ["档位", c.tier],
+    ["场景数", c.scene_count],
+    ["总时长", `${c.total_duration_seconds}s`],
+    ["视频成本", `${c.estimated_video_cost_cny} 元`],
+    ["图片成本", `${c.estimated_image_cost_cny} 元`],
+    ["预估总成本", `${c.estimated_total_cost_cny} 元`],
+    ["预估总耗时", `${c.estimated_total_time_minutes} 分钟（${c.estimated_total_time_seconds}s）`],
+  ];
+  return `
+    <div class="cost-kv-list">
+      ${rows
+        .map(
+          ([k, v]) => `<div class="cost-kv"><span class="muted">${h(k)}</span><b>${h(String(v))}</b></div>`
+        )
+        .join("")}
+    </div>
+    <p class="fs11 muted-2" style="margin-top:8px">成本为后端单价模型估算（CNY），仅供预算参考；实际以引擎账单为准。</p>`;
+}
+
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────
 export function renderProduceView(project) {
   const scenes = timelineSceneItems(project);
@@ -1494,7 +1587,7 @@ function renderTaskOverridesSection(cfg, taskDefs) {
   `;
 }
 
-function renderLlmUsageSection() {
+export function renderLlmUsageSection() {
   const usage = state.llmUsage;
   if (!usage || usage.total_calls === 0) {
     return `<div class="muted" style="font-size:12px;margin-top:8px">暂无 LLM 调用记录</div>`;

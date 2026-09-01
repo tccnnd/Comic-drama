@@ -97,6 +97,7 @@ import {
   loadVoicePresets,
   saveVoicePresets,
   loadTtsDiagnostics,
+  loadCostEstimate,
 } from "./api.js";
 import {
   render,
@@ -111,6 +112,9 @@ import {
   renderVoiceCards,
   renderVoiceDetail,
   renderVoicePreviewResult,
+  renderCostStats,
+  renderCostEstimate,
+  renderLlmUsageSection,
 } from "./render.js";
 
 import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
@@ -214,6 +218,9 @@ async function switchTab(tab, section) {
   }
   if (tab === "voice") {
     await refreshVoice();
+  }
+  if (tab === "cost") {
+    await refreshCost();
   }
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
@@ -531,6 +538,7 @@ async function handleClick(event) {
     "add-voice-preset",
     "edit-voice-preset",
     "cancel-voice-preset",
+    "refresh-cost",
   ]);
   if (state.busy && !allowedWhileBusy.has(action)) return;
   try {
@@ -620,6 +628,10 @@ async function handleClick(event) {
     }
     if (action === "preview-voice-preset") {
       await previewVoicePreset(button);
+      return;
+    }
+    if (action === "refresh-cost") {
+      await refreshCost();
       return;
     }
     if (action === "select-project") {
@@ -908,6 +920,11 @@ async function runReviewShotRerender(sceneOrderValue, shotId) {
 
 function handleChange(event) {
   if (handleCropInput(event.target)) return;
+  if (event.target?.id === "costProviderSelect") {
+    state.costProvider = event.target.value || "";
+    refreshCost();
+    return;
+  }
   if (event.target?.dataset?.action === "review-triage-input") {
     setReviewTriageField(event.target.dataset.triageField, event.target.value);
     render();
@@ -1352,6 +1369,47 @@ async function previewVoicePreset(button) {
     showToast(error?.message || "试听生成失败", "danger");
   } finally {
     setBusy(false);
+  }
+}
+
+// ─── Cost & Usage (C4) ────────────────────────────────────────────────────────
+// 成本估算（项目级，/api/projects/{id}/cost-estimate）+ LLM 用量（全局，/api/llm-usage）。
+// 两者后端均已就绪、纯展示零风险；沿用 BGM/Voice 的局部 DOM 替换策略。
+
+function costSyncText() {
+  if (state.costEstimateLoading) return "估算中…";
+  if (state.costEstimateError) return "估算失败";
+  if (!state.costLastSync) return "尚未估算";
+  return `已同步 ${new Date(state.costLastSync).toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
+function patchCostDom({ stats = true, estimate = true, usage = true } = {}) {
+  if (state.activeTab !== "cost") return;
+  const statsEl = document.getElementById("costStats");
+  const estimateEl = document.getElementById("costEstimate");
+  const usageEl = document.getElementById("costUsage");
+  const hint = document.getElementById("costSyncHint");
+  if (stats && statsEl) statsEl.innerHTML = renderCostStats();
+  if (estimate && estimateEl) estimateEl.innerHTML = renderCostEstimate();
+  if (usage && usageEl) usageEl.innerHTML = renderLlmUsageSection();
+  if (hint) hint.textContent = costSyncText();
+}
+
+export async function refreshCost() {
+  if (state.activeTab !== "cost") return;
+  state.costEstimateLoading = true;
+  patchCostDom();
+  try {
+    await loadLlmUsage();
+    if (state.currentProjectId) {
+      await loadCostEstimate(state.currentProjectId, state.costProvider);
+      state.costLastSync = Date.now();
+    }
+  } catch (error) {
+    state.costEstimateError = error?.message || "加载成本估算失败";
+  } finally {
+    state.costEstimateLoading = false;
+    patchCostDom();
   }
 }
 

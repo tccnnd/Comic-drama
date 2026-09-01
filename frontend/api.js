@@ -1445,6 +1445,24 @@ export async function loadLlmUsage() {
   }
 }
 
+export async function loadCostEstimate(projectId, provider = "") {
+  if (!projectId) return null;
+  const url = `/api/projects/${encodeURIComponent(projectId)}/cost-estimate${
+    provider ? `?provider=${encodeURIComponent(provider)}` : ""
+  }`;
+  try {
+    const data = await apiJson(url, { method: "GET" });
+    state.costEstimate = data || null;
+    state.costEstimateError = "";
+    return state.costEstimate;
+  } catch (err) {
+    state.costEstimateError = err?.message || String(err);
+    console.warn("Failed to load cost estimate:", err);
+    state.costEstimate = null;
+    return null;
+  }
+}
+
 export function saveComfyUIUrl() {
   const url = comfyuiEditorUrl();
   if (!url) {

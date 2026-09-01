@@ -69,6 +69,11 @@ export const state = {
   voicePresetEditing: null,
   voiceKeyword: "",
   ttsDiagnostics: null,
+  costEstimate: null,
+  costEstimateLoading: false,
+  costEstimateError: "",
+  costProvider: "",
+  costLastSync: 0,
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -199,6 +204,7 @@ export const tabs = [
   ["bgm", "⑦ BGM 素材库", "bgmSection"],
   ["voice", "⑧ 声线预设", "voiceSection"],
   ["settings", "⑨ 设置", "settingsSection"],
+  ["cost", "⑩ 成本与用量", "costSection"],
 ];
 
 // 任务中心：后端 tasks.py 只提供只读端点 + 单任务 WS 订阅，
