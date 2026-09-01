@@ -74,6 +74,10 @@ export const state = {
   costEstimateError: "",
   costProvider: "",
   costLastSync: 0,
+  consistencyReport: null,
+  consistencyLoading: false,
+  consistencyError: "",
+  consistencyLastSync: 0,
   scriptPreview: null,
   voicePreview: null,
   reviewFilter: "all",
@@ -205,6 +209,7 @@ export const tabs = [
   ["voice", "⑧ 声线预设", "voiceSection"],
   ["settings", "⑨ 设置", "settingsSection"],
   ["cost", "⑩ 成本与用量", "costSection"],
+  ["consistency", "⑪ 一致性治理", "consistencySection"],
 ];
 
 // 任务中心：后端 tasks.py 只提供只读端点 + 单任务 WS 订阅，

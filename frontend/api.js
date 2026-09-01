@@ -1463,6 +1463,22 @@ export async function loadCostEstimate(projectId, provider = "") {
   }
 }
 
+export async function loadConsistencyReport(projectId) {
+  if (!projectId) return null;
+  const url = `/api/projects/${encodeURIComponent(projectId)}/consistency-report`;
+  try {
+    const data = await apiJson(url, { method: "GET" });
+    state.consistencyReport = data || null;
+    state.consistencyError = "";
+    return state.consistencyReport;
+  } catch (err) {
+    state.consistencyError = err?.message || String(err);
+    console.warn("Failed to load consistency report:", err);
+    state.consistencyReport = null;
+    return null;
+  }
+}
+
 export function saveComfyUIUrl() {
   const url = comfyuiEditorUrl();
   if (!url) {

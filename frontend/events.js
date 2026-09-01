@@ -98,6 +98,7 @@ import {
   saveVoicePresets,
   loadTtsDiagnostics,
   loadCostEstimate,
+  loadConsistencyReport,
 } from "./api.js";
 import {
   render,
@@ -115,6 +116,9 @@ import {
   renderCostStats,
   renderCostEstimate,
   renderLlmUsageSection,
+  renderConsistencyStats,
+  renderConsistencyReport,
+  renderConsistencyRecommendations,
 } from "./render.js";
 
 import { playTemporalPreview, pauseTemporalPreview, resetTemporalPreview } from "./timeline.js";
@@ -221,6 +225,9 @@ async function switchTab(tab, section) {
   }
   if (tab === "cost") {
     await refreshCost();
+  }
+  if (tab === "consistency") {
+    await refreshConsistency();
   }
   if (tab === "assets" && state.currentProjectId) {
     await loadAssets(state.currentProjectId);
@@ -539,6 +546,7 @@ async function handleClick(event) {
     "edit-voice-preset",
     "cancel-voice-preset",
     "refresh-cost",
+    "refresh-consistency",
   ]);
   if (state.busy && !allowedWhileBusy.has(action)) return;
   try {
@@ -632,6 +640,10 @@ async function handleClick(event) {
     }
     if (action === "refresh-cost") {
       await refreshCost();
+      return;
+    }
+    if (action === "refresh-consistency") {
+      await refreshConsistency();
       return;
     }
     if (action === "select-project") {
@@ -1410,6 +1422,46 @@ export async function refreshCost() {
   } finally {
     state.costEstimateLoading = false;
     patchCostDom();
+  }
+}
+
+function consistencySyncText() {
+  if (state.consistencyLoading) return "校验中…";
+  if (state.consistencyError) return "校验失败";
+  if (!state.consistencyLastSync) return "尚未校验";
+  return `已同步 ${new Date(state.consistencyLastSync).toLocaleTimeString("zh-CN", { hour12: false })}`;
+}
+
+function patchConsistencyDom({ stats = true, report = true, reco = true } = {}) {
+  if (state.activeTab !== "consistency") return;
+  const statsEl = document.getElementById("consistencyStats");
+  const reportEl = document.getElementById("consistencyReport");
+  const recoEl = document.getElementById("consistencyReco");
+  const hint = document.getElementById("consistencySyncHint");
+  if (stats && statsEl) statsEl.innerHTML = renderConsistencyStats();
+  if (report && reportEl) reportEl.innerHTML = renderConsistencyReport();
+  if (reco && recoEl) recoEl.innerHTML = renderConsistencyRecommendations();
+  if (hint) hint.textContent = consistencySyncText();
+}
+
+export async function refreshConsistency() {
+  if (state.activeTab !== "consistency") return;
+  if (!state.currentProjectId) {
+    state.consistencyReport = null;
+    state.consistencyError = "";
+    patchConsistencyDom();
+    return;
+  }
+  state.consistencyLoading = true;
+  patchConsistencyDom();
+  try {
+    await loadConsistencyReport(state.currentProjectId);
+    state.consistencyLastSync = Date.now();
+  } catch (error) {
+    state.consistencyError = error?.message || "加载一致性报告失败";
+  } finally {
+    state.consistencyLoading = false;
+    patchConsistencyDom();
   }
 }
 

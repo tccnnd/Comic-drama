@@ -343,6 +343,7 @@ export function renderActiveView(project) {
   if (state.activeTab === "bgm") return renderBgmView();
   if (state.activeTab === "voice") return renderVoiceView();
   if (state.activeTab === "cost") return renderCostView(project);
+  if (state.activeTab === "consistency") return renderConsistencyView(project);
   if (state.activeTab === "settings") return renderSettingsView(project);
   return renderPlanView(project);
 }
@@ -1229,6 +1230,141 @@ export function renderCostEstimate(project) {
         .join("")}
     </div>
     <p class="fs11 muted-2" style="margin-top:8px">成本为后端单价模型估算（CNY），仅供预算参考；实际以引擎账单为准。</p>`;
+}
+
+export function renderConsistencyView(project) {
+  const r = state.consistencyReport;
+  const overall =
+    r && typeof r.overall_score === "number"
+      ? `${Math.round(r.overall_score * 100)} 分`
+      : "—";
+  return `
+    <div class="consistency-layout">
+      <div id="consistencyStats" class="consistency-stats">${renderConsistencyStats(project)}</div>
+      <div class="window-pane consistency-toolbar">
+        <div class="window-body row-actions">
+          <span class="spacer"></span>
+          <span id="consistencySyncHint" class="muted fs11">${
+            state.consistencyLoading
+              ? "校验中…"
+              : state.consistencyError
+              ? "校验失败"
+              : state.consistencyLastSync
+              ? `已同步 ${bgmTime(state.consistencyLastSync)}`
+              : "尚未校验"
+          }</span>
+          <button class="ghost-button" type="button" data-action="refresh-consistency">刷新</button>
+        </div>
+      </div>
+      <div class="consistency-body">
+        <div class="window-pane consistency-report-pane">
+          <div class="window-head">一致性治理报告 <small>整体 ${h(overall)}</small></div>
+          <div class="window-body section-stack" id="consistencyReport">${renderConsistencyReport(project)}</div>
+        </div>
+        <div class="window-pane consistency-reco-pane">
+          <div class="window-head">治理建议</div>
+          <div class="window-body section-stack" id="consistencyReco">${renderConsistencyRecommendations(project)}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+export function renderConsistencyStats(project) {
+  const r = state.consistencyReport;
+  const scenes = r?.scenes || [];
+  const passed = scenes.filter((s) => s.status === "passed").length;
+  const failed = scenes.filter((s) => s.status === "failed").length;
+  const noImage = scenes.filter((s) => s.status === "no_image").length;
+  const overallPct = r && typeof r.overall_score === "number" ? Math.round(r.overall_score * 100) : null;
+  const cards = [
+    ["整体评分", overallPct == null ? "—" : `${overallPct} 分`, overallPct == null ? "" : overallPct >= 70 ? "ok" : "warn"],
+    ["场景总数", r ? String(r.scene_count ?? 0) : "—", ""],
+    ["通过 / 未通过", r ? `${passed} / ${failed}` : "—", failed ? "warn" : "ok"],
+    ["缺关键帧", r ? String(noImage) : "—", noImage ? "warn" : ""],
+  ];
+  return cards
+    .map(
+      ([label, value, tone]) => `
+        <div class="consistency-stat">
+          <span class="consistency-stat-label">${h(label)}</span>
+          <span class="consistency-stat-value ${tone ? `is-${tone}` : ""}">${h(String(value))}</span>
+        </div>`
+    )
+    .join("");
+}
+
+export function renderConsistencyReport(project) {
+  const r = state.consistencyReport;
+  if (state.consistencyError) {
+    return `<div class="status-pill danger">报告生成失败：${h(state.consistencyError)}</div>`;
+  }
+  if (!r) {
+    return `<p class="muted">尚未生成一致性治理报告。点击右上角「刷新」对本项目全部场景进行一致性校验（角色身份一致性、风格漂移、光照连续性）。</p>`;
+  }
+  const drift = (r.character_drift || []).length
+    ? `<div class="consistency-drift"><h4>角色漂移</h4><ul class="consistency-drift-list">${(r.character_drift || [])
+        .map((d) => `<li>${h(typeof d === "string" ? d : JSON.stringify(d))}</li>`)
+        .join("")}</ul></div>`
+    : "";
+  const scenesHtml =
+    (r.scenes || []).map(renderConsistencySceneRow).join("") ||
+    '<p class="muted">无场景数据。</p>';
+  return `
+    ${drift}
+    <div class="consistency-scenes">${scenesHtml}</div>`;
+}
+
+function renderConsistencySceneRow(scene) {
+  const statusPill =
+    scene.status === "passed"
+      ? `<span class="status-pill ok">通过</span>`
+      : scene.status === "failed"
+      ? `<span class="status-pill danger">未通过</span>`
+      : `<span class="status-pill muted">缺关键帧</span>`;
+  const score = scene.score == null ? "—" : `${Math.round(scene.score * 100)} 分`;
+  const checks = (scene.checks || [])
+    .map(
+      (c) => `
+      <li class="consistency-check ${c.passed ? "is-ok" : "is-bad"}">
+        <span class="consistency-check-name">${h(c.name)}</span>
+        <span class="consistency-check-score">${
+          c.score == null ? "—" : `${Math.round(c.score * 100)}`
+        }</span>
+        ${c.details ? `<span class="consistency-check-details muted">${h(String(c.details))}</span>` : ""}
+      </li>`
+    )
+    .join("");
+  const warnings = (scene.warnings || [])
+    .map((w) => `<li class="consistency-warning">${h(String(w))}</li>`)
+    .join("");
+  return `
+    <div class="consistency-scene">
+      <div class="consistency-scene-head">
+        <b>场景 #${h(String(scene.order))}</b>
+        ${statusPill}
+        <span class="muted fs11">评分 ${score}</span>
+      </div>
+      ${checks ? `<ul class="consistency-checks">${checks}</ul>` : ""}
+      ${warnings ? `<ul class="consistency-warnings">${warnings}</ul>` : ""}
+    </div>`;
+}
+
+export function renderConsistencyRecommendations(project) {
+  const r = state.consistencyReport;
+  if (state.consistencyError) {
+    return `<div class="status-pill danger">报告生成失败：${h(state.consistencyError)}</div>`;
+  }
+  if (!r) {
+    return `<p class="muted">生成报告后，这里会列出针对一致性问题的治理建议。</p>`;
+  }
+  const recos = r.recommendations || [];
+  if (!recos.length) {
+    return `<p class="status-pill ok">未发现问题，一致性状态良好。</p>`;
+  }
+  return `
+    <ul class="consistency-reco-list">
+      ${recos.map((t) => `<li>${h(String(t))}</li>`).join("")}
+    </ul>`;
 }
 
 // ─── Phase ④ Produce View ────────────────────────────────────────────────────
