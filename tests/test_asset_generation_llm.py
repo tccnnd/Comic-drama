@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from backend import asset_generation
 from backend.assets import Asset, AssetStatus, AssetType
@@ -62,8 +63,6 @@ def test_asset_generation_prompts_fallback_when_llm_fails(monkeypatch):
 
 
 def test_render_asset_image_falls_back_to_cloud_when_comfyui_offline(tmp_path, monkeypatch):
-    from pathlib import Path
-
     asset = Asset(
         id="char01",
         asset_type=AssetType.CHARACTER,
@@ -116,3 +115,53 @@ def test_render_asset_image_falls_back_to_cloud_when_comfyui_offline(tmp_path, m
     assert captured["height"] == 1216
     assert "heroine portrait" in captured["prompt"]
     assert captured["update"]["status"] == AssetStatus.DONE
+
+
+def test_render_asset_image_survives_comfyui_base_url_raise(tmp_path, monkeypatch):
+    """comfyui_base_url() raising (SSH auth failure) must not break cloud fallback."""
+    import pytest
+
+    asset = Asset(
+        id="scene01",
+        asset_type=AssetType.SCENE_BG,
+        name="血魔教总坛",
+        visual_prompt="dark fortress",
+    )
+    monkeypatch.setattr(asset_generation, "_check_comfyui_online", lambda: False)
+
+    def raise_auth():
+        raise RuntimeError("Authentication failed.")
+
+    monkeypatch.setattr(asset_generation, "comfyui_base_url", raise_auth)
+    monkeypatch.setattr(asset_generation, "_load_asset_record", lambda *_a, **_k: asset)
+    monkeypatch.setattr(
+        asset_generation,
+        "_project_style",
+        lambda *_a, **_k: {"positive_suffix": "", "negative_suffix": ""},
+    )
+    monkeypatch.setattr(
+        asset_generation,
+        "_asset_generation_prompts",
+        lambda *_a, **_k: ("dark fortress", "people"),
+    )
+    monkeypatch.setattr(
+        asset_generation, "_asset_output_path", lambda *_a, **_k: tmp_path / "scene01.png"
+    )
+    monkeypatch.setattr(
+        asset_generation, "workspace_url", lambda *_a, **_k: "/workspace/p/assets/scene01.png"
+    )
+
+    def fake_cloud(**kwargs):
+        out = Path(kwargs["output_path"])
+        out.write_bytes(b"png")
+        return out
+
+    monkeypatch.setattr(asset_generation, "generate_keyframe_dashscope", fake_cloud)
+    monkeypatch.setattr(
+        asset_generation,
+        "update_project_asset",
+        lambda *_a, **_k: asset.model_copy(update={"status": AssetStatus.DONE}),
+    )
+
+    result = asset_generation._render_asset_image("proj", "scene01")
+    assert result.status == AssetStatus.DONE
