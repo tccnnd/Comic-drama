@@ -9,6 +9,8 @@ from PIL import Image
 from backend.config_utils import env_bool, env_float
 from backend.video_generation import (
     VideoGenerationResult,
+    VideoShotDryRun,
+    VideoShotQuotaError,
     normalize_video_render_granularity,
     render_scene_shots_with_provider_policy,
     video_fallback_mode,
@@ -389,8 +391,9 @@ def render_clip_with_meta(
     （复用 backend/video_generation.render_scene_shots_with_provider_policy），
     并把镜头级 provenance 写入调用方传入的 ``shot_meta_out`` 字典。
 
-    逐镜头编排失败时：strict 模式直接抛错，report 模式降级到既有 scene 级
-    渲染路径（不改变原行为）。
+    逐镜头编排失败时：``VideoShotQuotaError`` / ``VideoShotDryRun`` 必须上抛
+    （禁止降级到 scene 级以免绕过配额）；其余失败在 strict 模式直接抛错，
+    report 模式降级到既有 scene 级渲染路径。
     """
     style = normalize_subtitle_style(subtitle_style)
     audio_settings = normalize_audio_style(audio_style)
@@ -474,6 +477,9 @@ def render_clip_with_meta(
             shot_rendered = True
             if shot_meta_out is not None and isinstance(shot_meta, dict):
                 shot_meta_out.update(shot_meta)
+        except (VideoShotQuotaError, VideoShotDryRun):
+            # Quota/dry-run must abort before any scene-level fallback submit.
+            raise
         except Exception as exc:
             last_error = str(exc)
             if fallback_mode == "strict":

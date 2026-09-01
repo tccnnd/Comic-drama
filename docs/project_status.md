@@ -92,7 +92,10 @@ Expected result: an output run directory under `outputs/`, per-scene media, a
   coverage and prompt-contract tests.
 - `shot-level-video-rendering` is implemented and merged (v0.6.0-pre, opt-in).
   Gate C live validation EVALUATED 2026-09-01 (two-shot XL submit; 429 →
-  report fallback; assembled media verified). Before enabling shot-level
-  live calls by default, add dry-run quota guards (see `docs/roadmap.md`).
+  report fallback; assembled media verified). Remote shot-level quota
+  defaults (8 calls / 40 seconds per scene) now block over-limit live
+  submits; CLI quota errors no longer fall back to a scene-level submit.
+  Scene-level remains the default until XL `real_video` at shot-level is
+  proven.
 - Keep `_external/Toonflow-app` untouched unless explicitly investigating that
   nested reference project.

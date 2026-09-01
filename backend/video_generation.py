@@ -46,6 +46,10 @@ VIDEO_FALLBACK_MODE = os.environ.get("VIDEO_FALLBACK_MODE", "report").strip().lo
 # "silent" = original behavior, silent fallback (not recommended)
 VIDEO_RENDER_GRANULARITY = os.environ.get("VIDEO_RENDER_GRANULARITY", "scene").strip().lower()
 VIDEO_RENDER_GRANULARITIES = {"scene", "shot"}
+# Remote shot-level live calls multiply provider quota. Unset env/settings
+# still apply these per-scene caps; set 0 to opt out. local/comfyui stay unlimited.
+DEFAULT_REMOTE_SHOT_MAX_CALLS = 8
+DEFAULT_REMOTE_SHOT_MAX_SECONDS = 40.0
 
 
 @dataclass
@@ -164,45 +168,92 @@ def _first_config_value(
     return os.environ.get(env_name)
 
 
-def _optional_positive_int(value: object) -> int | None:
+def _optional_non_negative_int(value: object) -> int | None:
+    """Parse an int quota. ``None`` = unset; ``0`` = explicitly unlimited."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
     try:
         number = int(value)
     except (TypeError, ValueError):
         return None
-    return number if number > 0 else None
+    return number if number >= 0 else None
 
 
-def _optional_positive_float(value: object) -> float | None:
+def _optional_non_negative_float(value: object) -> float | None:
+    """Parse a float quota. ``None`` = unset; ``0`` = explicitly unlimited."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return number if number > 0.0 else None
+    return number if number >= 0.0 else None
+
+
+def _remote_shot_quota_applies(
+    *,
+    video_provider: str = "",
+    project_settings: dict[str, Any] | None = None,
+) -> bool:
+    """Return True when the unresolved provider is a remote (quota-consuming) backend."""
+    requested = str(video_provider or "").strip()
+    if not requested and isinstance(project_settings, dict):
+        requested = str(project_settings.get("video_provider") or "").strip()
+    try:
+        from video_providers import get_video_provider_spec
+    except Exception:  # pragma: no cover - optional in pure helper tests
+        return bool(requested) and requested.lower() not in {"", "local", "comfyui", "auto"}
+    spec = get_video_provider_spec(requested or None)
+    return spec.backend == "remote"
 
 
 def video_shot_quota_config(
     *,
     request_values: dict[str, Any] | None = None,
     project_settings: dict[str, Any] | None = None,
+    video_provider: str = "",
 ) -> dict[str, Any]:
-    """Resolve shot-level dry-run/quota settings without submitting jobs."""
+    """Resolve shot-level dry-run/quota settings without submitting jobs.
+
+    Unset ``VIDEO_SHOT_MAX_CALLS`` / ``VIDEO_SHOT_MAX_SECONDS`` apply the
+    remote-provider defaults (8 calls / 40 seconds per scene). Set either
+    value to ``0`` to opt out of that cap. local and ComfyUI backends stay
+    unlimited unless an explicit positive limit is configured.
+    """
+    raw_max_calls = _first_config_value(
+        "video_shot_max_calls",
+        "VIDEO_SHOT_MAX_CALLS",
+        request_values=request_values,
+        project_settings=project_settings,
+    )
+    raw_max_seconds = _first_config_value(
+        "video_shot_max_seconds",
+        "VIDEO_SHOT_MAX_SECONDS",
+        request_values=request_values,
+        project_settings=project_settings,
+    )
+    max_calls = _optional_non_negative_int(raw_max_calls)
+    max_seconds = _optional_non_negative_float(raw_max_seconds)
+    apply_remote_defaults = _remote_shot_quota_applies(
+        video_provider=video_provider, project_settings=project_settings
+    )
+    if max_calls is None and apply_remote_defaults:
+        max_calls = DEFAULT_REMOTE_SHOT_MAX_CALLS
+    elif max_calls == 0:
+        max_calls = None
+    if max_seconds is None and apply_remote_defaults:
+        max_seconds = DEFAULT_REMOTE_SHOT_MAX_SECONDS
+    elif max_seconds == 0.0:
+        max_seconds = None
     return {
-        "max_calls": _optional_positive_int(
-            _first_config_value(
-                "video_shot_max_calls",
-                "VIDEO_SHOT_MAX_CALLS",
-                request_values=request_values,
-                project_settings=project_settings,
-            )
-        ),
-        "max_seconds": _optional_positive_float(
-            _first_config_value(
-                "video_shot_max_seconds",
-                "VIDEO_SHOT_MAX_SECONDS",
-                request_values=request_values,
-                project_settings=project_settings,
-            )
-        ),
+        "max_calls": max_calls,
+        "max_seconds": max_seconds,
         "dry_run": _coerce_bool(
             _first_config_value(
                 "video_shot_dry_run",
@@ -1247,7 +1298,9 @@ def render_scene_shots_with_provider_policy(
     force_shot_id: str = "",
 ) -> tuple[Path, dict[str, Any], dict[str, Any]]:
     """Render/reuse all shots for one scene and assemble the scene clip."""
-    quota_config = video_shot_quota_config(project_settings=project_settings)
+    quota_config = video_shot_quota_config(
+        project_settings=project_settings, video_provider=video_provider
+    )
     requests = build_shot_provider_request_inputs(
         scene,
         shot_plan,

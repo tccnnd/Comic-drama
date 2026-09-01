@@ -150,8 +150,8 @@ environment variables and failure modes:
 | Setting | Purpose |
 | --- | --- |
 | `VIDEO_RENDER_GRANULARITY` | `scene` (default) or `shot`. |
-| `VIDEO_SHOT_MAX_CALLS` | Max provider calls per scene; quota validation runs before the first submit. |
-| `VIDEO_SHOT_MAX_SECONDS` | Max total generated seconds per scene. |
+| `VIDEO_SHOT_MAX_CALLS` | Max provider calls per scene. Unset remote default is `8`; `0` disables. |
+| `VIDEO_SHOT_MAX_SECONDS` | Max generated seconds per scene. Unset remote default is `40`; `0` disables. |
 | `VIDEO_SHOT_DRY_RUN` | When truthy, estimate quota and block if over limit without submitting. |
 | `VIDEO_SHOT_REUSE_CACHE` | When truthy, reuse unchanged successful shot outputs on rerender. |
 
