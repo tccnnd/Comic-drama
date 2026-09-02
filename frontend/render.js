@@ -2106,6 +2106,10 @@ export function renderAssetsView(project) {
           <div class="row-actions">
             <button class="primary-button" type="button" data-action="asset-generate-all" ${counts.character + counts.scene_bg + counts.prop ? "" : "disabled"}>一键重新生成</button>
             <button class="ghost-button" type="button" disabled>一键下载</button>
+            <label class="lock-reference-toggle" title="重绘时沿用已有形象作为参考图，保持角色长相不变">
+              <input type="checkbox" data-action="lock-reference-toggle" ${state.lockReference !== false ? "checked" : ""}>
+              <span>锁定角色</span>
+            </label>
           </div>
         </div>
       </section>
@@ -2182,6 +2186,14 @@ function renderAssetCard(asset) {
         }
       </div>
       <div class="asset-card-actions">
+        ${
+          type === "character" && asset.thumbnail
+            ? `<label class="asset-lock-toggle" data-action="asset-lock-toggle" title="重绘时沿用当前形象作为参考图，保持角色长相不变">
+                <input type="checkbox" data-asset-lock data-asset-id="${h(asset.id)}" checked>
+                <span>锁定形象</span>
+              </label>`
+            : ""
+        }
         <button class="ghost-button mini-button" type="button" data-action="asset-generate" data-asset-id="${h(asset.id)}" ${status === "generating" ? "disabled" : ""}>${status === "failed" ? "重试" : "生成"}</button>
       </div>
     </article>

@@ -247,6 +247,10 @@ function renderBatchRerenderBar(visibleCount) {
         ${renderBatchButton("rerender-audio", "Audio", visibleCount, running)}
         ${renderBatchButton("rerender-video", "Video", visibleCount, running)}
         ${renderBatchButton("rebuild-scene", "Full", visibleCount, running)}
+        <label class="lock-reference-toggle" title="重绘图时沿用场景参考图，保持角色长相不变；取消勾选则按文字重新想象">
+          <input type="checkbox" data-action="lock-reference-toggle" ${state.lockReference !== false ? "checked" : ""}>
+          <span>锁定角色</span>
+        </label>
       </div>
       ${
         running || results.length

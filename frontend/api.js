@@ -579,14 +579,18 @@ export function updateLocalAsset(assetId, patch) {
   return null;
 }
 
-export async function handleAssetGenerate(projectId = state.currentProjectId, assetId) {
+export async function handleAssetGenerate(
+  projectId = state.currentProjectId,
+  assetId,
+  { lockReference = null } = {}
+) {
   if (!projectId || !assetId) return;
   updateLocalAsset(assetId, { status: "generating" });
   render();
   try {
     const payload = await apiJson(
       `${API.projects}/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/generate`,
-      { method: "POST", body: "{}" }
+      { method: "POST", body: JSON.stringify({ lock_reference: lockReference }) }
     );
     if (payload?.asset) updateLocalAsset(assetId, payload.asset);
     showToast(payload?.message || "资产已生成");
@@ -598,7 +602,10 @@ export async function handleAssetGenerate(projectId = state.currentProjectId, as
   }
 }
 
-export async function handleAssetGenerateAll(projectId = state.currentProjectId) {
+export async function handleAssetGenerateAll(
+  projectId = state.currentProjectId,
+  { lockReference = null } = {}
+) {
   if (!projectId) return;
   for (const bucket of ["characters", "scene_bgs", "props"]) {
     state.assets[bucket] = state.assets[bucket].map((asset) => ({
@@ -610,7 +617,7 @@ export async function handleAssetGenerateAll(projectId = state.currentProjectId)
   try {
     const payload = await apiJson(
       `${API.projects}/${encodeURIComponent(projectId)}/assets/generate-all`,
-      { method: "POST", body: "{}" }
+      { method: "POST", body: JSON.stringify({ lock_reference: lockReference }) }
     );
     const assets = payload?.assets || {};
     state.assets.characters = Array.isArray(assets.characters)
@@ -1553,9 +1560,13 @@ export async function sceneAction(action) {
   if (!endpoint) return;
   setBusy(true, "分镜任务");
   try {
+    const body =
+      endpoint === "rerender-image"
+        ? JSON.stringify({ lock_reference: state.lockReference !== false })
+        : "{}";
     const project = await apiJson(
       `${API.projects}/${state.currentProjectId}/scenes/${state.selectedSceneOrder}/${endpoint}`,
-      { method: "POST", body: "{}" }
+      { method: "POST", body }
     );
     setCurrentProject(project);
     showToast("分镜任务已完成");
@@ -1574,9 +1585,13 @@ export async function runSceneAction(action, sceneOrder) {
   };
   const endpoint = endpointMap[action];
   if (!endpoint) return null;
+  const body =
+    endpoint === "rerender-image"
+      ? JSON.stringify({ lock_reference: state.lockReference !== false })
+      : "{}";
   const project = await apiJson(
     `${API.projects}/${state.currentProjectId}/scenes/${sceneOrder}/${endpoint}`,
-    { method: "POST", body: "{}" }
+    { method: "POST", body }
   );
   setCurrentProject(project);
   return project;

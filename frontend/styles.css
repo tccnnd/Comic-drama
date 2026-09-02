@@ -768,6 +768,38 @@ select:focus {
 .asset-card-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.asset-lock-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.asset-lock-toggle input {
+  accent-color: var(--accent, #534ab7);
+  margin: 0;
+}
+
+.lock-reference-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.lock-reference-toggle input {
+  accent-color: var(--accent, #534ab7);
+  margin: 0;
 }
 
 .asset-loading {

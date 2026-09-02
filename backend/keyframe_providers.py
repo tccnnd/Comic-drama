@@ -186,12 +186,15 @@ def generate_keyframe_openai(
     api_key: str = "",
     base_url: str = "",
     reference_image: str | Path | None = None,
+    reference_enabled: bool | None = None,
 ) -> Path | None:
     """Generate a keyframe via OpenAI Images API.
 
-    With ``reference_image`` (and ``KEYFRAME_T2I_REFERENCE`` enabled) it posts
-    to ``/v1/images/edits`` so the character identity is carried across shots.
-    Without a reference it posts to ``/v1/images/generations`` as before.
+    With ``reference_image`` it posts to ``/v1/images/edits`` so the character
+    identity is carried across shots; without one it posts to
+    ``/v1/images/generations``. ``reference_enabled`` tri-states the gate:
+    ``None`` follows ``KEYFRAME_T2I_REFERENCE`` (default on), ``True`` forces
+    the edits endpoint, ``False`` forces text-only.
     """
     api_key = (
         api_key
@@ -215,12 +218,15 @@ def generate_keyframe_openai(
 
     size = _nearest_openai_image_size(width, height)
     root = _openai_compatible_root(base_url)
-    use_reference = _env("KEYFRAME_T2I_REFERENCE", "1").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    if reference_enabled is None:
+        use_reference = _env("KEYFRAME_T2I_REFERENCE", "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    else:
+        use_reference = bool(reference_enabled)
     ref_path = _resolve_reference_image(reference_image) if use_reference else None
 
     try:
@@ -300,13 +306,15 @@ def generate_keyframe_dashscope(
     api_key: str = "",
     base_url: str = "",
     reference_image: str | Path | None = None,
+    reference_enabled: bool | None = None,
 ) -> Path | None:
     """Generate a keyframe via the configured cloud T2I backend.
 
     ``gpt-image-*`` / ``dall-e*`` models go to OpenAI Images API; when a
     ``reference_image`` is supplied they use the edits endpoint so character
-    identity carries across shots. Other models (``wanx*``) stay on DashScope
-    text2image. Default model is ``gpt-image-2``.
+    identity carries across shots (``reference_enabled`` tri-states the
+    gate; None follows ``KEYFRAME_T2I_REFERENCE``). Other models (``wanx*``)
+    stay on DashScope text2image. Default model is ``gpt-image-2``.
     """
     api_key = (
         api_key or _env("KEYFRAME_T2I_API_KEY") or _env("XL_API_KEY") or _env("DASHSCOPE_API_KEY")
@@ -326,6 +334,7 @@ def generate_keyframe_dashscope(
             api_key=api_key,
             base_url=base_url,
             reference_image=reference_image,
+            reference_enabled=reference_enabled,
         )
 
     if not api_key:

@@ -396,8 +396,43 @@ def _publish_project_update(project_id: str) -> None:
     project_event_bus.publish_project_updated(project_id, project)
 
 
-def _render_asset_image_cloud(project_id: str, asset_id: str) -> Asset:
-    """Render one asset image via cloud T2I (gpt-image-2 by default)."""
+def _asset_lock_reference(
+    project_id: str, asset: Asset, lock_reference: bool | None
+) -> Path | None:
+    """Reference image that keeps a character's look stable on re-render.
+
+    ``lock_reference=None`` (default) locks whenever a previous render exists;
+    ``True`` locks explicitly (no-op without a previous image); ``False``
+    disables locking so the model re-imagines the character from text.
+    Only character assets are locked — scene/prop images must not inherit a
+    face.
+    """
+    if lock_reference is False:
+        return None
+    if asset.asset_type != AssetType.CHARACTER:
+        return None
+    previous = _asset_output_path(project_id, asset.id)
+    try:
+        if previous.is_file() and previous.stat().st_size > 0:
+            return previous
+    except OSError:
+        return None
+    if lock_reference is True:
+        logger.info(
+            "lock_reference requested for %s but no previous image exists; " "rendering text-only",
+            asset.id,
+        )
+    return None
+
+
+def _render_asset_image_cloud(
+    project_id: str, asset_id: str, lock_reference: bool | None = None
+) -> Asset:
+    """Render one asset image via cloud T2I (gpt-image-2 by default).
+
+    Character assets reuse their previous render as an edits reference so the
+    face survives re-renders (see ``_asset_lock_reference``).
+    """
     asset = _load_asset_record(project_id, asset_id)
     style = _project_style(project_id)
     positive_prompt, negative_prompt = _asset_generation_prompts(asset, style)
@@ -405,12 +440,15 @@ def _render_asset_image_cloud(project_id: str, asset_id: str) -> Asset:
         positive_prompt = f"{positive_prompt}, {style['positive_suffix']}"
     width, height = ASSET_DIMENSIONS.get(asset.asset_type, (768, 1024))
     output_path = _asset_output_path(project_id, asset_id)
+    reference = _asset_lock_reference(project_id, asset, lock_reference)
     result = generate_keyframe_dashscope(
         prompt=positive_prompt,
         negative_prompt=negative_prompt,
         width=width,
         height=height,
         output_path=output_path,
+        reference_image=reference,
+        reference_enabled=True if reference is not None else None,
     )
     if not result or not result.exists() or result.stat().st_size <= 0:
         raise RuntimeError("Cloud T2I returned no image")
@@ -426,14 +464,16 @@ def _render_asset_image_cloud(project_id: str, asset_id: str) -> Asset:
     )
 
 
-def _render_asset_image(project_id: str, asset_id: str) -> Asset:
+def _render_asset_image(
+    project_id: str, asset_id: str, lock_reference: bool | None = None
+) -> Asset:
     if not _check_comfyui_online():
         logger.warning(
             "ComfyUI unreachable at %s; rendering asset %s via cloud T2I",
             _safe_comfyui_base_url(),
             asset_id,
         )
-        return _render_asset_image_cloud(project_id, asset_id)
+        return _render_asset_image_cloud(project_id, asset_id, lock_reference)
 
     asset = _load_asset_record(project_id, asset_id)
     style = _project_style(project_id)
@@ -532,13 +572,15 @@ def _render_asset_image(project_id: str, asset_id: str) -> Asset:
     raise RuntimeError("ComfyUI workflow completed but returned no images")
 
 
-def generate_asset_image(project_id: str, asset_id: str) -> Asset:
+def generate_asset_image(
+    project_id: str, asset_id: str, lock_reference: bool | None = None
+) -> Asset:
     asset = update_project_asset(
         project_id, asset_id, {"status": AssetStatus.GENERATING, "error": ""}
     )
     _publish_project_update(project_id)
     try:
-        result = _render_asset_image(project_id, asset_id)
+        result = _render_asset_image(project_id, asset_id, lock_reference)
     except Exception as exc:
         logger.error("Asset generation failed for %s: %s", asset_id, exc)
         update_project_asset(
@@ -550,7 +592,7 @@ def generate_asset_image(project_id: str, asset_id: str) -> Asset:
     return result
 
 
-def generate_all_assets(project_id: str) -> dict[str, Any]:
+def generate_all_assets(project_id: str, lock_reference: bool | None = None) -> dict[str, Any]:
     store = load_asset_store(project_id)
     asset_ids = [
         asset.id
@@ -563,7 +605,7 @@ def generate_all_assets(project_id: str) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for asset_id in asset_ids:
         try:
-            asset = _render_asset_image(project_id, asset_id)
+            asset = _render_asset_image(project_id, asset_id, lock_reference)
             results.append(asset.model_dump(mode="json"))
             _publish_project_update(project_id)
         except Exception as exc:
