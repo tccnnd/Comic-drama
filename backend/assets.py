@@ -94,6 +94,17 @@ class AssetUpdateRequest(BaseModel):
     first_scene: int | None = None
 
 
+class AssetGenerateRequest(BaseModel):
+    """Options for asset image generation.
+
+    lock_reference: None (default) locks a character's look whenever a
+    previous render exists; True forces the lock; False re-imagines from
+    text only.
+    """
+
+    lock_reference: bool | None = None
+
+
 ASSET_BUCKETS = {
     AssetType.CHARACTER: "characters",
     AssetType.SCENE_BG: "scene_bgs",
@@ -559,7 +570,10 @@ def extract_assets_endpoint(project_id: str) -> dict[str, Any]:
 
 
 @asset_router.post("/{asset_id}/generate")
-def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
+def generate_asset_endpoint(
+    project_id: str, asset_id: str, payload: AssetGenerateRequest | None = None
+) -> dict[str, Any]:
+    lock_reference = payload.lock_reference if payload is not None else None
     try:
         asset = update_asset_status(project_id, asset_id, AssetStatus.GENERATING)
     except FileNotFoundError:
@@ -570,7 +584,7 @@ def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
 
     def _run() -> None:
         try:
-            generate_asset_image(project_id, asset_id)
+            generate_asset_image(project_id, asset_id, lock_reference)
         except Exception as exc:
             logger.error("generation failed for %s/%s: %s", project_id, asset_id, exc)
 
@@ -583,7 +597,10 @@ def generate_asset_endpoint(project_id: str, asset_id: str) -> dict[str, Any]:
 
 
 @asset_router.post("/generate-all")
-def generate_all_assets_endpoint(project_id: str) -> dict[str, Any]:
+def generate_all_assets_endpoint(
+    project_id: str, payload: AssetGenerateRequest | None = None
+) -> dict[str, Any]:
+    lock_reference = payload.lock_reference if payload is not None else None
     try:
         with project_lock(project_id):
             store = load_asset_store(project_id)
@@ -601,7 +618,7 @@ def generate_all_assets_endpoint(project_id: str) -> dict[str, Any]:
 
     def _run() -> None:
         try:
-            generate_all_assets(project_id)
+            generate_all_assets(project_id, lock_reference)
         except Exception as exc:
             logger.error("batch generation failed for %s: %s", project_id, exc)
 

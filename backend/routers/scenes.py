@@ -113,14 +113,28 @@ def merge_scene_endpoint(project_id: str, scene_order: int) -> dict:
     return project_snapshot(project)
 
 
+class RerenderImageRequest(BaseModel):
+    """Per-request character-identity lock for image rerenders.
+
+    None (default) keeps the current behavior: use the scene's best
+    reference image when available. False forces a text-only render
+    (re-imagine the look); True forces the lock when a reference exists.
+    """
+
+    lock_reference: bool | None = None
+
+
 @router.post("/api/projects/{project_id}/scenes/{scene_order}/rerender-image")
-def rerender_scene_image_endpoint(project_id: str, scene_order: int) -> dict:
+def rerender_scene_image_endpoint(
+    project_id: str, scene_order: int, payload: RerenderImageRequest | None = None
+) -> dict:
     project_or_404(project_id)
+    lock_reference = payload.lock_reference if payload is not None else None
     run_background_job(
         project_id,
         stage=f"scene_{scene_order:03d}_image",
         message="Rerendering image",
-        action=lambda: rerender_scene_image(project_id, scene_order),
+        action=lambda: rerender_scene_image(project_id, scene_order, lock_reference),
         fail_message="Image rerender failed",
         error_log="image rerender failed for %s scene %s: %s",
         error_args=(project_id, scene_order),

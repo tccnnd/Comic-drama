@@ -916,12 +916,14 @@ def render_keyframe_comfyui(scene: StoryScene, run_dir: Path) -> Path:
     raise RuntimeError(f"ComfyUI workflow completed but returned no images. Debug: {debug_dir}")
 
 
-def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
+def generate_keyframe(
+    scene: StoryScene, run_dir: Path, provider: str, lock_reference: bool | None = None
+) -> Path:
     provider = (provider or "auto").strip().lower()
     if provider == "local":
         return create_keyframe(scene, run_dir)
     if provider == "cloud":
-        return _generate_keyframe_cloud(scene, run_dir)
+        return _generate_keyframe_cloud(scene, run_dir, lock_reference)
     if provider == "comfyui":
         try:
             return render_keyframe_comfyui(scene, run_dir)
@@ -929,7 +931,7 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
             if env_bool("COMFYUI_STRICT", "KEYFRAME_STRICT", default=False):
                 raise
             print(f"[keyframe] ComfyUI unavailable, trying cloud provider: {exc}")
-            return _generate_keyframe_cloud(scene, run_dir)
+            return _generate_keyframe_cloud(scene, run_dir, lock_reference)
     # Auto mode: try ComfyUI -> cloud -> local
     try:
         return render_keyframe_comfyui(scene, run_dir)
@@ -943,7 +945,7 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
         print(f"[keyframe] ComfyUI unavailable, trying cloud provider: {exc}")
         # Try cloud text-to-image
         try:
-            return _generate_keyframe_cloud(scene, run_dir)
+            return _generate_keyframe_cloud(scene, run_dir, lock_reference)
         except Exception as cloud_exc:
             print(f"[keyframe] Cloud provider also failed: {cloud_exc}")
             if isinstance(scene.consistency_meta, dict):
@@ -985,8 +987,15 @@ def _scene_reference_image(scene: StoryScene) -> str:
     return ""
 
 
-def _generate_keyframe_cloud(scene: StoryScene, run_dir: Path) -> Path:
-    """Generate keyframe via cloud text-to-image API."""
+def _generate_keyframe_cloud(
+    scene: StoryScene, run_dir: Path, lock_reference: bool | None = None
+) -> Path:
+    """Generate keyframe via cloud text-to-image API.
+
+    ``lock_reference`` mirrors the UI 锁定角色 switch: None uses the scene's
+    best reference image when available; False forces a text-only render;
+    True keeps the lock (text-only only when no reference exists).
+    """
     from backend.keyframe_providers import build_keyframe_prompt, generate_keyframe_dashscope
 
     # Build character info for prompt
@@ -1007,7 +1016,7 @@ def _generate_keyframe_cloud(scene: StoryScene, run_dir: Path) -> Path:
     width = int(env_float("COMFYUI_WIDTH", default=832))
     height = int(env_float("COMFYUI_HEIGHT", default=1216))
 
-    reference_image = _scene_reference_image(scene)
+    reference_image = "" if lock_reference is False else _scene_reference_image(scene)
 
     result = generate_keyframe_dashscope(
         prompt=positive,

@@ -484,7 +484,9 @@ def _render_shot_level_scene_clip(
     return update_scene_generation_meta(project_id, scene_order, shot_generation_meta, shot_plan)
 
 
-def rerender_scene_image(project_id: str, scene_order: int) -> dict[str, Any]:
+def rerender_scene_image(
+    project_id: str, scene_order: int, lock_reference: bool | None = None
+) -> dict[str, Any]:
     load_env_file()
     try:
         with project_lock(project_id):
@@ -518,7 +520,9 @@ def rerender_scene_image(project_id: str, scene_order: int) -> dict[str, Any]:
             _capture_scene_snapshot_locked(project_id, scene_order, "rerender-image", project)
             _append_scene_history(project, scene_order, "rerender-image", "running", "开始重绘图")
             _save_project_with_scene_event(project, scene_order)
-        image_path = generate_keyframe(scene_obj, directory, keyframe_provider)
+        image_path = generate_keyframe(
+            scene_obj, directory, keyframe_provider, lock_reference=lock_reference
+        )
         if getattr(scene_obj, "consistency_meta", None):
             update_scene_consistency_meta(
                 project_id,

@@ -102,6 +102,7 @@ export const state = {
     completed: 0,
     results: [],
   },
+  lockReference: true,
   modal: null,
   assets: {
     characters: [],

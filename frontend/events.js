@@ -718,9 +718,22 @@ async function handleClick(event) {
     }
     if (action === "asset-extract") return handleAssetExtract(state.currentProjectId);
     if (action === "asset-add") return openAssetAddModal();
-    if (action === "asset-generate")
-      return handleAssetGenerate(state.currentProjectId, button.dataset.assetId);
-    if (action === "asset-generate-all") return handleAssetGenerateAll(state.currentProjectId);
+    if (action === "asset-lock-toggle") return; // checkbox toggles locally; do not select the card
+    if (action === "asset-generate") {
+      const lockInput = button.closest(".asset-card")?.querySelector("[data-asset-lock]");
+      return handleAssetGenerate(state.currentProjectId, button.dataset.assetId, {
+        lockReference: lockInput ? lockInput.checked : null,
+      });
+    }
+    if (action === "asset-generate-all") {
+      return handleAssetGenerateAll(state.currentProjectId, {
+        lockReference: state.lockReference !== false,
+      });
+    }
+    if (action === "lock-reference-toggle") {
+      state.lockReference = button.checked !== false;
+      return;
+    }
     if (action === "modal-close-overlay") return closeModal();
     if (action === "modal-close") return closeModal();
     if (action === "style-filter") {
