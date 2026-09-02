@@ -295,6 +295,182 @@ def generate_keyframe_openai(
     return None
 
 
+LEONARDO_DEFAULT_MODEL_ID = "7b592283-e8a7-4c5a-9ba6-d18c31f258b9"  # Phoenix
+LEONARDO_POLL_INTERVAL_S = 3.0
+LEONARDO_POLL_TIMEOUT_S = 240.0
+
+
+def _leonardo_request(
+    url: str,
+    api_key: str,
+    *,
+    payload: dict[str, Any] | None = None,
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    headers = {"authorization": f"Bearer {api_key}", "accept": "application/json"}
+    data = None
+    method = "GET"
+    if payload is not None:
+        headers["content-type"] = "application/json"
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        method = "POST"
+    req = Request(url, data=data, headers=headers, method=method)
+    with urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8")
+    if not raw.strip():
+        return {}
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Leonardo response must be a JSON object: {url}")
+    return parsed
+
+
+def _leonardo_upload_init_image(
+    base: str, api_key: str, image_path: Path, timeout: float = 60.0
+) -> str:
+    """Upload a reference image to Leonardo, return its init-image id."""
+    boundary = f"----comicdrama-{uuid.uuid4().hex}"
+    ctype = mimetypes.guess_type(image_path.name)[0] or "image/png"
+    body = bytearray()
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(
+        (
+            f'Content-Disposition: form-data; name="file"; filename="{image_path.name}"\r\n'
+            f"Content-Type: {ctype}\r\n\r\n"
+        ).encode("utf-8")
+    )
+    body.extend(image_path.read_bytes())
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+    req = Request(
+        f"{base}/init-image",
+        data=bytes(body),
+        headers={
+            "authorization": f"Bearer {api_key}",
+            "accept": "application/json",
+            "content-type": f"multipart/form-data; boundary={boundary}",
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=timeout) as resp:
+        parsed = json.loads(resp.read().decode("utf-8"))
+    init_id = ""
+    if isinstance(parsed, dict):
+        inner = parsed.get("init_image") if isinstance(parsed.get("init_image"), dict) else parsed
+        init_id = str(inner.get("id") or "").strip()
+    if not init_id:
+        raise ValueError("Leonardo init-image upload returned no id")
+    return init_id
+
+
+def generate_keyframe_leonardo(
+    prompt: str,
+    negative_prompt: str = "",
+    *,
+    width: int = 832,
+    height: int = 1216,
+    output_path: Path | None = None,
+    reference_image: str | Path | None = None,
+    reference_enabled: bool | None = None,
+) -> Path | None:
+    """Generate a keyframe via the Leonardo REST API (uses web-adjacent credits).
+
+    Activated by ``KEYFRAME_T2I_PROVIDER=leonardo`` (or a ``leonardo`` model
+    prefix). Requires ``LEONARDO_API_KEY``; new keys include free API credit.
+    With ``reference_image`` (and gate on) the image is uploaded via
+    ``/init-image`` and used as img2img init so character identity carries.
+    """
+    api_key = _env("LEONARDO_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("[keyframe-leonardo] LEONARDO_API_KEY not set; skipping")
+        return None
+    base = _env("LEONARDO_API_BASE", "https://cloud.leonardo.ai/api/rest/v1").rstrip("/")
+    model_id = _env("LEONARDO_MODEL_ID", LEONARDO_DEFAULT_MODEL_ID)
+    use_ref = (
+        (_env("KEYFRAME_T2I_REFERENCE", "1").strip().lower() in {"1", "true", "yes", "on"})
+        if reference_enabled is None
+        else bool(reference_enabled)
+    )
+    ref_path = _resolve_reference_image(reference_image) if use_ref else None
+
+    # Leonardo dimensions must be multiples of 64 within [384, 1536]
+    def _dim(value: int) -> int:
+        clamped = max(384, min(1536, int(value)))
+        return int(round(clamped / 64) * 64)
+
+    payload: dict[str, Any] = {
+        "modelId": model_id,
+        "prompt": prompt[:1500],
+        "width": _dim(width),
+        "height": _dim(height),
+        "num_images": 1,
+    }
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt[:500]
+
+    try:
+        if ref_path is not None:
+            logger.info("[keyframe-leonardo] uploading reference %s for img2img", ref_path.name)
+            try:
+                init_id = _leonardo_upload_init_image(base, api_key, ref_path)
+                payload["init_image_id"] = init_id
+                payload["init_strength"] = float(_env("LEONARDO_INIT_STRENGTH", "0.55"))
+            except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+                logger.warning(
+                    "[keyframe-leonardo] init-image upload failed (%s); rendering text-only",
+                    exc,
+                )
+
+        logger.info(
+            "[keyframe-leonardo] submitting generation: model=%s size=%sx%s ref=%s",
+            model_id,
+            payload["width"],
+            payload["height"],
+            bool(payload.get("init_image_id")),
+        )
+        submitted = _leonardo_request(f"{base}/generations", api_key, payload=payload, timeout=120)
+        sd = submitted.get("sdGenerationJob") or {}
+        generation_id = str(sd.get("generationId") or "").strip()
+        if not generation_id:
+            logger.error("[keyframe-leonardo] no generationId in response: %s", submitted)
+            return None
+
+        deadline = time.time() + LEONARDO_POLL_TIMEOUT_S
+        status = ""
+        while time.time() < deadline:
+            time.sleep(LEONARDO_POLL_INTERVAL_S)
+            job = _leonardo_request(f"{base}/generations/{generation_id}", api_key, timeout=60)
+            gen = job.get("generations_by_pk") or job.get("sdGenerationJob") or {}
+            status = str(gen.get("status") or "").upper()
+            if status in {"COMPLETE", "FAILED", "PUBLISHED_FAILED"}:
+                break
+        if status != "COMPLETE":
+            logger.error("[keyframe-leonardo] generation %s ended as %s", generation_id, status)
+            return None
+
+        gen = gen.get("generated_images") or []
+        if isinstance(gen, dict):
+            gen = [gen]
+        for item in gen:
+            img_url = str(item.get("url") or "").strip()
+            if img_url:
+                return _download_image(img_url, output_path)
+        logger.error("[keyframe-leonardo] COMPLETE generation had no image url")
+        return None
+    except HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+        except Exception:
+            pass
+        logger.error("[keyframe-leonardo] submit failed: %s %s", exc, detail)
+        return None
+    except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        logger.error("[keyframe-leonardo] submit failed: %s", exc)
+        return None
+
+
 def generate_keyframe_dashscope(
     prompt: str,
     negative_prompt: str = "",
@@ -323,6 +499,17 @@ def generate_keyframe_dashscope(
         base_url or _env("KEYFRAME_T2I_BASE_URL") or _env("XL_BASE_URL") or "https://memefast.top"
     )
     model = model or _env("KEYFRAME_T2I_MODEL") or DEFAULT_OPENAI_IMAGE_MODEL
+
+    provider_hint = _env("KEYFRAME_T2I_PROVIDER", "").strip().lower()
+    if provider_hint == "leonardo" or model.strip().lower().startswith("leonardo"):
+        return generate_keyframe_leonardo(
+            prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            output_path=output_path,
+            reference_image=reference_image,
+        )
 
     if _is_openai_image_model(model):
         return generate_keyframe_openai(
