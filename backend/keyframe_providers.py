@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import base64
 import json
+import mimetypes
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -30,6 +32,14 @@ def _env(name: str, default: str = "") -> str:
 
 DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_DASHSCOPE_T2I_MODEL = "wanx2.1-t2i-turbo"
+
+# Prepended to the prompt when a character reference image is supplied via
+# /v1/images/edits, so the model knows to preserve identity, not just style.
+REFERENCE_PROMPT_PREFIX = (
+    "Use the character from the reference image. Keep the same face, "
+    "hairstyle, and signature outfit; only change the scene, pose, camera, "
+    "and lighting as described. "
+)
 
 
 def _is_openai_image_model(model: str) -> bool:
@@ -59,6 +69,113 @@ def _openai_compatible_root(base_url: str) -> str:
     return f"{root}/v1"
 
 
+def _resolve_reference_image(reference_image: str | Path | None) -> Path | None:
+    """Return an existing image path, or None (caller falls back to text-only)."""
+    if not reference_image:
+        return None
+    path = Path(str(reference_image)).expanduser()
+    try:
+        if path.is_file():
+            return path
+    except OSError:
+        return None
+    return None
+
+
+def _post_image_generations(
+    submit_url: str,
+    *,
+    model: str,
+    prompt: str,
+    size: str,
+    api_key: str,
+) -> dict[str, Any]:
+    """POST /v1/images/generations (text-only, no reference image)."""
+    body = {
+        "model": model,
+        "prompt": prompt[:32000],
+        "n": 1,
+        "size": size,
+        "response_format": "b64_json",
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = Request(submit_url, data=data, headers=headers, method="POST")
+    with urlopen(req, timeout=180) as resp:
+        raw = resp.read().decode("utf-8")
+    if not raw.strip():
+        return {}
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"image generation response must be a JSON object: {submit_url}")
+    return parsed
+
+
+def _post_image_edit(
+    submit_url: str,
+    *,
+    image_path: Path,
+    model: str,
+    prompt: str,
+    size: str,
+    api_key: str,
+) -> dict[str, Any]:
+    """POST /v1/images/edits with a reference image (multipart/form-data).
+
+    Used to condition generation on a character reference so the same face
+    survives across shots; text-only generation cannot keep identity stable.
+    """
+    boundary = f"----comicdrama-{uuid.uuid4().hex}"
+    body = bytearray()
+
+    def add_field(name: str, value: str) -> None:
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+        body.extend(f"{value}\r\n".encode("utf-8"))
+
+    def add_file(name: str, path: Path) -> None:
+        ctype = mimetypes.guess_type(path.name)[0] or "image/png"
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(
+            f'Content-Disposition: form-data; name="{name}"; filename="{path.name}"\r\n'.encode(
+                "utf-8"
+            )
+        )
+        body.extend(f"Content-Type: {ctype}\r\n\r\n".encode("utf-8"))
+        body.extend(path.read_bytes())
+        body.extend(b"\r\n")
+
+    add_file("image", image_path)
+    add_field("model", model)
+    add_field("prompt", prompt)
+    add_field("n", "1")
+    add_field("size", size)
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+    req = Request(
+        submit_url,
+        data=bytes(body),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=300) as resp:
+        raw = resp.read().decode("utf-8")
+    if not raw.strip():
+        return {}
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"image edit response must be a JSON object: {submit_url}")
+    return parsed
+
+
 def generate_keyframe_openai(
     prompt: str,
     *,
@@ -68,11 +185,13 @@ def generate_keyframe_openai(
     model: str = "",
     api_key: str = "",
     base_url: str = "",
+    reference_image: str | Path | None = None,
 ) -> Path | None:
-    """Generate a keyframe via OpenAI Images API (/v1/images/generations).
+    """Generate a keyframe via OpenAI Images API.
 
-    Used for gpt-image-2 and other gpt-image-* models on OpenAI-compatible
-    relays (including memefast.top).
+    With ``reference_image`` (and ``KEYFRAME_T2I_REFERENCE`` enabled) it posts
+    to ``/v1/images/edits`` so the character identity is carried across shots.
+    Without a reference it posts to ``/v1/images/generations`` as before.
     """
     api_key = (
         api_key
@@ -96,25 +215,53 @@ def generate_keyframe_openai(
 
     size = _nearest_openai_image_size(width, height)
     root = _openai_compatible_root(base_url)
-    submit_url = f"{root}/images/generations"
-    body = {
-        "model": model,
-        "prompt": prompt[:32000],
-        "n": 1,
-        "size": size,
-        "response_format": "b64_json",
+    use_reference = _env("KEYFRAME_T2I_REFERENCE", "1").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
     }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    logger.info("[keyframe-cloud] Submitting OpenAI image: model=%s, size=%s", model, size)
+    ref_path = _resolve_reference_image(reference_image) if use_reference else None
+
     try:
-        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-        req = Request(submit_url, data=data, headers=headers, method="POST")
-        with urlopen(req, timeout=180) as resp:
-            response = json.loads(resp.read().decode("utf-8"))
+        if ref_path is not None:
+            submit_url = f"{root}/images/edits"
+            logger.info(
+                "[keyframe-cloud] Submitting OpenAI image edit: model=%s, size=%s, ref=%s",
+                model,
+                size,
+                ref_path.name,
+            )
+            try:
+                response = _post_image_edit(
+                    submit_url,
+                    image_path=ref_path,
+                    model=model,
+                    prompt=f"{REFERENCE_PROMPT_PREFIX}{prompt}"[:32000],
+                    size=size,
+                    api_key=api_key,
+                )
+            except (HTTPError, URLError, TimeoutError, OSError) as exc:
+                logger.warning(
+                    "[keyframe-cloud] Reference edit failed (%s); falling back to text-only",
+                    exc,
+                )
+                response = _post_image_generations(
+                    f"{root}/images/generations",
+                    model=model,
+                    prompt=prompt,
+                    size=size,
+                    api_key=api_key,
+                )
+        else:
+            logger.info("[keyframe-cloud] Submitting OpenAI image: model=%s, size=%s", model, size)
+            response = _post_image_generations(
+                f"{root}/images/generations",
+                model=model,
+                prompt=prompt,
+                size=size,
+                api_key=api_key,
+            )
     except HTTPError as exc:
         detail = ""
         try:
@@ -152,12 +299,14 @@ def generate_keyframe_dashscope(
     model: str = "",
     api_key: str = "",
     base_url: str = "",
+    reference_image: str | Path | None = None,
 ) -> Path | None:
     """Generate a keyframe via the configured cloud T2I backend.
 
-    ``gpt-image-*`` / ``dall-e*`` models go to OpenAI Images API.
-    Other models (``wanx*``) stay on DashScope text2image.
-    Default model is ``gpt-image-2``.
+    ``gpt-image-*`` / ``dall-e*`` models go to OpenAI Images API; when a
+    ``reference_image`` is supplied they use the edits endpoint so character
+    identity carries across shots. Other models (``wanx*``) stay on DashScope
+    text2image. Default model is ``gpt-image-2``.
     """
     api_key = (
         api_key or _env("KEYFRAME_T2I_API_KEY") or _env("XL_API_KEY") or _env("DASHSCOPE_API_KEY")
@@ -176,6 +325,7 @@ def generate_keyframe_dashscope(
             model=model,
             api_key=api_key,
             base_url=base_url,
+            reference_image=reference_image,
         )
 
     if not api_key:

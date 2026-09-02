@@ -952,6 +952,39 @@ def generate_keyframe(scene: StoryScene, run_dir: Path, provider: str) -> Path:
             return create_keyframe(scene, run_dir)
 
 
+def _scene_reference_image(scene: StoryScene) -> str:
+    """Best character reference image for cloud T2I consistency.
+
+    Prefers the resolved primary reference (absolute path when available),
+    then the first character reference that exists on disk. Returns "" when
+    nothing usable is present, which keeps generation text-only.
+    """
+    candidates: list[str] = []
+    primary_abs = str(getattr(scene, "primary_reference_image_abs_path", "") or "").strip()
+    primary_rel = str(getattr(scene, "primary_reference_image_path", "") or "").strip()
+    candidates.extend([primary_abs, primary_rel])
+
+    for ref in getattr(scene, "character_references", None) or []:
+        if not isinstance(ref, dict):
+            continue
+        for key in ("absolute", "source", "path", "load_image"):
+            value = str(ref.get(key) or "").strip()
+            if value:
+                candidates.append(value)
+
+    seen: set[str] = set()
+    for raw in candidates:
+        if not raw or raw in seen:
+            continue
+        seen.add(raw)
+        try:
+            if Path(raw).is_file():
+                return raw
+        except OSError:
+            continue
+    return ""
+
+
 def _generate_keyframe_cloud(scene: StoryScene, run_dir: Path) -> Path:
     """Generate keyframe via cloud text-to-image API."""
     from backend.keyframe_providers import build_keyframe_prompt, generate_keyframe_dashscope
@@ -974,12 +1007,15 @@ def _generate_keyframe_cloud(scene: StoryScene, run_dir: Path) -> Path:
     width = int(env_float("COMFYUI_WIDTH", default=832))
     height = int(env_float("COMFYUI_HEIGHT", default=1216))
 
+    reference_image = _scene_reference_image(scene)
+
     result = generate_keyframe_dashscope(
         prompt=positive,
         negative_prompt=negative,
         width=width,
         height=height,
         output_path=output_path,
+        reference_image=reference_image,
     )
     if result and result.exists():
         return result
