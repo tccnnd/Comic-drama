@@ -111,6 +111,96 @@ def test_generate_keyframe_dashscope_keeps_wanx_on_dashscope(tmp_path, monkeypat
     assert captured["body"]["model"] == "wanx2.1-t2i-turbo"
 
 
+def test_generate_keyframe_openai_edit_posts_multipart_with_reference(tmp_path, monkeypatch):
+    """Reference image must be sent as multipart and prompt gets the identity prefix."""
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"data": [{"b64_json": base64.b64encode(_png_bytes()).decode("ascii")}]}
+            ).encode("utf-8")
+
+    def fake_urlopen(req, timeout=0):
+        captured["url"] = req.full_url
+        captured["timeout"] = timeout
+        captured["auth"] = req.headers.get("Authorization")
+        captured["content_type"] = req.headers.get("Content-type") or req.headers.get(
+            "Content-Type"
+        )
+        captured["body"] = req.data
+        return FakeResponse()
+
+    ref = tmp_path / "ref.png"
+    ref.write_bytes(b"REF-DATA")
+    monkeypatch.delenv("KEYFRAME_T2I_MODEL", raising=False)
+    monkeypatch.setenv("XL_API_KEY", "test-xl-key")
+    monkeypatch.setenv("XL_BASE_URL", "https://memefast.top")
+    monkeypatch.setenv("KEYFRAME_T2I_REFERENCE", "1")
+    monkeypatch.setattr(kp, "urlopen", fake_urlopen)
+
+    out = tmp_path / "kf.png"
+    result = kp.generate_keyframe_openai(
+        "standing in a bamboo forest",
+        width=832,
+        height=1216,
+        output_path=out,
+        reference_image=ref,
+    )
+    assert result == out
+    assert out.exists() and out.stat().st_size > 0
+    assert captured["url"] == "https://memefast.top/v1/images/edits"
+    assert captured["timeout"] == 300
+    assert captured["auth"] == "Bearer test-xl-key"
+    body = captured["body"]
+    assert isinstance(body, bytes)
+    assert b'Content-Disposition: form-data; name="image"' in body
+    assert b"REF-DATA" in body
+    assert b'name="model"\r\n\r\ngpt-image-2' in body
+    assert b'name="size"\r\n\r\n1024x1536' in body
+    assert kp.REFERENCE_PROMPT_PREFIX.encode().split(b" ")[1] in body
+
+
+def test_generate_keyframe_openai_disables_reference_when_env_off(tmp_path, monkeypatch):
+    """KEYFRAME_T2I_REFERENCE=0 should keep generation text-only even if a ref is passed."""
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"data": [{"b64_json": base64.b64encode(_png_bytes()).decode("ascii")}]}
+            ).encode("utf-8")
+
+    def fake_urlopen(req, timeout=0):
+        captured["url"] = req.full_url
+        captured["body"] = req.data
+        return FakeResponse()
+
+    ref = tmp_path / "ref.png"
+    ref.write_bytes(b"REF-DATA")
+    monkeypatch.setenv("XL_API_KEY", "test-xl-key")
+    monkeypatch.setenv("XL_BASE_URL", "https://memefast.top")
+    monkeypatch.setenv("KEYFRAME_T2I_REFERENCE", "0")
+    monkeypatch.setattr(kp, "urlopen", fake_urlopen)
+
+    kp.generate_keyframe_openai("a scene", output_path=tmp_path / "kf.png", reference_image=ref)
+    assert captured["url"] == "https://memefast.top/v1/images/generations"
+    assert isinstance(captured["body"], bytes)  # JSON-encoded body, not multipart
+    assert b"REF-DATA" not in captured["body"]
+
+
 def _fake_image_response(payload: bytes):
     class FakeResponse:
         def __enter__(self):
